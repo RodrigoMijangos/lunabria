@@ -1,0 +1,40 @@
+# ========================================================
+# Caddyfile: Lunabria HTTP/2 & HTTPS Reverse Proxy
+# ========================================================
+
+# HTTPS with automatic local trust (for HTTP/2 in Chrome/Edge/Firefox)
+localhost:8443, :8443 {
+    tls internal
+    encode zstd gzip
+
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+
+    # Security & PWA headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Proxy all traffic to FastAPI backend (which also serves the PWA frontend)
+    reverse_proxy localhost:8000 {
+        # Transport settings for fast streaming
+        transport http {
+            versions h1 h2c
+        }
+    }
+}
+
+# Optional plain HTTP on port 8080
+:8080 {
+    encode zstd gzip
+    reverse_proxy localhost:8000 {
+        transport http {
+            versions h1 h2c
+        }
+    }
+}

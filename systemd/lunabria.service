@@ -1,0 +1,18 @@
+[Unit]
+Description=Lunabria Backend Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=./backend
+Environment="PATH=./.venv/bin:/usr/local/bin:/usr/bin"
+Environment="CALIBRE_LIBRARY_PATH=../data/calibre_library"
+Environment="APP_DATA_DIR=../data"
+Environment="HOST=127.0.0.1"
+Environment="PORT=8000"
+ExecStart=python3 run.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

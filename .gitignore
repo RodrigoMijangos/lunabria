@@ -1,0 +1,36 @@
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+
+# Application data and Calibre libraries
+data/
+**/Calibre Library/
+**/calibre_library/
+*.tar
+*.tar.xz
+*.zip
+
+# OS and system files
+.DS_Store
+Thumbs.db
+
+# SSL certificates and private keys
+backend/certs/
+*.pem
+*.key
+*.crt
+
+# Environment variables (allow only .env.example)
+.env
+.env.*
+!.env.example
+
+# IDE & Editor settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
