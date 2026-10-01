@@ -1,0 +1,53 @@
+name: CD (Staging Deployment)
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+jobs:
+  test-and-package:
+    name: Staging Verification & Packaging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements.txt'
+
+      - name: Install System Dependencies (Calibre)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y calibre
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Backend Regression Test Suite
+        working-directory: backend
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Package Staging Release Bundle
+        run: |
+          mkdir -p staging-dist
+          tar --exclude='./.git' \
+              --exclude='./backend/.venv' \
+              --exclude='./backend/__pycache__' \
+              -czvf staging-dist/lunabria-staging-bundle.tar.gz .
+          ls -lh staging-dist/lunabria-staging-bundle.tar.gz
+
+      - name: Upload Staging Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lunabria-staging-bundle
+          path: staging-dist/lunabria-staging-bundle.tar.gz
+          retention-days: 14
