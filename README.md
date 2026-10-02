@@ -186,6 +186,15 @@ Once running, access the application locally at `http://localhost:8000` or throu
 
 ---
 
+## 📜 Changelog
+
+All notable changes, pre-1.0 development milestones, and release notes are documented in [CHANGELOG.md](CHANGELOG.md).
+
+Prior to the official **1.0.0** release on `main`, Lunabria underwent iterative pre-release development spanning offline PWA caching, HTTP/2 streaming, freehand stylus inking, MVVM architecture refactoring, and full English localization. For the complete categorized log of changes prior to version 1.0.0, refer to the [Changelog](CHANGELOG.md).
+
+---
+
 ## 📄 License
 
 This project is licensed under the **GNU Affero General Public License v3.0 (GNU AGPL v3)**. See the [LICENSE](LICENSE) file for the full license text.
+
