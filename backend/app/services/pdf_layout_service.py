@@ -9,9 +9,55 @@ class PdfLayoutService:
     """
 
     @staticmethod
+    def _group_words_geometrically(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not words:
+            return []
+        sorted_words = sorted(words, key=lambda w: (round(w["y0"] / 4.0) * 4.0, w["x0"]))
+        line_groups = []
+        for w in sorted_words:
+            w_y0 = w["y0"]
+            w_y1 = w["y1"]
+            w_mid_y = (w_y0 + w_y1) / 2.0
+            w_h = max(1.0, w_y1 - w_y0)
+            matched_group = None
+            for group in line_groups:
+                g_y0 = min(item["y0"] for item in group)
+                g_y1 = max(item["y1"] for item in group)
+                g_mid_y = sum((item["y0"] + item["y1"]) / 2.0 for item in group) / len(group)
+                g_h = max(1.0, g_y1 - g_y0)
+                overlap = min(w_y1, g_y1) - max(w_y0, g_y0)
+                min_h = min(w_h, g_h)
+                overlap_ratio = overlap / min_h if min_h > 0 else 0
+                mid_dist = abs(w_mid_y - g_mid_y)
+                if overlap_ratio >= 0.35 or mid_dist <= max(w_h, g_h) * 0.45 or (overlap > 0 and mid_dist <= min_h * 0.75):
+                    matched_group = group
+                    break
+            if matched_group is not None:
+                matched_group.append(w)
+            else:
+                line_groups.append([w])
+
+        lines = []
+        for group in line_groups:
+            group.sort(key=lambda x: x["x0"])
+            lines.append({
+                "block": group[0]["block"],
+                "line": group[0]["line"],
+                "x0": round(min(x["x0"] for x in group), 2),
+                "y0": round(min(x["y0"] for x in group), 2),
+                "x1": round(max(x["x1"] for x in group), 2),
+                "y1": round(max(x["y1"] for x in group), 2),
+                "text": " ".join(x["text"] for x in group),
+                "words": group
+            })
+        lines.sort(key=lambda l: (l["y0"], l["x0"]))
+        return lines
+
+    @staticmethod
     def extract_page_layout(pdf_path: Path, page_number: int) -> Optional[Dict[str, Any]]:
         """
-        Extracts pixel-perfect word bounding boxes for a given page using PyMuPDF (fitz).
+        Extracts pixel-perfect word bounding boxes and typographical lines for a single page.
+        Coordinates are in PDF point units (unscaled).
         page_number is 1-indexed.
         """
         try:
@@ -31,30 +77,6 @@ class PdfLayoutService:
                 page = doc[page_idx]
                 rect = page.rect
                 raw_words = page.get_text("words")
-                
-                # Merge words on the same line if gap is smaller than a typographical space (< 2.8 pt)
-                # This fixes tracked titles like "IN T ROD UCTION" -> "INTRODUCTION"
-                merged_raw = []
-                for w in raw_words:
-                    if merged_raw and merged_raw[-1][5] == w[5] and merged_raw[-1][6] == w[6]:
-                        prev = merged_raw[-1]
-                        gap = w[0] - prev[2]
-                        font_h = max(prev[3] - prev[1], w[3] - w[1])
-                        # A typographical word space in fonts is >= 0.22 of font height.
-                        # Tracking / wide kerning between letters in a single word is typically <= 0.18 * font height.
-                        if font_h > 0 and (gap / font_h) < 0.18:
-                            merged_raw[-1] = (
-                                prev[0],
-                                min(prev[1], w[1]),
-                                w[2],
-                                max(prev[3], w[3]),
-                                prev[4] + w[4],
-                                prev[5],
-                                prev[6],
-                                prev[7]
-                            )
-                            continue
-                    merged_raw.append(w)
 
                 words = [
                     {
@@ -67,35 +89,10 @@ class PdfLayoutService:
                         "line": w[6],
                         "word": w[7]
                     }
-                    for w in merged_raw
+                    for w in raw_words
                 ]
 
-                # Group words into continuous typographical lines for gapless selection & highlighting
-                lines = []
-                cur_line = []
-                for w in words:
-                    if cur_line and (cur_line[0]["block"] != w["block"] or cur_line[0]["line"] != w["line"]):
-                        lines.append({
-                            "block": cur_line[0]["block"],
-                            "line": cur_line[0]["line"],
-                            "x0": round(min(x["x0"] for x in cur_line), 2),
-                            "y0": round(min(x["y0"] for x in cur_line), 2),
-                            "x1": round(max(x["x1"] for x in cur_line), 2),
-                            "y1": round(max(x["y1"] for x in cur_line), 2),
-                            "text": " ".join(x["text"] for x in cur_line)
-                        })
-                        cur_line = []
-                    cur_line.append(w)
-                if cur_line:
-                    lines.append({
-                        "block": cur_line[0]["block"],
-                        "line": cur_line[0]["line"],
-                        "x0": round(min(x["x0"] for x in cur_line), 2),
-                        "y0": round(min(x["y0"] for x in cur_line), 2),
-                        "x1": round(max(x["x1"] for x in cur_line), 2),
-                        "y1": round(max(x["y1"] for x in cur_line), 2),
-                        "text": " ".join(x["text"] for x in cur_line)
-                    })
+                lines = PdfLayoutService._group_words_geometrically(words)
 
                 return {
                     "page": page_number,
@@ -137,20 +134,6 @@ class PdfLayoutService:
                     rect = page.rect
                     raw_words = page.get_text("words")
 
-                    merged_raw = []
-                    for w in raw_words:
-                        if merged_raw and merged_raw[-1][5] == w[5] and merged_raw[-1][6] == w[6]:
-                            prev = merged_raw[-1]
-                            gap = w[0] - prev[2]
-                            font_h = max(prev[3] - prev[1], w[3] - w[1])
-                            if font_h > 0 and (gap / font_h) < 0.18:
-                                merged_raw[-1] = (
-                                    prev[0], min(prev[1], w[1]), w[2], max(prev[3], w[3]),
-                                    prev[4] + w[4], prev[5], prev[6], prev[7]
-                                )
-                                continue
-                        merged_raw.append(w)
-
                     words = [
                         {
                             "text": w[4],
@@ -158,34 +141,10 @@ class PdfLayoutService:
                             "x1": round(w[2], 2), "y1": round(w[3], 2),
                             "block": w[5], "line": w[6], "word": w[7]
                         }
-                        for w in merged_raw
+                        for w in raw_words
                     ]
 
-                    lines = []
-                    cur_line = []
-                    for w in words:
-                        if cur_line and (cur_line[0]["block"] != w["block"] or cur_line[0]["line"] != w["line"]):
-                            lines.append({
-                                "block": cur_line[0]["block"],
-                                "line": cur_line[0]["line"],
-                                "x0": round(min(x["x0"] for x in cur_line), 2),
-                                "y0": round(min(x["y0"] for x in cur_line), 2),
-                                "x1": round(max(x["x1"] for x in cur_line), 2),
-                                "y1": round(max(x["y1"] for x in cur_line), 2),
-                                "text": " ".join(x["text"] for x in cur_line)
-                            })
-                            cur_line = []
-                        cur_line.append(w)
-                    if cur_line:
-                        lines.append({
-                            "block": cur_line[0]["block"],
-                            "line": cur_line[0]["line"],
-                            "x0": round(min(x["x0"] for x in cur_line), 2),
-                            "y0": round(min(x["y0"] for x in cur_line), 2),
-                            "x1": round(max(x["x1"] for x in cur_line), 2),
-                            "y1": round(max(x["y1"] for x in cur_line), 2),
-                            "text": " ".join(x["text"] for x in cur_line)
-                        })
+                    lines = PdfLayoutService._group_words_geometrically(words)
 
                     layouts[str(page_num)] = {
                         "page": page_num,

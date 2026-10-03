@@ -4,7 +4,7 @@
 class LocalDB {
   constructor() {
     this.dbName = 'moon_calibre_local';
-    this.version = 3;
+    this.version = 5;
     this.db = null;
   }
 
@@ -28,6 +28,9 @@ class LocalDB {
           db.createObjectStore('local_progress', { keyPath: 'bookId' });
         }
         // 4. Store for pre-buffered & offline page layouts (key: `${bookId}_${pageNumber}`)
+        if (e.oldVersion < 5 && db.objectStoreNames.contains('page_layouts')) {
+          db.deleteObjectStore('page_layouts');
+        }
         if (!db.objectStoreNames.contains('page_layouts')) {
           const store = db.createObjectStore('page_layouts', { keyPath: 'key' });
           store.createIndex('by_book', 'bookId', { unique: false });

@@ -35,10 +35,21 @@ def start_server():
     cmd = [
         sys.executable, "-m", "hypercorn",
         "app.main:app",
-        "--reload",
         "--access-logfile", "-",
         "--error-logfile", "-"
     ]
+    if os.getenv("RELOAD", "false").lower() == "true" and sys.platform != "win32":
+        cmd.append("--reload")
+
+    # Ensure UTF-8 output on Windows consoles
+    if sys.platform == "win32":
+        try:
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(encoding="utf-8")
+            if hasattr(sys.stderr, "reconfigure"):
+                sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
     if has_ssl:
         cmd.extend([
@@ -50,11 +61,11 @@ def start_server():
         print("=" * 60)
         print("  Lunabria HTTP/2 & ASGI Server (Hypercorn)")
         print("=" * 60)
-        print(f"  🔒 HTTPS (HTTP/2 multiplexing via ALPN 'h2'):")
-        print(f"     👉 https://localhost:{SSL_PORT}")
-        print(f"  🌐 HTTP  (HTTP/1.1 & h2c cleartext):")
-        print(f"     👉 http://localhost:{PORT}")
-        print("  📋 Live Access Logs: ACTIVADOS (consola stdout)")
+        print(f"  [HTTPS] (HTTP/2 multiplexing via ALPN 'h2'):")
+        print(f"     -> https://localhost:{SSL_PORT}")
+        print(f"  [HTTP]  (HTTP/1.1 & h2c cleartext):")
+        print(f"     -> http://localhost:{PORT}")
+        print("  [Logs]  Live Access Logs: ACTIVADOS (consola stdout)")
         print("=" * 60)
     else:
         cmd.extend([
@@ -62,7 +73,7 @@ def start_server():
         ])
         print("=" * 60)
         print(f"  Lunabria running on http://{HOST}:{PORT}")
-        print("  📋 Live Access Logs: ACTIVADOS (consola stdout)")
+        print("  [Logs]  Live Access Logs: ACTIVADOS (consola stdout)")
         print("=" * 60)
 
     try:

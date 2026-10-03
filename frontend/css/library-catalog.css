@@ -1,0 +1,433 @@
+/* ================= Main Container ================= */
+.container {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 32px 28px;
+  width: 100%;
+}
+
+.container.search-active {
+  max-width: none;
+  padding-inline: clamp(16px, 3vw, 48px);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.section-title {
+  font-size: 1.28rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background-color: var(--accent-light);
+  color: var(--accent-color);
+  border: 1px solid var(--border-color);
+}
+
+/* ================= Section: Recent Reads ================= */
+.book-grid.recents-container {
+  grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+  margin-bottom: 36px;
+}
+
+.recent-progress-meta {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: auto;
+  margin-bottom: 6px;
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-color), #f97316);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* ================= Catalog Section & Collections Bar ================= */
+.catalog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.catalog-header {
+  display: flex;
+  flex-direction: column;
+}
+
+.catalog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.catalog-content[hidden] {
+  display: none;
+}
+
+.catalog-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.catalog-sort-label {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.catalog-controls .select-custom {
+  min-width: 150px;
+}
+
+.catalog-toggle-btn {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 1.1rem;
+}
+
+.catalog-page-size-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.catalog-page-size-control .select-custom {
+  width: auto;
+  min-width: 112px;
+}
+
+.catalog-page-size-control small {
+  color: var(--text-muted);
+}
+
+.catalog-selection-toolbar,
+.catalog-selection-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-selection-toolbar {
+  margin: 0 0 12px;
+}
+
+.catalog-selection-actions[hidden] {
+  display: none;
+}
+
+.catalog-selection-actions > span,
+.catalog-selection-target {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.catalog-selection-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalog-selection-target .select-custom {
+  width: auto;
+  min-width: 180px;
+}
+
+.catalog-selection-hint {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+#catalog-selection-status {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.catalog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.catalog-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.catalog-page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.catalog-page-input {
+  width: 48px;
+  min-width: 42px;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.catalog-page-input:hover {
+  border-color: var(--text-muted);
+}
+
+.catalog-page-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(168, 82, 34, 0.25);
+}
+
+.catalog-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.catalog-page-number,
+.catalog-page-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+}
+
+.catalog-page-number {
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.catalog-page-number:hover {
+  border-color: var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.catalog-page-number[aria-current="page"] {
+  border-color: var(--accent-color);
+  background-color: var(--accent-color);
+  color: var(--accent-contrast);
+  cursor: default;
+}
+
+.catalog-page-ellipsis {
+  color: var(--text-muted);
+}
+
+.catalog-page-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.catalog-page-nav-label {
+  white-space: nowrap;
+}
+
+.catalog-pagination[hidden] {
+  display: none;
+}
+
+.catalog-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.collections-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.collections-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.collections-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.collection-chip-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 9999px;
+  background-color: var(--bg-surface);
+  white-space: nowrap;
+}
+
+.collection-chip-group.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.collection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.collection-chip:hover {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--accent-color);
+}
+
+.collection-chip-group .collection-chip {
+  border: 0;
+  box-shadow: none;
+  padding: 4px 8px;
+}
+
+.collection-chip-group .collection-chip:hover {
+  border-color: transparent;
+}
+
+.collection-chip-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.collection-chip-delete:hover {
+  background-color: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.collection-chip-delete:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.collection-chip-group.active .collection-chip-delete {
+  color: var(--accent-contrast);
+}
+
+.collection-chip.active {
+  background-color: var(--accent-color);
+  color: var(--accent-contrast);
+  border-color: var(--accent-color);
+  box-shadow: 0 2px 8px rgba(168, 82, 34, 0.3);
+}
+
+.chip-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.collection-chip.active .chip-badge {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+

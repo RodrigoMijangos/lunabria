@@ -128,7 +128,7 @@ class BookMetadataManager {
 
     const fetchBtn = document.getElementById('edit-fetch-isbn-btn');
     fetchBtn.disabled = true;
-    fetchBtn.textContent = '⏳ Searching...';
+    fetchBtn.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Searching...';
 
     try {
       const data = await api.fetchMetadataByIsbn(isbn);
@@ -143,7 +143,7 @@ class BookMetadataManager {
       alert('No metadata found for that ISBN: ' + e.message);
     } finally {
       fetchBtn.disabled = false;
-      fetchBtn.textContent = '🔍 Fetch from Calibre';
+      fetchBtn.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg> Fetch from Calibre';
     }
   }
 

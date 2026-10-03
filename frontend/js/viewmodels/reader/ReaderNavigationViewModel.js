@@ -77,23 +77,72 @@ class ReaderNavigationViewModel {
     this.viewportEl.classList.toggle('notes-mode', this.model.viewMode === 'notes');
   }
 
-  zoomIn() {
-    this.setZoom(this.model.calculateZoomInScale());
+  async calculateFitWidthScale(pageNumber = this.model.currentPage) {
+    if (!this.model.pdfDoc) return 1.0;
+    try {
+      const page = await this.model.pdfDoc.getPage(pageNumber || 1);
+      const unscaledViewport = page.getViewport({ scale: 1.0 });
+      const availableWidth = Math.max(300, (this.bodyEl?.clientWidth || window.innerWidth) * 0.90);
+      const targetWidth = this.model.viewMode === 'dual' ? (availableWidth - 24) / 2 : availableWidth;
+      const calculated = targetWidth / unscaledViewport.width;
+      return Math.max(0.25, Math.min(5.0, Math.round(calculated * 100) / 100));
+    } catch (e) {
+      return 1.0;
+    }
   }
 
-  zoomOut() {
-    this.setZoom(this.model.calculateZoomOutScale());
+  async calculateFitPageScale(pageNumber = this.model.currentPage) {
+    if (!this.model.pdfDoc) return 1.0;
+    try {
+      const page = await this.model.pdfDoc.getPage(pageNumber || 1);
+      const unscaledViewport = page.getViewport({ scale: 1.0 });
+      const availableWidth = Math.max(300, (this.bodyEl?.clientWidth || window.innerWidth) * 0.90);
+      const availableHeight = Math.max(300, (this.bodyEl?.clientHeight || window.innerHeight) - 180);
+      const targetWidth = this.model.viewMode === 'dual' ? (availableWidth - 24) / 2 : availableWidth;
+      const scaleW = targetWidth / unscaledViewport.width;
+      const scaleH = availableHeight / unscaledViewport.height;
+      const calculated = Math.min(scaleW, scaleH);
+      return Math.max(0.25, Math.min(5.0, Math.round(calculated * 100) / 100));
+    } catch (e) {
+      return 1.0;
+    }
   }
 
-  resetZoom() {
-    this.setZoom(1.3);
+  async fitWidth() {
+    this.model.setFitMode('width');
+    const scale = await this.calculateFitWidthScale();
+    this.setZoom(scale, false, { isZoom: true });
   }
 
-  setZoom(scale) {
+  async fitPage() {
+    this.model.setFitMode('page');
+    const scale = await this.calculateFitPageScale();
+    this.setZoom(scale, false, { isZoom: true });
+  }
+
+  zoomIn(focalPoint = null) {
+    this.model.setFitMode(null);
+    this.setZoom(this.model.calculateZoomInScale(), false, focalPoint || { isZoom: true });
+  }
+
+  zoomOut(focalPoint = null) {
+    this.model.setFitMode(null);
+    this.setZoom(this.model.calculateZoomOutScale(), false, focalPoint || { isZoom: true });
+  }
+
+  resetZoom(focalPoint = null) {
+    this.model.setFitMode(null);
+    this.setZoom(1.0, true, focalPoint || { isZoom: true });
+  }
+
+  setZoom(scale, clearFitMode = true, focalPoint = null) {
+    if (clearFitMode) {
+      this.model.setFitMode(null);
+    }
     this.model.setScale(scale);
     this.updateHUD();
     if (this.callbacks.onRenderRequest) {
-      this.callbacks.onRenderRequest(this.model.currentPage);
+      this.callbacks.onRenderRequest(this.model.currentPage, focalPoint || { isZoom: true });
     }
   }
 
@@ -116,6 +165,12 @@ class ReaderNavigationViewModel {
     );
     const zoomLabel = document.getElementById('reader-zoom-reset-btn');
     if (zoomLabel) zoomLabel.textContent = `${Math.round(this.model.scale * 100)}%`;
+
+    const fitWidthBtn = document.getElementById('reader-fit-width-btn');
+    if (fitWidthBtn) fitWidthBtn.classList.toggle('active', this.model.fitMode === 'width');
+
+    const fitPageBtn = document.getElementById('reader-fit-page-btn');
+    if (fitPageBtn) fitPageBtn.classList.toggle('active', this.model.fitMode === 'page');
   }
 
   currentEffectiveScale(pageNumber) {

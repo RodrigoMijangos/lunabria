@@ -67,18 +67,20 @@ class SyncSettingsManager {
     const button = document.getElementById('sync-manual-now-btn');
     if (!button || button.disabled) return;
     button.disabled = true;
-    button.textContent = '⏳ Syncing…';
+    button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Syncing…';
 
     try {
       const result = await api.syncPendingProgress('manual');
-      button.textContent = result.success ? '✅ Synced' : '⚠️ Offline';
+      button.innerHTML = result.success
+        ? '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#circle-check"></use></svg> Synced'
+        : '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Offline';
     } catch (error) {
-      button.textContent = '⚠️ Offline';
+      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Offline';
       console.error('[SyncSettingsManager] Sync error:', error);
     } finally {
       setTimeout(() => {
         button.disabled = false;
-        button.textContent = '🔄 Sync Now';
+        button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#sync"></use></svg> Sync Now';
       }, 1500);
     }
   }

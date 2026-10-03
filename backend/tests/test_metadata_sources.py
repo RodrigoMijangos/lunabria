@@ -2,6 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -29,7 +30,7 @@ class TestMetadataSources(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory(prefix="lunabria-metadata-tests-")
         self.db_path = Path(self.temp_dir.name) / "app_state.db"
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute("CREATE TABLE user_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
 
         self.db_patch = patch("app.services.metadata_service.get_db", side_effect=self.get_db)
@@ -41,10 +42,15 @@ class TestMetadataSources(unittest.TestCase):
         MetadataService.get_available_sources.cache_clear()
         self.temp_dir.cleanup()
 
+    @contextmanager
     def get_db(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def test_detects_plugin_names_across_wrapped_help_lines(self):
         with patch(

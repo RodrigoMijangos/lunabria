@@ -1,0 +1,564 @@
+/* ================= VIEW: MOON READER ================= */
+.reader-view {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background-color: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.reader-header {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 90%;
+  height: auto;
+  min-height: 50px;
+  flex-wrap: wrap;
+  gap: 8px;
+  background-color: var(--hud-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  z-index: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  box-sizing: border-box;
+}
+
+.reader-header.hidden {
+  transform: translate(-50%, -120%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Common HUD button styling - perfectly sized and aligned, never wraps */
+.hud-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 17px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.hud-btn:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--text-muted);
+  transform: translateY(-1px);
+}
+
+.hud-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.hud-btn-outline {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+}
+
+.hud-btn-primary {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(180, 83, 9, 0.25);
+}
+
+.hud-btn-primary:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.hud-btn-nav {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 17px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  font-weight: 600;
+}
+
+.hud-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+/* Reader Title in Header */
+.reader-title-bar {
+  text-align: center;
+  max-width: 320px;
+  min-width: 120px;
+  overflow: hidden;
+  padding: 0 8px;
+  flex-shrink: 1;
+}
+
+.reader-book-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+
+.reader-book-author {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+/* Right controls container */
+.hud-right-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* Zoom Segmented Control */
+.hud-zoom-group {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  border: 1px solid var(--border-color);
+  border-radius: 17px;
+  background-color: var(--bg-surface);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.hud-zoom-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  width: 28px;
+  height: 100%;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+  user-select: none;
+}
+
+.hud-zoom-btn:hover {
+  background-color: var(--bg-secondary);
+}
+
+.hud-zoom-btn:active {
+  background-color: var(--border-color);
+}
+
+.hud-zoom-label {
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0 8px;
+  height: 100%;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  transition: all 0.15s ease;
+}
+
+.hud-zoom-label:hover {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.hud-fit-btn {
+  border-left: 1px solid var(--border-color);
+  width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.hud-fit-btn.active {
+  background-color: var(--accent-light, rgba(168, 82, 34, 0.15));
+  color: var(--accent-color);
+}
+
+.hud-fit-icon {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+}
+
+/* Top HUD Vertical Divider (Microsoft Edge style) */
+.hud-divider {
+  width: 1px;
+  height: 22px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Microsoft Edge Styled Unified Page Control Group */
+.msedge-page-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: transparent;
+  padding: 0 2px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.msedge-page-input {
+  width: 48px;
+  min-width: 42px;
+  height: 32px;
+  padding: 0 6px;
+  text-align: center;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.msedge-page-input:hover {
+  border-color: var(--text-muted);
+}
+
+.msedge-page-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(168, 82, 34, 0.25);
+  background-color: var(--bg-surface);
+}
+
+.msedge-page-input::-webkit-outer-spin-button,
+.msedge-page-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.msedge-page-total {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  letter-spacing: -0.2px;
+}
+
+/* View Mode Selector in HUD */
+.hud-select {
+  height: 34px;
+  padding: 0 10px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 17px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.hud-select:hover {
+  border-color: var(--text-muted);
+}
+
+
+/* PDF Viewer Container */
+.reader-body {
+  flex-grow: 1;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 100px 16px 90px;
+  cursor: text;
+}
+
+.pdf-viewport-container {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  filter: var(--pdf-filter);
+  margin: auto;
+  transition: filter 0.2s ease;
+  cursor: text;
+}
+
+.pdf-viewport-container.single-mode {
+  flex-direction: column;
+}
+
+.pdf-viewport-container.dual-mode {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 20px;
+  max-width: 100%;
+}
+
+.pdf-viewport-container.flow-mode {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+
+.pdf-viewport-container.flow-mode .pdf-page-wrapper {
+  box-shadow: none;
+  margin-bottom: 0;
+  border-radius: 0;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.22);
+}
+
+.pdf-viewport-container.flow-mode .pdf-page-wrapper:last-child {
+  border-bottom: none;
+}
+
+.pdf-viewport-container.flow-mode .pdf-page-wrapper:first-child {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.pdf-viewport-container.flow-mode .pdf-page-wrapper:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+/* Subtle continuous stream page indicator badge */
+.pdf-viewport-container.flow-mode .pdf-page-wrapper::after {
+  content: "Page " attr(data-page);
+  position: absolute;
+  bottom: 8px;
+  right: 14px;
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(0, 0, 0, 0.4);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  z-index: 4;
+}
+
+[data-theme="dark"] .pdf-viewport-container.flow-mode,
+[data-theme="amoled"] .pdf-viewport-container.flow-mode {
+  box-shadow: 0 12px 42px rgba(0, 0, 0, 0.5);
+  background-color: #0f172a;
+}
+
+[data-theme="dark"] .pdf-viewport-container.flow-mode .pdf-page-wrapper,
+[data-theme="amoled"] .pdf-viewport-container.flow-mode .pdf-page-wrapper {
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.18);
+}
+
+[data-theme="dark"] .pdf-viewport-container.flow-mode .pdf-page-wrapper:last-child,
+[data-theme="amoled"] .pdf-viewport-container.flow-mode .pdf-page-wrapper:last-child {
+  border-bottom: none;
+}
+
+[data-theme="dark"] .pdf-viewport-container.flow-mode .pdf-page-wrapper::after,
+[data-theme="amoled"] .pdf-viewport-container.flow-mode .pdf-page-wrapper::after {
+  color: rgba(255, 255, 255, 0.45);
+  background: rgba(30, 41, 59, 0.88);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.pdf-page-wrapper.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-surface);
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 1px dashed var(--border-color);
+}
+
+.pdf-page-wrapper {
+  position: relative;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  margin-bottom: 24px;
+  border-radius: 6px;
+  background-color: #ffffff;
+  overflow: hidden;
+  flex-shrink: 0 !important;
+  isolation: isolate;
+  cursor: text;
+}
+
+.pdf-page-canvas {
+  display: block;
+  margin: 0 auto;
+  cursor: text;
+}
+
+/* Official PDF.js Text Layer rules: Perfectly aligned, crisp selection without ghost text */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 1 !important;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+  cursor: text;
+  font-family: sans-serif;
+}
+
+.textLayer :is(span, .precise-word, .precise-line) {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  box-sizing: border-box;
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+}
+
+.textLayer br {
+  display: none !important;
+  position: absolute !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  pointer-events: none !important;
+}
+
+.textLayer br::selection,
+.textLayer br::-moz-selection {
+  background: transparent !important;
+  color: transparent !important;
+}
+
+.textLayer .precise-line {
+  display: inline-block !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+  pointer-events: auto;
+}
+
+.textLayer .precise-word {
+  display: inline-block;
+}
+
+/* Translucent selection box without showing duplicate text - continuous solid bar like MS Edge */
+.textLayer ::selection,
+.textLayer *::selection {
+  background: rgba(59, 130, 246, 0.42) !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+}
+
+.textLayer ::-moz-selection,
+.textLayer *::-moz-selection {
+  background: rgba(59, 130, 246, 0.42) !important;
+  color: transparent !important;
+  text-shadow: none !important;
+}
+
+[data-theme="dark"] .textLayer ::selection,
+[data-theme="dark"] .textLayer *::selection,
+[data-theme="amoled"] .textLayer ::selection,
+[data-theme="amoled"] .textLayer *::selection {
+  background: rgba(245, 158, 11, 0.5) !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* Highlights Overlay - Authentically styled after Microsoft Edge PDF Highlighter */
+.pdf-highlight-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.pdf-highlight-rect {
+  position: absolute;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+[data-theme="dark"] .pdf-highlight-rect,
+[data-theme="amoled"] .pdf-highlight-rect {
+  mix-blend-mode: screen;
+  opacity: 0.38;
+}
+
+.pdf-highlight-rect:hover {
+  opacity: 0.52 !important;
+  filter: brightness(1.08);
+}
+

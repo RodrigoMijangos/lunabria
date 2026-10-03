@@ -13,75 +13,59 @@ class ReaderAnnotationViewModel {
     this.onPageNeedsRefresh = callbacks.onPageNeedsRefresh;
   }
 
-  async applyHighlight(colorId, comment = "", options = {}) {
-    const range = this.model.selectedRange;
-    const text = this.model.selectedText;
-    if (!range || !text) return;
-    const selection = window.getSelection();
-    const activeRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    const shouldClearSelection = () => {
-      if (!selection || !activeRange || selection.rangeCount !== 1) return false;
-      const current = selection.getRangeAt(0);
-      return current.startContainer === activeRange.startContainer &&
-        current.startOffset === activeRange.startOffset &&
-        current.endContainer === activeRange.endContainer &&
-        current.endOffset === activeRange.endOffset;
-    };
+  computeSelectionRects(range, pageWrapper, currentScale) {
+    if (!range || !pageWrapper) return [];
+    const pageRect = pageWrapper.getBoundingClientRect();
+    const rawRects = Array.from(range.getClientRects()).filter(r => r.width > 1 && r.height > 1);
+    const rectsToUse = rawRects.length > 0 ? rawRects : [range.getBoundingClientRect()].filter(r => r.width > 1 && r.height > 1);
+    if (!rectsToUse.length) return [];
 
-    let pageWrapper = null;
-    const startNode = range.startContainer;
-    const element = startNode.nodeType === Node.ELEMENT_NODE ? startNode : startNode.parentElement;
-    if (element) pageWrapper = element.closest('.pdf-page-wrapper');
-    if (!pageWrapper) pageWrapper = this.viewportEl.querySelector('.pdf-page-wrapper');
-
-    const pageNumber = pageWrapper?.dataset?.page ? Number(pageWrapper.dataset.page) : this.model.currentPage;
-    const pageRect = (pageWrapper || this.viewportEl).getBoundingClientRect();
-    const currentScale = this.model.scale;
-    const selectionBounds = range.getBoundingClientRect();
-
-    const clientRects = Array.from(range.getClientRects()).filter(r => r.width > 2 && r.height > 2);
     const lineSpans = Array.from(pageWrapper.querySelectorAll('.precise-line'));
 
-    const relativeRects = clientRects.map(cr => {
+    const relativeRects = rectsToUse.map(cr => {
       const midY = cr.top + cr.height / 2;
-      const lineSpan = lineSpans.find(s => {
+
+      let lineSpan = null;
+      let bestSpan = null;
+      let bestScore = -Infinity;
+
+      for (const s of lineSpans) {
         const sr = s.getBoundingClientRect();
-        return midY >= sr.top - 6 && midY <= sr.bottom + 6;
-      });
-
-      if (lineSpan && lineSpan.dataset.y0) {
-        const lineX0 = parseFloat(lineSpan.dataset.x0);
-        const lineY0 = parseFloat(lineSpan.dataset.y0);
-        const lineX1 = parseFloat(lineSpan.dataset.x1);
-        const lineY1 = parseFloat(lineSpan.dataset.y1);
-
-        const selLeft = (cr.left - pageRect.left) / currentScale;
-        const selRight = (cr.right - pageRect.left) / currentScale;
-
-        const x0 = Math.max(lineX0, Math.min(lineX1, selLeft));
-        const x1 = Math.min(lineX1, Math.max(lineX0, selRight));
-        const y0 = Math.max(0, lineY0 - 1.2);
-        const y1 = lineY1 + 1.2;
-
-        return {
-          x0: Math.round(x0 * 100) / 100,
-          y0: Math.round(y0 * 100) / 100,
-          x1: Math.round(x1 * 100) / 100,
-          y1: Math.round(y1 * 100) / 100
-        };
-      } else {
-        const x0 = (cr.left - pageRect.left) / currentScale;
-        const y0 = (cr.top - pageRect.top) / currentScale;
-        return {
-          x0: Math.round(x0 * 100) / 100,
-          y0: Math.round(y0 * 100) / 100,
-          x1: Math.round((x0 + cr.width / currentScale) * 100) / 100,
-          y1: Math.round((y0 + cr.height / currentScale) * 100) / 100
-        };
+        const score = ReaderSelectionGeometry.lineMatchScore(cr, sr, midY);
+        if (score !== null) {
+          if (score > bestScore) {
+            bestScore = score;
+            bestSpan = s;
+          }
+        }
       }
+
+      lineSpan = bestSpan;
+
+      return ReaderSelectionGeometry.relativeRect(
+        cr, pageRect, currentScale,
+        lineSpan && lineSpan.dataset.y0 ? lineSpan.dataset : null
+      );
     });
 
-    const mergedRects = ReaderModel.mergeLineRects(relativeRects);
+    return ReaderModel.mergeLineRects(relativeRects);
+  }
+
+  async applyHighlight(colorId, comment = "", options = {}) {
+    const text = this.model.selectedText;
+    let rects = this.model.selectedRects;
+    let pageNumber = this.model.selectedPage || this.model.currentPage;
+
+    if ((!rects || !rects.length) && this.model.selectedRange) {
+      let pageWrapper = document.getElementById(`pdf-page-${pageNumber}`) || this.viewportEl.querySelector('.pdf-page-wrapper');
+      rects = this.computeSelectionRects(this.model.selectedRange, pageWrapper, this.model.scale);
+    }
+
+    if (!text || !rects || !rects.length) {
+      console.warn('[ReaderAnnotationViewModel] Cannot apply highlight: missing text or rects', { text, rects });
+      return;
+    }
+
     const colorMeta = this.model.getColorMetadata(colorId);
     const cleanText = ReaderModel.normalizeText(text);
 
@@ -92,23 +76,27 @@ class ReaderAnnotationViewModel {
       category: colorMeta?.name || '',
       text: cleanText,
       comment: comment,
-      rects: mergedRects
+      rects: rects
     };
 
-    const savedAnnotation = await api.createAnnotation(this.model.bookId, annotData);
-    if (this.floatingToolbar) {
-      this.floatingToolbar.style.opacity = '0';
-      this.floatingToolbar.style.pointerEvents = 'none';
-    }
-    if (shouldClearSelection()) selection.removeAllRanges();
+    try {
+      const savedAnnotation = await api.createAnnotation(this.model.bookId, annotData);
+      if (this.floatingToolbar) {
+        this.floatingToolbar.style.opacity = '0';
+        this.floatingToolbar.style.pointerEvents = 'none';
+      }
+      this.clearTextSelection();
 
-    await this.refreshAnnotations();
-    const refreshed = this.refreshPageHighlights(pageNumber);
-    if (!refreshed && this.model.viewMode !== 'flow' && this.onPageNeedsRefresh) {
-      this.onPageNeedsRefresh(this.model.currentPage);
-    }
-    if (options.showQuickPalette) {
-      this.openQuickHighlightPalette(savedAnnotation, pageNumber, selectionBounds);
+      await this.refreshAnnotations();
+      const refreshed = this.refreshPageHighlights(pageNumber);
+      if (!refreshed && this.model.viewMode !== 'flow' && this.onPageNeedsRefresh) {
+        this.onPageNeedsRefresh(this.model.currentPage);
+      }
+      if (options.showQuickPalette) {
+        this.openQuickHighlightPalette(savedAnnotation, pageNumber);
+      }
+    } catch (err) {
+      console.error('[ReaderAnnotationViewModel] Error saving highlight:', err);
     }
   }
 
@@ -147,9 +135,6 @@ class ReaderAnnotationViewModel {
     if (this.floatingToolbar) this.floatingToolbar.style.display = 'none';
 
     const rect = highlightEl.getBoundingClientRect();
-    this.highlightActionMenu.style.left = `${rect.left + rect.width / 2}px`;
-    this.highlightActionMenu.style.top = `${rect.top - 8}px`;
-    this.highlightActionMenu.style.display = 'flex';
 
     const colorsContainer = document.getElementById('highlight-action-colors');
     if (colorsContainer) {
@@ -167,6 +152,8 @@ class ReaderAnnotationViewModel {
         colorsContainer.appendChild(btn);
       });
     }
+    const { safeTop, safeBottom } = this.toolbarSafeBounds();
+    this.positionAnnotationToolbar(this.highlightActionMenu, rect, rect, safeTop, safeBottom);
   }
 
   openQuickHighlightPalette(annot, pageNumber, fallbackBounds = null) {
@@ -212,13 +199,9 @@ class ReaderAnnotationViewModel {
     palette.setAttribute('aria-hidden', 'false');
 
     const paletteBounds = palette.getBoundingClientRect();
-    const left = Math.max(paletteBounds.width / 2 + 8, Math.min(
-      window.innerWidth - paletteBounds.width / 2 - 8,
-      bounds.left + bounds.width / 2
-    ));
-    const opensBelow = bounds.top < paletteBounds.height + 16;
+    const { left, top, opensBelow } = ReaderSelectionGeometry.quickPalettePosition(bounds, paletteBounds, window.innerWidth);
     palette.style.left = `${left}px`;
-    palette.style.top = `${opensBelow ? bounds.bottom : bounds.top - 8}px`;
+    palette.style.top = `${top}px`;
     palette.classList.toggle('opens-below', opensBelow);
     requestAnimationFrame(() => {
       palette.style.opacity = '1';
@@ -262,6 +245,17 @@ class ReaderAnnotationViewModel {
           range.collapse(true);
         }
       }
+
+      if ((!range || range.startContainer?.nodeType !== Node.TEXT_NODE) && drawCanvas.parentElement) {
+        const textLayer = drawCanvas.parentElement.querySelector('.textLayer');
+        const fallbackProbe = window.ReaderNativeSelectionLoupeController?.prototype?.findTextTargetWithinGap?.call(null, clientX, clientY, textLayer);
+        if (fallbackProbe?.node) {
+          range = document.createRange();
+          range.setStart(fallbackProbe.node, fallbackProbe.offset);
+          range.collapse(true);
+        }
+      }
+
       if (range && range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
         const textContent = range.startContainer.textContent;
         const offset = range.startOffset;
@@ -296,10 +290,15 @@ class ReaderAnnotationViewModel {
     colorContainer.innerHTML = '';
     this.model.colors.forEach(c => {
       const btn = document.createElement('button');
+      btn.type = 'button';
       btn.className = 'color-dot-btn';
       btn.style.backgroundColor = c.color;
       btn.title = c.name;
-      btn.onclick = () => this.applyHighlight(c.id);
+      btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.applyHighlight(c.id);
+      });
       colorContainer.appendChild(btn);
     });
   }
@@ -308,10 +307,33 @@ class ReaderAnnotationViewModel {
     window.getSelection()?.removeAllRanges();
     this.model.selectedRange = null;
     this.model.selectedText = '';
+    this.model.selectedRects = [];
+    this.model.selectedPage = null;
     if (this.floatingToolbar) {
       this.floatingToolbar.style.opacity = '0';
       this.floatingToolbar.style.pointerEvents = 'none';
     }
+  }
+
+  toolbarSafeBounds() {
+    const header = document.getElementById('reader-header') || document.querySelector('.reader-hud-header');
+    const footer = document.getElementById('reader-footer') || document.querySelector('.reader-footer');
+    return {
+      safeTop: (header && !header.classList.contains('hidden') ? header.getBoundingClientRect().bottom : 0) + 10,
+      safeBottom: (footer && !footer.classList.contains('hidden') ? footer.getBoundingClientRect().top : window.innerHeight) - 10
+    };
+  }
+
+  positionAnnotationToolbar(toolbar, firstRect, lastRect, safeTop, safeBottom) {
+    // Hidden controls have zero dimensions; measure the populated, visible layout.
+    toolbar.style.display = 'flex';
+    const width = toolbar.offsetWidth || 240;
+    const height = toolbar.offsetHeight || 44;
+    const { left, top } = ReaderSelectionGeometry.floatingToolbarPosition(
+      firstRect, lastRect, width, height, window.innerWidth, safeTop, safeBottom
+    );
+    toolbar.style.left = `${Math.round(left)}px`;
+    toolbar.style.top = `${Math.round(top)}px`;
   }
 
   async updateFloatingToolbar() {
@@ -337,8 +359,29 @@ class ReaderAnnotationViewModel {
     const rect = range.getBoundingClientRect();
 
     if (rect.width > 0 && rect.height > 0) {
-      this.model.selectedRange = range;
+      const { safeTop, safeBottom } = this.toolbarSafeBounds();
+
+      // If selection is scrolled completely off-screen, hide toolbar
+      if (rect.bottom < safeTop || rect.top > safeBottom) {
+        if (this.floatingToolbar) {
+          this.floatingToolbar.style.opacity = '0';
+          this.floatingToolbar.style.pointerEvents = 'none';
+        }
+        return;
+      }
+
+      this.model.selectedRange = range.cloneRange();
       this.model.selectedText = text;
+
+      let pageWrapper = null;
+      const startNode = range.startContainer;
+      const element = startNode.nodeType === Node.ELEMENT_NODE ? startNode : startNode.parentElement;
+      if (element) pageWrapper = element.closest('.pdf-page-wrapper');
+      if (!pageWrapper) pageWrapper = this.viewportEl.querySelector('.pdf-page-wrapper');
+
+      const pageNumber = pageWrapper?.dataset?.page ? Number(pageWrapper.dataset.page) : this.model.currentPage;
+      this.model.selectedPage = pageNumber;
+      this.model.selectedRects = this.computeSelectionRects(range, pageWrapper, this.model.scale);
 
       if (this.highlightActionMenu) this.highlightActionMenu.style.display = 'none';
 
@@ -350,13 +393,11 @@ class ReaderAnnotationViewModel {
         return;
       }
 
-      const tbWidth = 240;
-      const left = Math.max(tbWidth / 2 + 10, Math.min(window.innerWidth - tbWidth / 2 - 10, rect.left + rect.width / 2));
-      const top = Math.max(64, rect.top - 14);
+      const rects = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0);
+      const firstRect = rects.length > 0 ? rects[0] : rect;
+      const lastRect = rects.length > 0 ? rects[rects.length - 1] : rect;
 
-      this.floatingToolbar.style.left = `${left}px`;
-      this.floatingToolbar.style.top = `${top}px`;
-      this.floatingToolbar.style.display = 'flex';
+      this.positionAnnotationToolbar(this.floatingToolbar, firstRect, lastRect, safeTop, safeBottom);
       requestAnimationFrame(() => {
         this.floatingToolbar.style.opacity = '1';
         this.floatingToolbar.style.pointerEvents = 'auto';
@@ -373,7 +414,7 @@ class ReaderAnnotationViewModel {
     if (!annots.length) {
       container.innerHTML = `
         <div style="text-align: center; color: var(--text-secondary); padding: 32px 16px;">
-          <p style="font-size: 1.8rem; margin-bottom: 8px;">🖍️</p>
+          <p class="annotations-empty-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#highlighter"></use></svg></p>
           <p style="font-weight: 600; margin-bottom: 4px;">No annotations yet</p>
           <p style="font-size: 0.8rem;">Select text in the reader to highlight.</p>
         </div>
@@ -391,11 +432,11 @@ class ReaderAnnotationViewModel {
         <div class="annotation-item-header">
           <span class="annotation-page">Page ${annot.page}</span>
           <div style="display:flex; gap:6px;">
-            <button type="button" class="btn btn-icon delete-annot-btn" title="Delete" style="padding:2px 6px; font-size:0.8rem;">🗑️</button>
+            <button type="button" class="btn btn-icon delete-annot-btn" title="Delete" aria-label="Delete annotation on page ${annot.page}" style="padding:2px 6px; font-size:0.8rem;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#trash"></use></svg></button>
           </div>
         </div>
         <div class="annotation-text">"${annot.text}"</div>
-        ${annot.comment ? `<div class="annotation-comment" style="margin-top:6px; font-size:0.82rem; color:var(--text-secondary); font-style:italic;">💬 ${annot.comment}</div>` : ''}
+        ${annot.comment ? `<div class="annotation-comment" style="margin-top:6px; font-size:0.82rem; color:var(--text-secondary); font-style:italic;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#comment"></use></svg> ${annot.comment}</div>` : ''}
       `;
 
       item.onclick = (e) => {

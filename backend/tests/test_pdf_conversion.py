@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -21,7 +22,7 @@ class TestEpubPdfConversion(unittest.TestCase):
         self.database_path = self.library_path / "metadata.db"
         self.converted_pdf_dir = self.root / "converted-pdfs"
 
-        with sqlite3.connect(self.database_path) as conn:
+        with closing(sqlite3.connect(self.database_path)) as conn, conn:
             conn.execute("CREATE TABLE books (id INTEGER PRIMARY KEY, path TEXT)")
             conn.execute("CREATE TABLE data (book INTEGER, name TEXT, format TEXT)")
             conn.execute(
@@ -67,7 +68,7 @@ class TestEpubPdfConversion(unittest.TestCase):
     def test_native_pdf_is_used_without_conversion(self):
         native_pdf = self.book_dir / "Native.pdf"
         native_pdf.write_bytes(b"%PDF-1.4 native fixture")
-        with sqlite3.connect(self.database_path) as conn:
+        with closing(sqlite3.connect(self.database_path)) as conn, conn:
             conn.execute(
                 "INSERT INTO data (book, name, format) VALUES (?, ?, ?)",
                 (7, "Native", "PDF"),

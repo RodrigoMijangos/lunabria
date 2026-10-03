@@ -1,11 +1,20 @@
-import sqlite3
 import json
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+import sqlite3
+
 from app.config import APP_STATE_DB_PATH
 
+class _ClosingSQLiteConnection(sqlite3.Connection):
+    """Retain sqlite's transaction context while closing its connection."""
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            return super().__exit__(exc_type, exc_value, traceback)
+        finally:
+            self.close()
+
+
 def get_db():
-    conn = sqlite3.connect(APP_STATE_DB_PATH)
+    conn = sqlite3.connect(APP_STATE_DB_PATH, factory=_ClosingSQLiteConnection)
     conn.row_factory = sqlite3.Row
     return conn
 

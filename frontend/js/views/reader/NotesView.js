@@ -17,7 +17,7 @@ const NotesView = {
     const pageChip = document.createElement('button');
     pageChip.type = 'button';
     pageChip.className = 'notes-page-chip';
-    pageChip.innerHTML = `<span>📄</span> Page ${annot.page}`;
+    pageChip.innerHTML = `<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#page"></use></svg> Page ${annot.page}`;
     pageChip.title = `Go to page ${annot.page}`;
     pageChip.onclick = () => onJumpToPage(annot.page);
     tagsWrap.appendChild(pageChip);
@@ -38,7 +38,7 @@ const NotesView = {
     const readBtn = document.createElement('button');
     readBtn.type = 'button';
     readBtn.className = 'btn btn-secondary notes-read-here-btn';
-    readBtn.innerHTML = '<span>📖</span> Read here';
+    readBtn.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#book-open"></use></svg> Read here';
     readBtn.onclick = () => onJumpToPage(annot.page);
     actionsWrap.appendChild(readBtn);
 
@@ -46,7 +46,8 @@ const NotesView = {
     commentBtn.type = 'button';
     commentBtn.className = 'btn btn-icon';
     commentBtn.title = annot.comment ? 'Edit Note' : 'Add Note';
-    commentBtn.innerHTML = annot.comment ? '📝' : '💬';
+    commentBtn.setAttribute('aria-label', commentBtn.title);
+    commentBtn.innerHTML = `<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#${annot.comment ? 'notes' : 'comment'}"></use></svg>`;
     commentBtn.onclick = () => onEditComment(annot);
     actionsWrap.appendChild(commentBtn);
 
@@ -54,8 +55,9 @@ const NotesView = {
     deleteBtn.type = 'button';
     deleteBtn.className = 'btn btn-icon';
     deleteBtn.title = 'Delete Highlight';
+    deleteBtn.setAttribute('aria-label', 'Delete Highlight');
     deleteBtn.style.color = '#ef4444';
-    deleteBtn.innerHTML = '🗑️';
+    deleteBtn.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#trash"></use></svg>';
     deleteBtn.onclick = () => onDelete(annot.id);
     actionsWrap.appendChild(deleteBtn);
 
@@ -71,7 +73,7 @@ const NotesView = {
       const commentBox = document.createElement('div');
       commentBox.className = 'notes-comment-box';
       commentBox.innerHTML = `
-        <div class="notes-comment-icon">💡</div>
+        <div class="notes-comment-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#lightbulb"></use></svg></div>
         <div class="notes-comment-content">
           <span class="notes-comment-label">Your Personal Note</span>
           <p class="notes-comment-text">${annot.comment}</p>

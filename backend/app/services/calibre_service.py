@@ -15,8 +15,10 @@ from app.config import (
 )
 from app.services.pdf_layout_service import pdf_layout_service
 from app.services.metadata_service import metadata_service
+from app.services import calibre_cli, calibre_conversion
 
 class CalibreService:
+    # Resolve dependencies here so patches on this module remain effective after extraction.
     def __init__(
         self,
         library_path: str = CALIBRE_LIBRARY_PATH,
@@ -30,18 +32,7 @@ class CalibreService:
 
     def ensure_library(self):
         """Ensures the Calibre library exists or creates an empty one for testing."""
-        if not self.db_path.exists():
-            self.library_path.mkdir(parents=True, exist_ok=True)
-            # Run calibredb to initialize an empty library
-            try:
-                subprocess.run(
-                    [CALIBREDB_BIN, "list", "--with-library", str(self.library_path)],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-            except Exception as e:
-                print(f"Warning: Could not run calibredb to init library: {e}")
+        return calibre_cli.ensure_library(self, CALIBREDB_BIN=CALIBREDB_BIN, subprocess=subprocess)
 
     def get_db_connection(self) -> Optional[sqlite3.Connection]:
         """Provides direct read-only connection to Calibre's metadata.db for high performance."""
@@ -68,38 +59,12 @@ class CalibreService:
         
         # If specific Calibre search query is provided, use calibredb search
         if search_query and search_query.strip():
-            try:
-                cmd = [
-                    CALIBREDB_BIN, "list",
-                    "--with-library", str(self.library_path),
-                    "--search", search_query.strip(),
-                    "--fields", "id,title,authors,formats,tags,series,pubdate,comments,timestamp",
-                    "--for-machine"
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                raw_books = json.loads(result.stdout)
-                
-                # Format response
-                books = []
-                for b in raw_books:
-                    book_id = b.get("id")
-                    cover_file = self.get_cover_path(book_id)
-                    books.append({
-                        "id": book_id,
-                        "title": b.get("title", "Untitled"),
-                        "authors": b.get("authors", "Unknown"),
-                        "formats": b.get("formats", []),
-                        "tags": [t.strip() for t in b.get("tags", "").split(",") if t.strip()] if isinstance(b.get("tags"), str) else (b.get("tags") or []),
-                        "series": b.get("series"),
-                        "pubdate": b.get("pubdate"),
-                        "date_added": b.get("timestamp"),
-                        "comments": b.get("comments"),
-                        "has_cover": cover_file is not None and cover_file.exists(),
-                        "cover_url": f"/api/books/{book_id}/cover" if cover_file and cover_file.exists() else None
-                    })
+            books = calibre_cli.search_books(
+                self, search_query, CALIBREDB_BIN=CALIBREDB_BIN,
+                subprocess=subprocess, json=json,
+            )
+            if books is not None:
                 return books
-            except Exception as e:
-                print(f"calibredb search failed: {e}. Falling back to SQLite.")
 
         # High-performance direct SQLite query
         conn = self.get_db_connection()
@@ -251,62 +216,21 @@ class CalibreService:
 
     def convert_epub_to_pdf(self, book_id: int, epub_path: Path) -> Path:
         """Converts an EPUB into a cached PDF without modifying the Calibre library."""
-        source_stats = epub_path.stat()
-        cache_path = self.converted_pdf_dir / (
-            f"{book_id}-{source_stats.st_size}-{source_stats.st_mtime_ns}.pdf"
+        return calibre_conversion.convert_epub_to_pdf(
+            self,
+            book_id,
+            epub_path,
+            EBOOK_CONVERT_BIN=EBOOK_CONVERT_BIN,
+            Path=Path,
+            os=os,
+            subprocess=subprocess,
+            tempfile=tempfile,
+            threading=threading,
         )
-        if self._is_valid_pdf(cache_path):
-            return cache_path
-
-        with self._conversion_locks_guard:
-            conversion_lock = self._conversion_locks.setdefault(book_id, threading.Lock())
-
-        with conversion_lock:
-            if self._is_valid_pdf(cache_path):
-                return cache_path
-
-            self.converted_pdf_dir.mkdir(parents=True, exist_ok=True)
-            temp_fd, temp_name = tempfile.mkstemp(
-                prefix=f"{book_id}-", suffix=".pdf", dir=self.converted_pdf_dir
-            )
-            os.close(temp_fd)
-            temp_path = Path(temp_name)
-            temp_path.unlink()
-
-            try:
-                subprocess.run(
-                    [EBOOK_CONVERT_BIN, str(epub_path), str(temp_path)],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                )
-                if not self._is_valid_pdf(temp_path):
-                    raise RuntimeError("Calibre did not generate a valid PDF when converting the EPUB.")
-                temp_path.replace(cache_path)
-            except FileNotFoundError as error:
-                raise RuntimeError(
-                    "ebook-convert was not found. Please install Calibre or set EBOOK_CONVERT_BIN."
-                ) from error
-            except subprocess.CalledProcessError as error:
-                detail = (error.stderr or error.stdout or "").strip()
-                message = "Calibre could not convert the EPUB to PDF."
-                if detail:
-                    message = f"{message} {detail}"
-                raise RuntimeError(message) from error
-            except OSError as error:
-                raise RuntimeError(f"Could not execute ebook-convert: {error}") from error
-            finally:
-                temp_path.unlink(missing_ok=True)
-
-            return cache_path
 
     @staticmethod
     def _is_valid_pdf(file_path: Path) -> bool:
-        try:
-            with file_path.open("rb") as pdf_file:
-                return pdf_file.read(5) == b"%PDF-"
-        except OSError:
-            return False
+        return calibre_conversion._is_valid_pdf(file_path)
 
     def get_page_layout(self, book_id: int, page_number: int) -> Optional[Dict[str, Any]]:
         """Extracts pixel-perfect word bounding boxes for a given page using PdfLayoutService."""
@@ -335,35 +259,16 @@ class CalibreService:
 
     def add_book(self, file_path: str, title: Optional[str] = None, authors: Optional[str] = None, tags: Optional[str] = None, isbn: Optional[str] = None) -> int:
         """Adds a book to Calibre using calibredb add."""
-        cmd = [CALIBREDB_BIN, "add", "--with-library", str(self.library_path)]
-        if title:
-            cmd.extend(["--title", title])
-        if authors:
-            cmd.extend(["--authors", authors])
-        if tags:
-            cmd.extend(["--tags", tags])
-        if isbn:
-            cmd.extend(["--identifier", f"isbn:{isbn}"])
-        cmd.append(str(file_path))
-
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        # Parse returned book id (e.g., "Added book ids: 42")
-        output = result.stdout
-        for line in output.splitlines():
-            if "Added book ids:" in line:
-                id_str = line.split(":")[-1].strip().split(",")[0].strip()
-                return int(id_str)
-        
-        # Fallback: get highest id from db
-        conn = self.get_db_connection()
-        if conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT MAX(id) as max_id FROM books")
-            row = cursor.fetchone()
-            conn.close()
-            if row and row["max_id"]:
-                return int(row["max_id"])
-        raise RuntimeError(f"Could not determine new book ID from calibredb: {output}")
+        return calibre_cli.add_book(
+            self,
+            file_path,
+            title,
+            authors,
+            tags,
+            isbn,
+            CALIBREDB_BIN=CALIBREDB_BIN,
+            subprocess=subprocess,
+        )
 
     def delete_book(self, book_id: int) -> bool:
         """
@@ -372,12 +277,7 @@ class CalibreService:
         """
         from app.database import get_db
         self.ensure_library()
-        cmd = [CALIBREDB_BIN, "remove", str(book_id), "--with-library", str(self.library_path), "--permanent"]
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError as e:
-            err_msg = (e.stderr or e.stdout or str(e)).strip()
-            raise RuntimeError(f"Error deleting book with calibredb: {err_msg}")
+        calibre_cli.remove_book(self, book_id, CALIBREDB_BIN=CALIBREDB_BIN, subprocess=subprocess)
 
         self._cleanup_converted_pdfs(book_id)
 
@@ -399,44 +299,23 @@ class CalibreService:
         return True
 
     def _cleanup_converted_pdfs(self, book_id: int) -> None:
-        if not self.converted_pdf_dir.exists():
-            return
-        for pdf_path in self.converted_pdf_dir.glob(f"{book_id}-*.pdf"):
-            try:
-                pdf_path.unlink()
-            except OSError:
-                pass
+        return calibre_conversion._cleanup_converted_pdfs(self, book_id)
 
     def update_metadata(self, book_id: int, title: Optional[str] = None, authors: Optional[str] = None, tags: Optional[str] = None, series: Optional[str] = None, series_index: Optional[float] = None, comments: Optional[str] = None, isbn: Optional[str] = None):
         """Updates book metadata using calibredb set_metadata."""
-        fields = []
-        if title is not None:
-            fields.append(f"title:{title}")
-        if authors is not None:
-            fields.append(f"authors:{authors}")
-        if tags is not None:
-            fields.append(f"tags:{tags}")
-        if series is not None:
-            fields.append(f"series:{series}")
-        if series_index is not None:
-            fields.append(f"series_index:{series_index}")
-        if comments is not None:
-            fields.append(f"comments:{comments}")
-        if isbn is not None and isbn.strip():
-            fields.append(f"identifiers:isbn:{isbn.strip()}")
-
-        if not fields:
-            return
-
-        cmd = [CALIBREDB_BIN, "set_metadata", "--with-library", str(self.library_path), str(book_id)]
-        for f in fields:
-            cmd.extend(["--field", f])
-
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError as e:
-            err_msg = (e.stderr or e.stdout or str(e)).strip()
-            raise RuntimeError(f"Error updating metadata with calibredb: {err_msg}")
+        return calibre_cli.update_metadata(
+            self,
+            book_id,
+            title,
+            authors,
+            tags,
+            series,
+            series_index,
+            comments,
+            isbn,
+            CALIBREDB_BIN=CALIBREDB_BIN,
+            subprocess=subprocess,
+        )
 
     def fetch_metadata(self, isbn: Optional[str] = None, title: Optional[str] = None, authors: Optional[str] = None) -> Dict[str, Any]:
         """Uses MetadataService to scrape online metadata by ISBN or title/authors."""

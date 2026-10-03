@@ -1,0 +1,300 @@
+/* ================= FREEHAND INK & SMART PENCIL CANVAS ================= */
+.pdf-drawing-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 12;
+  touch-action: none;
+}
+
+.draw-mode-active .pdf-drawing-canvas {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* Palm Rejection & Native Gesture Lock: Prevent browser from scrolling while drawing */
+#reader-body.draw-mode-active,
+.draw-mode-active .pdf-viewport-container,
+.draw-mode-active .pdf-page-wrapper,
+.draw-mode-active .pdf-drawing-canvas {
+  touch-action: none !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.draw-mode-active.pan-mode-active .pdf-drawing-canvas,
+.draw-mode-active.pan-tool-active .pdf-drawing-canvas {
+  cursor: grab !important;
+}
+
+.draw-mode-active.panning .pdf-drawing-canvas {
+  cursor: grabbing !important;
+}
+
+/* Text Highlighter Selector Mode in Drawing Toolbar (Annotation Highlighter) */
+.draw-mode-active.text-highlight-mode .pdf-drawing-canvas {
+  pointer-events: none !important;
+  cursor: text !important;
+}
+
+#reader-body.draw-mode-active.text-highlight-mode,
+.draw-mode-active.text-highlight-mode .pdf-viewport-container,
+.draw-mode-active.text-highlight-mode .textLayer {
+  touch-action: none !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.draw-mode-active.text-highlight-mode .pdf-page-wrapper {
+  touch-action: none !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.draw-mode-active.text-highlight-mode .textLayer {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text !important;
+}
+
+.draw-mode-active.text-highlight-mode .textLayer .precise-line {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  pointer-events: auto !important;
+  cursor: text !important;
+}
+
+.draw-mode-active.text-highlight-mode .textLayer ::selection,
+.draw-mode-active.text-highlight-mode .textLayer *::selection {
+  background: rgba(234, 179, 8, 0.45) !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+.draw-mode-active.text-highlight-mode .textLayer ::-moz-selection,
+.draw-mode-active.text-highlight-mode .textLayer *::-moz-selection {
+  background: rgba(234, 179, 8, 0.45) !important;
+  color: transparent !important;
+}
+
+/* Excalidraw-inspired Floating Drawing Toolbar */
+.drawing-toolbar {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 950;
+  background-color: var(--hud-bg);
+  border: 1.5px solid var(--border-color);
+  border-radius: 18px;
+  padding: 6px 14px;
+  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 90px);
+  overflow-y: auto;
+  align-items: center;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  user-select: none;
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawing-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.drawing-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--text-secondary);
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.drawing-drag-handle .drawing-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.drawing-drag-handle:active {
+  cursor: grabbing;
+}
+
+.drawing-tool-group,
+.drawing-colors-group,
+.drawing-width-group,
+.drawing-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.drawing-actions-group {
+  flex-wrap: wrap;
+}
+
+.drawing-tool-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.drawing-tool-btn:hover {
+  background-color: var(--bg-secondary);
+  transform: scale(1.08);
+}
+
+.drawing-tool-btn.active {
+  background-color: var(--accent-color);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(168, 82, 34, 0.35);
+}
+
+.drawing-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-color);
+  margin: 0 2px;
+}
+
+.drawing-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease;
+}
+
+.drawing-color-dot:hover {
+  transform: scale(1.25);
+}
+
+.drawing-color-dot.active {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--accent-color);
+}
+
+.drawing-width-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.drawing-width-btn:hover {
+  border-color: var(--accent-color);
+}
+
+.drawing-width-btn.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #fff;
+}
+
+.drawing-close-btn:hover {
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.drawing-device-pill {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.drawing-device-pill.pen-active {
+  background-color: rgba(168, 82, 34, 0.12);
+  color: var(--accent-color);
+  border-color: rgba(168, 82, 34, 0.25);
+}
+
+.reader-selection-loupe {
+  position: fixed;
+  z-index: 500;
+  display: none;
+  width: 144px;
+  height: 144px;
+  overflow: hidden;
+  border: 2px solid var(--accent-color);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+
+.reader-selection-loupe canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.reader-selection-loupe.has-highlight-target::before {
+  content: attr(data-target-label);
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  z-index: 1;
+  padding: 3px 7px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.reader-selection-loupe::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.7);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+

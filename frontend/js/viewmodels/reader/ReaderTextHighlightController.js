@@ -68,7 +68,7 @@ class ReaderTextHighlightController {
         position.offset >= record.start && position.offset <= record.end
       );
       if (wordRecord) {
-        const tolerance = allowNearby ? Math.max(3, wordRecord.rect.height * 0.2) : 0;
+        const tolerance = allowNearby ? Math.max(20, wordRecord.rect.height * 0.8) : 0;
         if (distanceToRect(wordRecord.rect) <= tolerance * tolerance) return position;
       }
     }
@@ -84,7 +84,7 @@ class ReaderTextHighlightController {
     }
 
     if (!nearest) return null;
-    const tolerance = allowNearby ? Math.max(3, nearest.rect.height * 0.2) : 0;
+    const tolerance = allowNearby ? Math.max(26, nearest.rect.height * 1.0) : 0;
     if (nearestDistance > tolerance * tolerance) return null;
 
     const ratio = nearest.rect.width
@@ -116,15 +116,24 @@ class ReaderTextHighlightController {
     if (event.isPrimary === false || (event.pointerType !== 'pen' && event.button !== 0)) return false;
 
     const textRecords = this.buildTextRecords(pageWrapper);
-    const anchor = this.textPositionAtPoint(event.clientX, event.clientY, pageWrapper, textRecords);
+    const anchor = this.textPositionAtPoint(event.clientX, event.clientY, pageWrapper, textRecords, true);
     if (!anchor) return false;
 
     event.preventDefault();
     event.stopPropagation();
-    this.gesture = { pointerId: event.pointerId, pageNumber, pageWrapper, anchor, focus: anchor, textRecords };
+    this.gesture = {
+      pointerId: event.pointerId,
+      pageNumber,
+      pageWrapper,
+      anchor,
+      focus: anchor,
+      textRecords,
+      startX: event.clientX,
+      startY: event.clientY,
+      isDragging: false
+    };
     this.setSelection(anchor, anchor);
     try { pageWrapper.setPointerCapture(event.pointerId); } catch (error) {}
-    this.updateGesture(event);
     return true;
   }
 
@@ -150,8 +159,14 @@ class ReaderTextHighlightController {
     if (focus && (focus.node !== gesture.focus.node || focus.offset !== gesture.focus.offset)) {
       gesture.focus = focus;
       this.setSelection(gesture.anchor, focus);
+      gesture.isDragging = true;
     }
-    this.loupe.update(event.clientX, event.clientY, gesture.pageWrapper);
+    const hasMoved = Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 3;
+    const hasSpan = focus && (focus.node !== gesture.anchor.node || focus.offset !== gesture.anchor.offset);
+    if (gesture.isDragging || hasMoved || hasSpan) {
+      gesture.isDragging = true;
+      this.loupe.update(event.clientX, event.clientY, gesture.pageWrapper);
+    }
   }
 
   async handlePointerUp(event) {
@@ -164,7 +179,9 @@ class ReaderTextHighlightController {
     }
 
     const gesture = this.gesture;
-    this.updateGesture(event);
+    if (gesture.isDragging) {
+      this.updateGesture(event);
+    }
     this.gesture = null;
     this.loupe.hide();
     try { gesture.pageWrapper.releasePointerCapture(event.pointerId); } catch (error) {}

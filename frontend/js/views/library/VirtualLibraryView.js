@@ -5,7 +5,7 @@
 const VirtualLibraryView = {
   populateDropdown(selectEl, libraries, activeId) {
     if (!selectEl) return;
-    selectEl.innerHTML = '<option value="">📚 All Libraries</option>';
+    selectEl.innerHTML = '<option value="">All Libraries</option>';
     (libraries || []).forEach(vl => {
       const opt = document.createElement('option');
       opt.value = vl.id;
@@ -25,7 +25,7 @@ const VirtualLibraryView = {
     const allButton = document.createElement('button');
     allButton.type = 'button';
     allButton.className = 'collection-chip';
-    allButton.textContent = '📚 All libraries';
+    allButton.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#library"></use></svg> All libraries';
     allButton.setAttribute('aria-pressed', String(activeId == null));
     if (activeId == null) allButton.classList.add('active');
     allButton.onclick = () => onSelect?.(null);
@@ -61,7 +61,7 @@ const VirtualLibraryView = {
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';
       deleteButton.className = 'collection-chip-delete';
-      deleteButton.textContent = '🗑️';
+      deleteButton.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#trash"></use></svg>';
       deleteButton.title = `Delete library ${library.name}`;
       deleteButton.setAttribute('aria-label', `Delete library ${library.name}`);
       deleteButton.onclick = async () => {

@@ -26,22 +26,22 @@ class ReaderNotesViewModel {
         </div>
         <div class="notes-hero-actions">
           <button type="button" class="btn btn-secondary notes-action-btn" id="notes-back-read-btn">
-            <span>📖</span> Back to Reading
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#book-open"></use></svg> Back to Reading
           </button>
         </div>
       </div>
       <div class="notes-filter-bar">
         <div class="notes-filter-top-row">
           <div class="notes-search-wrap">
-            <span>🔍</span>
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg>
             <input type="text" id="notes-search-input" class="notes-search-input" placeholder="Search quotes and notes...">
           </div>
           <div class="notes-sort-wrap">
             <span class="notes-sort-label">Sort by:</span>
             <select id="notes-sort-select" class="form-select notes-sort-select">
-              <option value="page_asc">Page (1 → End)</option>
+              <option value="page_asc">Page (1 to End)</option>
               <option value="recent">Most recent</option>
-              <option value="page_desc">Page (End → 1)</option>
+              <option value="page_desc">Page (End to 1)</option>
             </select>
           </div>
         </div>
@@ -104,7 +104,7 @@ class ReaderNotesViewModel {
     if (annots.length === 0) {
       listEl.innerHTML = `
         <div class="notes-empty-state">
-          <div class="notes-empty-icon">📝</div>
+          <div class="notes-empty-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg></div>
           <div class="notes-empty-title">No annotations found</div>
           <p class="notes-empty-desc">Try adjusting your search or create new annotations while reading.</p>
         </div>

@@ -36,6 +36,14 @@ jobs:
         run: |
           python -m unittest discover -s tests -v
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Frontend Regression Tests
+        run: node --test frontend/tests/*.test.cjs
+
       - name: Package Staging Release Bundle
         run: |
           mkdir -p staging-dist
