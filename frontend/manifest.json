@@ -2,20 +2,35 @@
   "name": "Lunabria",
   "short_name": "Lunabria",
   "description": "E-book reader and library manager connected to Calibre with offline PWA support",
+  "id": "/",
+  "scope": "./",
   "start_url": "./",
   "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
   "background_color": "#f4ecd8",
   "theme_color": "#e2d3b4",
+  "categories": [
+    "books",
+    "productivity",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "./icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "./icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

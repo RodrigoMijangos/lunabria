@@ -48,7 +48,8 @@ class ReaderViewModel {
       this.model,
       this.viewportEl,
       this.bodyEl,
-      () => this.annotations
+      () => this.annotations,
+      this
     );
     this.selectionLoupe = new ReaderNativeSelectionLoupeController(this.model, this.viewportEl, this.bodyEl);
 
@@ -111,7 +112,11 @@ class ReaderViewModel {
     this.eventBindings = new ReaderEventBindings(this);
     this.documentLifecycle = new ReaderDocumentLifecycle(this);
     this.offlineService = new ReaderOfflineService(this.model);
+    this.mobile = (typeof MobileReaderController !== 'undefined')
+      ? new MobileReaderController(this, this.model)
+      : null;
     this.initGlobalEvents();
+    this.mobile?.init();
   }
 
   initGlobalEvents() {

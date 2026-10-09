@@ -129,6 +129,14 @@ Lunabria interfaces directly with your Calibre library and CLI utilities. Keep t
 
 ---
 
+## 🔍 Known Issues & Typography Limitations
+
+For a detailed technical overview of book compatibility edge cases—such as scanned books without OCR, custom font ligatures, code blocks, or temporary layout desyncs (and their workarounds)—please consult:
+
+👉 **[Docs: Known Issues & Typography Limitations](docs/known_issues.md)**
+
+---
+
 ## 🖥️ Run on a Windows desktop
 
 1. Install Python 3.11 or later and Calibre for Windows. Make sure `calibredb`, `ebook-convert`, and `fetch-ebook-metadata` are available in `PATH`.

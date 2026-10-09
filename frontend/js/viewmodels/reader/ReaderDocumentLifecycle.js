@@ -77,6 +77,7 @@ class ReaderDocumentLifecycle {
       reader.nav.syncViewModeUI();
       reader.nav.updateHUD();
       await reader.renderCurrentViewMode(initialPage);
+      reader.mobile?.onBookOpened();
     } catch (err) {
       if (sequence !== reader.openSequence) return;
       console.error('[ReaderViewModel] Error opening book:', err);
@@ -149,6 +150,7 @@ class ReaderDocumentLifecycle {
     const pdfDoc = reader.model.pdfDoc;
     reader.loadingTask = null;
 
+    reader.mobile?.exitFullscreen();
     reader.container.style.display = 'none';
     document.body.style.overflow = '';
 

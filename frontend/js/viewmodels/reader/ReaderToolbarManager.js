@@ -97,13 +97,13 @@ class ReaderToolbarManager {
     button.disabled = false;
 
     if (isComplete) {
-      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#circle-check"></use></svg> Offline';
+      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#circle-check"></use></svg><span class="hud-btn-label"> Offline</span>';
       button.title = 'The PDF and all layouts are saved for offline reading';
     } else if (pdfCached) {
-      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Layouts';
+      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg><span class="hud-btn-label"> Layouts</span>';
       button.title = 'The PDF is saved. Download layouts to complete offline access';
     } else {
-      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Offline';
+      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg><span class="hud-btn-label"> Offline</span>';
       button.title = 'Save the PDF and layouts in browser for offline reading';
     }
   }
@@ -114,17 +114,17 @@ class ReaderToolbarManager {
 
     const requestedBookId = this.model.bookId;
     button.disabled = true;
-    button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Saving';
+    button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg><span class="hud-btn-label"> Saving</span>';
     try {
       await this.onDownloadOffline((progress) => {
         if (this.model.bookId !== requestedBookId) return;
         if (progress.stage === 'pdf') {
-          button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Downloading PDF';
+          button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg><span class="hud-btn-label"> Downloading PDF</span>';
         } else if (progress.stage === 'pdf-complete') {
           button.dataset.pdfCached = 'true';
-          button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Preparing layouts';
+          button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg><span class="hud-btn-label"> Preparing layouts</span>';
         } else if (progress.stage === 'layouts') {
-          button.innerHTML = `<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Layouts ${progress.completed}/${progress.total}`;
+          button.innerHTML = `<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg><span class="hud-btn-label"> Layouts ${progress.completed}/${progress.total}</span>`;
         }
       });
       if (this.model.bookId === requestedBookId) {
@@ -134,8 +134,8 @@ class ReaderToolbarManager {
       console.error('[ReaderToolbarManager] Incomplete offline download:', error);
       if (this.model.bookId === requestedBookId) {
         button.innerHTML = button.dataset.pdfCached === 'true'
-                  ? '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Retry layouts'
-                  : '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Retry';
+                  ? '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg><span class="hud-btn-label"> Retry layouts</span>'
+                  : '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg><span class="hud-btn-label"> Retry</span>';
         button.title = error.message || 'Could not complete offline download';
       }
     } finally {

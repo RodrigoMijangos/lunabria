@@ -1,0 +1,487 @@
+/* ==========================================================================
+   LUNABRIA MOBILE SUITE STYLES
+   Isolated stylesheet for mobile reader, FAB, compact HUD & touch workflows.
+   ========================================================================== */
+
+/* Offline Catalog Banner */
+.offline-catalog-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--accent-color, #a85222);
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.offline-catalog-banner .ui-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  stroke: currentColor;
+}
+
+/* PWA Install Button */
+#pwa-install-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--accent-color, #a85222);
+  color: #ffffff;
+  border-color: var(--accent-color, #a85222);
+  font-weight: 600;
+}
+
+#pwa-install-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* ================= MOBILE READER ENHANCEMENTS ================= */
+
+/* Mobile FAB Floating Drawing Button Container */
+.mobile-draw-fab-container {
+  position: fixed;
+  right: 18px;
+  bottom: 84px;
+  z-index: 960;
+  display: none; /* Shown dynamically via DeviceEnvironment / MobileReaderController */
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+/* Primary FAB Button (Single collapsible button) */
+.mobile-draw-fab-main {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 3px solid var(--border-color, #dcd2b8);
+  background-color: var(--bg-surface, #fcf9f2);
+  color: var(--text-primary, #2d261e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22), 0 1px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease, background-color 0.15s ease;
+  position: relative;
+  outline: none;
+}
+
+.mobile-draw-fab-main:active {
+  transform: scale(0.92);
+}
+
+.mobile-draw-fab-main .drawing-icon {
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+/* Dynamic Pen styling on FAB: stroke width as border, fill as background */
+.mobile-draw-fab-main.is-pen-tool {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.26), 0 0 0 2px var(--bg-surface, #fcf9f2);
+}
+
+/* Undo Button always below the main FAB when collapsed */
+.mobile-draw-undo-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-color, #dcd2b8);
+  background-color: var(--bg-surface, #fcf9f2);
+  color: var(--text-primary, #2d261e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  outline: none;
+}
+
+.mobile-draw-undo-btn:active {
+  transform: scale(0.90);
+}
+
+.mobile-draw-undo-btn .drawing-icon {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+/* Expanded Tool Palette */
+.mobile-draw-tools-drawer {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 4px;
+  animation: mobileFadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mobile-draw-tools-drawer.open {
+  display: flex;
+}
+
+.mobile-draw-tool-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-color, #dcd2b8);
+  background-color: var(--bg-surface, #fcf9f2);
+  color: var(--text-primary, #2d261e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mobile-draw-tool-item.active {
+  background-color: var(--accent-color, #a85222);
+  color: #ffffff;
+  border-color: var(--accent-color, #a85222);
+}
+
+.mobile-draw-tool-item:active {
+  transform: scale(0.92);
+}
+
+/* Contextual Color Palette Popup for Pen */
+.mobile-color-contextual-menu {
+  position: absolute;
+  right: 68px;
+  bottom: 50px;
+  background-color: var(--hud-bg, rgba(244, 236, 216, 0.96));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid var(--border-color, #dcd2b8);
+  border-radius: 28px;
+  padding: 8px 12px;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 970;
+  animation: mobileFadeInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mobile-draw-tools-drawer.open ~ .mobile-color-contextual-menu {
+  bottom: 5px;
+}
+
+.mobile-color-contextual-menu.open {
+  display: flex;
+}
+
+.mobile-color-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mobile-color-swatch:active {
+  transform: scale(1.2);
+}
+
+.mobile-color-swatch.active {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px var(--bg-surface, #fcf9f2), 0 0 0 4px var(--accent-color, #a85222);
+}
+
+/* Compact Mobile Presentation Mode Switcher */
+#mobile-view-mode-btn {
+  display: none;
+}
+
+/* Mobile Scenario Info Indicator (replaces yellow Mouse/PC pill) */
+.mobile-device-indicator {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #786b59);
+  padding: 2px 6px;
+}
+
+.mobile-device-indicator .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Animations */
+@keyframes mobileFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mobileFadeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(12px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* Desktop default for mobile wrappers: unwrap them so desktop layout is unaffected */
+.hud-mobile-grid,
+.hud-mobile-half-left,
+.hud-mobile-left-row2,
+.hud-mobile-half-right {
+  display: contents;
+}
+
+#mobile-wipe-strokes-btn {
+  display: none;
+}
+
+/* Mobile responsive adjustments for Reader HUD */
+body.mobile-reader-active .reader-header {
+  padding: 6px 8px !important;
+  gap: 4px !important;
+}
+
+body.mobile-reader-active .hud-right-controls {
+  display: flex !important;
+  width: 100% !important;
+  margin-top: 4px !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  justify-content: stretch !important;
+}
+
+/* Menú contextual mobile en una sola línea flex con flex space-around */
+body.mobile-reader-active .hud-mobile-grid {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  justify-content: space-around !important;
+  align-items: center !important;
+  width: 100% !important;
+  gap: 4px !important;
+  box-sizing: border-box !important;
+}
+
+/* Desempaquetar contenedores internos para alinear todos los controles en la misma línea flex */
+body.mobile-reader-active .hud-mobile-half-left,
+body.mobile-reader-active .hud-mobile-left-row2,
+body.mobile-reader-active .hud-mobile-half-right {
+  display: contents !important;
+}
+
+/* Grupo de páginas integrado en la línea flex */
+body.mobile-reader-active #reader-page-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  height: 36px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  border-radius: 18px !important;
+  padding: 0 8px !important;
+  flex-shrink: 0 !important;
+  background-color: var(--bg-surface, #fcf9f2) !important;
+  border: 1.5px solid var(--border-color, #dcd2b8) !important;
+}
+
+body.mobile-reader-active #reader-page-input {
+  width: 34px !important;
+  text-align: center !important;
+  height: 24px !important;
+  font-size: 0.85rem !important;
+  padding: 0 2px !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  border: 1px solid var(--border-color, #dcd2b8) !important;
+  color: var(--text-primary, #2d261e) !important;
+}
+
+body.mobile-reader-active #reader-page-total {
+  font-size: 0.82rem !important;
+  white-space: nowrap !important;
+  color: var(--text-secondary, #786b59) !important;
+  margin-left: 4px !important;
+}
+
+/* Botones COMPLETAMENTE REDONDOS con íconos visibles en mobile */
+body.mobile-reader-active #reader-offline-btn,
+body.mobile-reader-active #reader-sync-btn,
+body.mobile-reader-active #mobile-view-mode-btn,
+body.mobile-reader-active #reader-drawer-toggle-btn,
+body.mobile-reader-active #mobile-wipe-strokes-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  border-radius: 50% !important; /* Completamente redondo */
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  cursor: pointer !important;
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease !important;
+}
+
+body.mobile-reader-active #reader-offline-btn,
+body.mobile-reader-active #reader-sync-btn,
+body.mobile-reader-active #mobile-view-mode-btn,
+body.mobile-reader-active #mobile-wipe-strokes-btn {
+  background-color: var(--bg-surface, #fcf9f2) !important;
+  border: 1.5px solid var(--border-color, #dcd2b8) !important;
+  color: var(--text-primary, #2d261e) !important;
+}
+
+body.mobile-reader-active #reader-drawer-toggle-btn {
+  background-color: var(--accent-color, #a85222) !important;
+  border: 1.5px solid var(--accent-color, #a85222) !important;
+  color: #ffffff !important;
+}
+
+body.mobile-reader-active #reader-offline-btn:active,
+body.mobile-reader-active #reader-sync-btn:active,
+body.mobile-reader-active #mobile-view-mode-btn:active,
+body.mobile-reader-active #reader-drawer-toggle-btn:active,
+body.mobile-reader-active #mobile-wipe-strokes-btn:active {
+  transform: scale(0.92) !important;
+}
+
+/* Ocultar etiquetas de texto en mobile para dejar SOLO los íconos */
+body.mobile-reader-active .hud-btn-label {
+  display: none !important;
+}
+
+/* SVG icons visibles y centrados dentro de los botones redondos */
+body.mobile-reader-active #reader-offline-btn .ui-icon,
+body.mobile-reader-active #reader-sync-btn .ui-icon,
+body.mobile-reader-active #mobile-view-mode-btn .ui-icon,
+body.mobile-reader-active #reader-drawer-toggle-btn .ui-icon,
+body.mobile-reader-active #mobile-wipe-strokes-btn .ui-icon,
+body.mobile-reader-active #mobile-scenario-indicator .ui-icon {
+  width: 19px !important;
+  height: 19px !important;
+  min-width: 19px !important;
+  min-height: 19px !important;
+  max-width: 19px !important;
+  max-height: 19px !important;
+  stroke: currentColor !important;
+  fill: none !important;
+  display: block !important;
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+  pointer-events: none !important;
+}
+
+body.mobile-reader-active #reader-drawer-toggle-btn .ui-icon {
+  stroke: #ffffff !important;
+}
+
+/* Indicador de escenario mobile redondo */
+body.mobile-reader-active #mobile-scenario-indicator {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  border: 1.5px dashed var(--border-color, #dcd2b8) !important;
+  color: var(--text-secondary, #786b59) !important;
+}
+
+/* Ocultar elementos de desktop en mobile */
+body.mobile-reader-active .hud-zoom-group,
+body.mobile-reader-active .hud-divider,
+body.mobile-reader-active #view-mode-select,
+body.mobile-reader-active #reader-draw-toggle-btn,
+body.mobile-reader-active #drawing-device-pill,
+body.mobile-reader-active #drawing-toolbar {
+  display: none !important;
+}
+
+body.mobile-reader-active .mobile-draw-fab-container {
+  display: flex !important;
+}
+
+/* Touch action & canvas gating on mobile */
+body.mobile-reader-active .pdf-drawing-canvas {
+  pointer-events: none !important;
+}
+
+body.mobile-reader-active.mobile-drawing-active .pdf-drawing-canvas {
+  pointer-events: auto !important;
+  touch-action: none !important;
+}
+
+/* Default mobile touch navigation (pan/zoom) when drawing is not active */
+body.mobile-reader-active,
+body.mobile-reader-active #reader-body,
+body.mobile-reader-active #pdf-viewport,
+body.mobile-reader-active .pdf-viewport-container,
+body.mobile-reader-active .pdf-page-wrapper {
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
+
+/* When mobile drawing is active, lock touch-action to none to prevent browser gesture interception/cancellation */
+body.mobile-reader-active.mobile-drawing-active,
+body.mobile-reader-active.mobile-drawing-active #reader-body,
+body.mobile-reader-active.mobile-drawing-active #pdf-viewport,
+body.mobile-reader-active.mobile-drawing-active .pdf-viewport-container,
+body.mobile-reader-active.mobile-drawing-active .pdf-page-wrapper,
+body.mobile-reader-active.mobile-drawing-active .pdf-drawing-canvas {
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+body.mobile-reader-active .textLayer {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+body.mobile-reader-active .textLayer :is(.precise-line, .precise-word, span) {
+  pointer-events: auto !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* Text layer does not capture pointer events or trigger selection while mobile drawing is active */
+body.mobile-reader-active.mobile-drawing-active .textLayer,
+body.mobile-reader-active.mobile-drawing-active .textLayer :is(.precise-line, .precise-word, span) {
+  pointer-events: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* Mobile Selection Loupe */
+body.mobile-reader-active .reader-selection-loupe {
+  z-index: 999;
+}
+

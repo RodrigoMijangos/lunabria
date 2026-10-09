@@ -1,11 +1,14 @@
-const CACHE_NAME = 'lunabria-v1.0.10-selection-anchor-v6';
+const CACHE_NAME = 'lunabria-v1.1.0-mobile-suite';
 // Match the HTML query strings exactly: CacheStorage keys include search parameters.
 const STATIC_ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icons.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   './css/style.css?v=1.0.10-selection-layout',
+  './css/mobile/mobile-reader.css?v=1.1.0',
   './js/db.js?v=1.0.6',
   './js/services/books.js?v=1.0.8',
   './js/services/virtual-libraries.js?v=1.0.8',
@@ -54,6 +57,12 @@ const STATIC_ASSETS = [
   './js/services/reader/ReaderOfflineService.js?v=1.0.8',
   './js/viewmodels/reader/ReaderEventBindings.js?v=1.0.8',
   './js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.0.8',
+  './js/mobile/DeviceEnvironment.js?v=1.1.0',
+  './js/mobile/MobileHUDView.js?v=1.1.0',
+  './js/mobile/MobileDrawingToolbarView.js?v=1.1.0',
+  './js/mobile/MobileSelectionController.js?v=1.1.0',
+  './js/mobile/MobilePWAInstaller.js?v=1.1.0',
+  './js/mobile/MobileReaderController.js?v=1.1.0',
   './js/viewmodels/ReaderViewModel.js?v=1.0.8',
   './js/reader.js?v=0.6.0',
   './js/app.js?v=0.6.0',

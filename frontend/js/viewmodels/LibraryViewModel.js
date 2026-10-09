@@ -33,6 +33,7 @@ class LibraryViewModel {
   async init() {
     this.applyTheme(this.model.theme);
     this.initServiceWorker();
+    this.initPWAInstaller();
     this.uploadManager.init();
     this.colorSettings.init();
     this.syncSettings.init();
@@ -40,6 +41,12 @@ class LibraryViewModel {
     this.syncCatalogControls();
     await this.loadVirtualLibraries();
     await this.loadHome();
+  }
+
+  initPWAInstaller() {
+    if (typeof MobilePWAInstaller !== 'undefined') {
+      this.pwaInstaller = new MobilePWAInstaller();
+    }
   }
 
   initServiceWorker() {
@@ -64,12 +71,50 @@ class LibraryViewModel {
       const [books, recents] = await Promise.all([api.getBooks(), api.getRecents()]);
       this.model.setBooks(books);
       this.model.setRecentBooks(recents);
+      if (typeof localDB !== 'undefined' && localDB && Array.isArray(books) && books.length > 0) {
+        localDB.saveCachedBooks(books).catch(() => {});
+      }
+      this.hideOfflineBanner();
       this.renderRecents();
       this.renderBooks();
       this.updateActiveCollectionChip();
     } catch (err) {
-      console.error('[LibraryViewModel] Error loading home:', err);
+      console.warn('[LibraryViewModel] Error loading home from server, checking offline complete books:', err);
+      if (typeof localDB !== 'undefined' && localDB) {
+        try {
+          const offlineBooks = await localDB.getOfflineCompleteBooks();
+          if (offlineBooks && offlineBooks.length > 0) {
+            this.model.setBooks(offlineBooks);
+            this.model.setRecentBooks([]);
+            this.showOfflineBanner(offlineBooks.length);
+            this.renderRecents();
+            this.renderBooks();
+            this.updateActiveCollectionChip();
+            return;
+          }
+        } catch (dbErr) {
+          console.error('[LibraryViewModel] Error retrieving offline complete books:', dbErr);
+        }
+      }
     }
+  }
+
+  showOfflineBanner(count) {
+    let banner = document.getElementById('offline-catalog-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'offline-catalog-banner';
+      banner.className = 'offline-catalog-banner';
+      const container = document.querySelector('.container') || document.querySelector('main');
+      if (container) container.prepend(banner);
+    }
+    banner.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#circle-check"></use></svg> <span>Modo sin conexión: mostrando ' + count + ' libro(s) disponible(s) con PDF y lectura completa</span>';
+    banner.style.display = 'flex';
+  }
+
+  hideOfflineBanner() {
+    const banner = document.getElementById('offline-catalog-banner');
+    if (banner) banner.style.display = 'none';
   }
 
   async loadVirtualLibraries() {
@@ -245,6 +290,9 @@ class LibraryViewModel {
   }
 
   openBook(bookId, startPage = null) {
+    if (window.reader?.mobile?.requestFullscreenIfMobile) {
+      window.reader.mobile.requestFullscreenIfMobile();
+    }
     if (window.reader && typeof window.reader.open === 'function') window.reader.open(bookId, startPage);
   }
 

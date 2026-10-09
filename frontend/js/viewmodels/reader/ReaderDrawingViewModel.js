@@ -3,11 +3,12 @@
  * Manages drawing canvas layer, stylus pressure engine, gestures, and palm rejection.
  */
 class ReaderDrawingViewModel {
-  constructor(model, viewportEl, bodyEl, getAnnotationCoordinator) {
+  constructor(model, viewportEl, bodyEl, getAnnotationCoordinator, reader = null) {
     this.model = model;
     this.viewportEl = viewportEl;
     this.bodyEl = bodyEl;
     this.getAnnotationCoordinator = getAnnotationCoordinator;
+    this.reader = reader;
 
     this.isDrawing = false;
     this.currentStroke = null;
@@ -77,7 +78,20 @@ class ReaderDrawingViewModel {
   }
 
   handleDrawingPointerDown(e, pageNumber, pageWrapper, drawCanvas, effectiveScale, outputScale) {
-    if (e.target.closest('#floating-toolbar') || e.target.closest('#highlight-action-menu') || e.target.closest('#drawing-toolbar') || e.target.closest('#stylus-accessibility-modal')) {
+    if (e.target && typeof e.target.closest === 'function') {
+      if (e.target.closest('#floating-toolbar') || e.target.closest('#highlight-action-menu') || e.target.closest('#drawing-toolbar') || e.target.closest('#stylus-accessibility-modal') || e.target.closest('#mobile-draw-fab-container')) {
+        return;
+      }
+    }
+
+    const fab = this.reader?.mobile?.drawingFAB || this.reader?.drawingFAB || (typeof window !== 'undefined' && window.reader?.mobile?.drawingFAB);
+    if (fab && (fab.isExpanded || fab.isColorMenuOpen)) {
+      fab.setExpanded(false);
+      fab.closeColorMenu();
+      if (e) {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      }
       return;
     }
 
@@ -92,7 +106,16 @@ class ReaderDrawingViewModel {
     const isMiddleClick = (e.button === 1 || e.buttons === 4) && !isPen;
     const isPanToolActive = this.model.isSpacePanActive || this.model.drawTool === 'pan' || isMiddleClick;
 
+    const isMobileReader = Boolean(
+      (this.reader?.mobile?.device || window.reader?.mobile?.device)?.isMobileReaderActive?.() ||
+      document.body.classList.contains('mobile-reader-active') ||
+      (typeof window !== 'undefined' && window.innerWidth <= 850)
+    );
+
     if (isPanToolActive) {
+      if (isTouch || isMobileReader) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       this.isPanning = true;
@@ -111,8 +134,8 @@ class ReaderDrawingViewModel {
       return;
     }
 
-    // Touch handling according to Palm Rejection setting:
-    if (isTouch && this.model.drawTool !== 'highlighter') {
+    // Touch handling according to Palm Rejection setting (bypassed on mobile reader to allow finger drawing):
+    if (isTouch && this.model.drawTool !== 'highlighter' && !isMobileReader) {
       if (palmSetting === 'strict') {
         e.preventDefault();
         e.stopPropagation();
@@ -147,6 +170,13 @@ class ReaderDrawingViewModel {
       if (startedSelection) this.recordTap(e, now);
       else this.lastTapTime = 0;
       return;
+    }
+
+    // Ensure draw mode is active when pen or eraser is selected
+    if ((this.model.drawTool === 'pen' || this.model.drawTool === 'eraser') && !this.model.isDrawMode) {
+      this.model.isDrawMode = true;
+      this.viewportEl.classList.add('draw-mode-active');
+      this.bodyEl.classList.add('draw-mode-active');
     }
 
     const shouldDraw = isPen || this.model.isDrawMode;
@@ -365,6 +395,10 @@ class ReaderDrawingViewModel {
     this.lastTapTime = 0;
     this.model.setDrawTool(tool);
 
+    if ((tool === 'pen' || tool === 'eraser') && !this.model.isDrawMode) {
+      this.toggleDrawMode(true);
+    }
+
     const toolButtons = {
       penBtn: document.getElementById('draw-tool-pen'),
       highlighterBtn: document.getElementById('draw-tool-highlighter'),
@@ -380,6 +414,7 @@ class ReaderDrawingViewModel {
     if (tool === 'highlighter' && this.model.drawColor === '#1e293b') {
       this.setDrawColor('#eab308');
     }
+    window.reader?.mobile?.drawingFAB?.render();
   }
 
   setDrawColor(hex) {
@@ -390,12 +425,14 @@ class ReaderDrawingViewModel {
     if (this.model.drawTool === 'eraser' || this.model.drawTool === 'pan') {
       this.setDrawTool('pen');
     }
+    window.reader?.mobile?.drawingFAB?.render();
   }
 
   setDrawWidth(width) {
     this.model.setDrawWidth(width);
     const widthBtns = document.querySelectorAll('.drawing-width-btn');
     ReaderHUDView.updateWidthButtons(widthBtns, width);
+    window.reader?.mobile?.drawingFAB?.render();
   }
 
   cycleDrawWidth(direction = 1) {
@@ -422,13 +459,15 @@ class ReaderDrawingViewModel {
   }
 
   clearCurrentPageDrawings(pageNumber = null) {
-    const targetPage = pageNumber || this.model.currentPage;
-    if (confirm(`Delete all drawings on page ${targetPage}?`)) {
-      this.model.clearPageStrokes(targetPage);
-      const canvas = document.querySelector(`.pdf-drawing-canvas[data-page="${targetPage}"]`);
-      if (canvas) this.renderStrokes(canvas, targetPage);
-      this.persistPageDrawings(targetPage);
-    }
+    const targetPage = Number(pageNumber || this.model.currentPage || 1);
+    this.isDrawing = false;
+    this.currentStroke = null;
+    this.strokePoints = [];
+
+    this.model.clearPageStrokes(targetPage);
+    const canvas = document.querySelector(`.pdf-drawing-canvas[data-page="${targetPage}"]`);
+    if (canvas) this.renderStrokes(canvas, targetPage);
+    this.persistPageDrawings(targetPage);
   }
 
   async persistPageDrawings(pageNumber) {

@@ -7,6 +7,10 @@
   
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#f4ecd8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Lunabria">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <!-- Modern Typography (Plus Jakarta Sans & Newsreader) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,6 +19,7 @@
   <!-- PDF.js official textLayer stylesheet -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/web/pdf_viewer.min.css">
   <link rel="stylesheet" href="./css/style.css?v=1.0.10-selection-layout">
+  <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.0">
   
   <!-- PDF.js library -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs" type="module"></script>
@@ -62,6 +67,12 @@
         <option value="dark">Dark</option>
         <option value="amoled">AMOLED</option>
       </select>
+
+      <!-- PWA Install Button (Mobile, Tablet, Desktop) -->
+      <button id="pwa-install-btn" class="btn btn-secondary" style="display: none;" title="Install Lunabria as an App" aria-label="Install Lunabria as an App">
+        <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg>
+        <span class="btn-desktop">Install App</span>
+      </button>
 
       <!-- Upload Button (Optimized for PC) -->
       <button id="upload-btn" class="btn btn-primary btn-desktop"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#upload"></use></svg> Add Books</button>
@@ -187,20 +198,43 @@
 
         <div class="hud-divider" id="hud-page-divider"></div>
 
-        <!-- Microsoft Edge Styled Unified Page Control (Box + Counter) -->
-        <div class="msedge-page-group" id="reader-page-group" title="Go to page (enter number and press Enter)">
-          <input 
-            type="text" 
-            id="reader-page-input" 
-            class="msedge-page-input" 
-            value="1" 
-            inputmode="numeric" 
-            pattern="[0-9]*" 
-            autocomplete="off" 
-            title="Enter a page number and press Enter to jump directly" 
-          />
-          <span id="reader-page-total" class="msedge-page-total">of 1</span>
-          <span id="reader-page-text" style="display:none;"></span>
+        <div class="hud-mobile-grid">
+          <!-- Primer medio (1/2): Box 2x2. Fila 1 = Páginas. Fila 2 = [Offline] [Autosave] (SOLO íconos) -->
+          <div class="hud-mobile-half-left">
+            <div class="msedge-page-group" id="reader-page-group" title="Go to page (enter number and press Enter)">
+              <input 
+                type="text" 
+                id="reader-page-input" 
+                class="msedge-page-input" 
+                value="1" 
+                inputmode="numeric" 
+                pattern="[0-9]*" 
+                autocomplete="off" 
+                title="Enter a page number and press Enter to jump directly" 
+              />
+              <span id="reader-page-total" class="msedge-page-total">of 1</span>
+              <span id="reader-page-text" style="display:none;"></span>
+            </div>
+            <div class="hud-mobile-left-row2">
+              <button id="reader-offline-btn" class="hud-btn hud-btn-outline" title="Save book in browser for offline reading" aria-label="Offline"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg><span class="hud-btn-label">Offline</span></button>
+              <button id="reader-sync-btn" class="hud-btn hud-btn-outline" title="Configure Sync and Autosave" aria-label="Autosave"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg><span class="hud-btn-label">Autosave</span></button>
+            </div>
+          </div>
+
+          <!-- Segundo medio (1/2): 4 íconos sobrantes (Flujo, Anotaciones, Modo mobile, Wipear trazos) -->
+          <div class="hud-mobile-half-right">
+            <button id="mobile-view-mode-btn" class="hud-btn hud-btn-outline" type="button" title="Toggle Reading Mode (Single / Continuous Flow)" aria-label="Toggle Reading Mode">
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#book-open"></use></svg>
+              <span id="mobile-view-mode-label" class="hud-btn-label">Página</span>
+            </button>
+            <button id="reader-drawer-toggle-btn" class="hud-btn hud-btn-primary" title="Notes, Highlights, and Table of Contents" aria-label="Annotations"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg><span class="hud-btn-label">Annotations</span></button>
+            <div id="mobile-scenario-indicator" class="mobile-device-indicator" title="Mobile scenario active" aria-label="Mobile scenario active">
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#smartphone"></use></svg>
+            </div>
+            <button id="mobile-wipe-strokes-btn" class="hud-btn hud-btn-outline" type="button" title="Limpiar todos los trazos de esta página (devolver a la vida)" aria-label="Limpiar trazos de esta página">
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#trash"></use></svg>
+            </button>
+          </div>
         </div>
 
         <div class="hud-divider" id="hud-mode-divider"></div>
@@ -211,10 +245,7 @@
           <option value="flow">Continuous Flow</option>
           <option value="notes">Annotations Only</option>
         </select>
-        <button id="reader-sync-btn" class="hud-btn hud-btn-outline" title="Configure Sync and Autosave"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg> Autosave</button>
-        <button id="reader-offline-btn" class="hud-btn hud-btn-outline" title="Save book in browser for offline reading"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Offline</button>
         <button id="reader-draw-toggle-btn" class="hud-btn hud-btn-outline" title="Drawing Mode / Smart Pen (Shortcut: P or D)"><svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg><span class="reader-draw-toggle-label">Draw</span></button>
-        <button id="reader-drawer-toggle-btn" class="hud-btn hud-btn-primary" title="Notes, Highlights, and Table of Contents"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg> Annotations</button>
       </div>
     </div>
 
@@ -225,6 +256,31 @@
 
     <div id="reader-selection-loupe" class="reader-selection-loupe" aria-hidden="true">
       <canvas width="288" height="288"></canvas>
+    </div>
+
+    <!-- Mobile Collapsible Drawing FAB (Floating Action Button) -->
+    <div id="mobile-draw-fab-container" class="mobile-draw-fab-container" aria-label="Mobile Drawing Tools">
+      <div id="mobile-draw-tools-drawer" class="mobile-draw-tools-drawer">
+        <button id="mobile-tool-pen" type="button" class="mobile-draw-tool-item" title="Lápiz" aria-label="Lápiz">
+          <svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+        </button>
+        <button id="mobile-tool-eraser" type="button" class="mobile-draw-tool-item" title="Borrador" aria-label="Borrador">
+          <svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4l7.6-7.6a2.4 2.4 0 0 1 3.4 0l6.6 6.6a2.4 2.4 0 0 1 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5.5 11.5 7 7"/></svg>
+        </button>
+        <button id="mobile-tool-pan" type="button" class="mobile-draw-tool-item" title="Mover" aria-label="Mover">
+          <svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2v20M2 12h20"/><path d="m8 6 4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4"/></svg>
+        </button>
+      </div>
+
+      <div id="mobile-color-contextual-menu" class="mobile-color-contextual-menu"></div>
+
+      <button id="mobile-draw-main-btn" type="button" class="mobile-draw-fab-main" title="Herramientas de dibujo" aria-label="Herramientas de dibujo">
+        <span id="mobile-draw-main-icon"></span>
+      </button>
+
+      <button id="mobile-draw-undo-btn" type="button" class="mobile-draw-undo-btn" title="Deshacer trazo" aria-label="Deshacer trazo">
+        <svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 7v6h6"/><path d="M3 13c1.6-4.1 5.3-6.5 9.5-6.5A8.5 8.5 0 0 1 21 15"/></svg>
+      </button>
     </div>
 
     <!-- Floating Selection Toolbar (Moon-style) -->
@@ -747,6 +803,7 @@
   <script src="./js/views/library/CatalogSelectionView.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Modular Library ViewModels -->
+  <script src="./js/mobile/MobilePWAInstaller.js?v=1.1.0"></script>
   <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.9"></script>
   <script src="./js/viewmodels/library/BookMetadataManager.js?v=1.0.9"></script>
   <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.0"></script>
@@ -768,6 +825,11 @@
   <script src="./js/services/reader/ReaderOfflineService.js?v=1.0.8"></script>
   <script src="./js/viewmodels/reader/ReaderEventBindings.js?v=1.0.8"></script>
   <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.0.8"></script>
+  <script src="./js/mobile/DeviceEnvironment.js?v=1.1.0"></script>
+  <script src="./js/mobile/MobileHUDView.js?v=1.1.0"></script>
+  <script src="./js/mobile/MobileDrawingToolbarView.js?v=1.1.0"></script>
+  <script src="./js/mobile/MobileSelectionController.js?v=1.1.0"></script>
+  <script src="./js/mobile/MobileReaderController.js?v=1.1.0"></script>
   <script src="./js/viewmodels/ReaderViewModel.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Facades & Singletons -->

@@ -38,6 +38,12 @@ def start_server():
         "--access-logfile", "-",
         "--error-logfile", "-"
     ]
+
+    # Windows multiprocess spawning with Hypercorn has known WaitForMultipleObjects issues.
+    # Running in single-process mode (-w 0) executes worker_func in-process, preventing SpawnProcess crashes.
+    if sys.platform == "win32":
+        cmd.extend(["--workers", "0"])
+
     if os.getenv("RELOAD", "false").lower() == "true" and sys.platform != "win32":
         cmd.append("--reload")
 

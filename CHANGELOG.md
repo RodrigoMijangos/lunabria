@@ -11,10 +11,100 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+---
+
+## [1.1.0] - Decoupled Mobile Suite, Collapsible Drawing FAB & Offline Library Catalog
+
+### Added
+- **Decoupled Mobile Architecture (`frontend/js/mobile/`)**: Created a dedicated, modular mobile subsystem preserving complete separation from desktop code:
+  - `DeviceEnvironment`: Reactive detection of mobile viewports, touch capabilities, coarse pointers, and PWA standalone mode.
+  - `MobileReaderController`: Master coordinator plugging into `ReaderViewModel` without mutating base desktop classes or breaking regression test suites.
+  - `MobileDrawingToolbarView`: Single-button collapsible floating action button (FAB) located on the right side of the screen.
+  - `MobileHUDView`: Compact topbar with reading mode toggler and two-finger pinch-to-zoom gesture management.
+  - `MobileSelectionController`: Long-press text line detection leveraging native mobile selection handles and highlighter defaults.
+  - `MobilePWAInstaller`: Handles `beforeinstallprompt`, app install CTA buttons across desktop, mobile, and tablets, and iOS Safari instructions.
+- **Collapsible Single-Button Drawing FAB**:
+  - Displays the active drawing tool icon by default.
+  - When the pen is selected, the button background dynamically fills with the active color (`drawColor`) and its border matches the stroke width in pixels (`drawWidth` px).
+  - Tapping the icon unfolds the essential drawing tools: Pen (Lápiz), Eraser (Borrador), and Move (Mover).
+  - Undo button is positioned directly below the main collapsed button and automatically hides when the tools drawer is expanded.
+  - Tapping the pen tool unfolds a contextual color palette. Starting to draw on the canvas automatically dismisses the color menu.
+- **Compact Mobile HUD & Pinch-to-Zoom**:
+  - Removed static zoom buttons (`- 75% +`, fit width, fit page) on mobile in favor of intuitive two-finger pinch-to-zoom gestures.
+  - Replaced the reading mode dropdown select with a single compact button (`#mobile-view-mode-btn`) with icon that toggles between single page and continuous flow reading.
+  - Replaced the desktop "Mouse / PC" pill with a discrete mobile scenario indicator (`#mobile-scenario-indicator`).
+  - Drawing mode is enabled by default in mobile readers, defaulting to the pan/move tool for fluid touch navigation.
+- **Long-Press Text Selection with Magnifying Loupe**:
+  - Holding a finger on the text layer (~450ms) triggers native text selection with magnifying loupe assistance (`ReaderSelectionLoupeView`).
+  - Allows users to drag and expand text selection freely while tracking the selection with the circular magnifying loupe.
+  - Hides the loupe on release and displays the contextual highlight floating toolbar to pick colors at will, preserving fluid `pan` navigation mode without premature highlighting.
+  - Mitigates conflicting default browser callouts and context menus on the reader viewport.
+- **Offline Home Library Catalog**:
+  - Enhanced `LocalDB` in `frontend/js/db.js` with `cached_books` metadata store and `getOfflineCompleteBooks()` verification checking both PDF blob and all layout caches.
+  - Updated `LibraryViewModel.loadHome()`: caches book metadata when online, and automatically falls back to complete offline books when disconnected, rendering an informative offline banner.
+- **Cross-Platform PWA Installability**:
+  - Upgraded `manifest.json` with maskable icons (`icon-192.png`, `icon-512.png`), `window-controls-overlay`, display overrides, and categories.
+  - Added iOS Safari web app meta tags and responsive "Install App" button in the navigation header.
+- **Automatic Mobile Fullscreen**:
+  - Enters fullscreen mode upon opening a book via user tap gesture on mobile devices, maximizing reading real estate by removing browser address bars. Restores windowed mode upon exit.
+- **Reorganized Mobile HUD (1/2 and 1/2 Symmetrical Grid)**:
+  - Reorganized the mobile reader topbar (`.hud-right-controls`) into a symmetrical 2-column grid (`1fr 1fr`):
+    - *Left Half (2x2 Box)*: Row 1 displays the unified page navigation group (`#reader-page-group`), and Row 2 centers two round icon-only buttons for Offline download/status (`#reader-offline-btn`) and Autosave settings (`#reader-sync-btn`).
+    - *Right Half (2x2 Box)*: Organizes 4 round icon-only action buttons: Reading Mode toggle (`#mobile-view-mode-btn`), Annotations drawer toggle (`#reader-drawer-toggle-btn`), Mobile scenario indicator (`#mobile-scenario-indicator`), and Page Stroke Wipe button (`#mobile-wipe-strokes-btn`).
+- **Page Stroke Wipe Action (`#mobile-wipe-strokes-btn`)**:
+  - Added a dedicated circular button in the mobile HUD invoking `clearCurrentPageDrawings()`, allowing users to wipe all ink drawings on the active page and restore the reading view to its clean state with a single tap.
+
 ### Changed
+- **Single Flex Line Mobile HUD Layout (`space-around`)**:
+  - Concentrated the mobile reader contextual topbar controls from a 2-column grid into a single horizontal flex line with `justify-content: space-around` and `flex-wrap: nowrap`.
+  - Unwrapped internal box containers via `display: contents` to align the page navigation group (`#reader-page-group`), offline status (`#reader-offline-btn`), autosave settings (`#reader-sync-btn`), reading mode toggle (`#mobile-view-mode-btn`), annotations toggle (`#reader-drawer-toggle-btn`), mobile indicator (`#mobile-scenario-indicator`), and stroke wipe action (`#mobile-wipe-strokes-btn`) in one continuous, evenly distributed row.
+- **Two-Step Pen Selection & Contextual Color Palette Trigger (`MobileDrawingToolbarView`)**:
+  - Configured the Pen FAB so the first tap unfolds the drawer of alternate tools without displaying the color palette or altering the active color.
+  - Pressing the Pen icon a second time while it is already active unfolds the horizontal color swatches adjacent to the FAB instead of collapsing the menu.
+  - Pressing the Pen icon a third time cleanly collapses both the drawer and the color palette.
+  - Selecting the Pen tool from the drawer switches the active tool and collapses the drawer without immediately opening the color menu.
+- **Zero-Stroke Screen Tap Dismissal for Drawing Canvas**:
+  - Intercepted viewport pointer and touch events during capture phase and early in `ReaderDrawingViewModel.handleDrawingPointerDown()` whenever the drawer or color menu is open.
+  - The first tap on the screen only dismisses the open drawer and color menu, suppressing drawing so that zero strokes are rendered on the page.
+  - The second tap on the canvas begins drawing freehand ink strokes normally.
+- **Fluid Long-Press Text Selection, Magnifying Loupe & Pan Mode Preservation (`MobileSelectionController`)**:
+  - Replaced immediate auto-highlighting and permanent tool change to highlighter with fluid, user-driven text selection.
+  - Added geometric proximity hit testing with generous spatial tolerance slack (holgura of ~44px horizontal / ~30px vertical on tap, ~52px/36px on drag) without altering any CSS or DOM layout dimensions, allowing readers to easily grab words and lines even when touching slightly above, below, or between text elements.
+  - Activates the circular magnifying loupe (`ReaderSelectionLoupeView`) on touch hold (~450ms) and dynamically tracks finger drag across text, allowing users to accurately select words, phrases, and lines at will.
+  - Hides the loupe immediately upon gesture completion while strictly maintaining and restoring `pan` navigation mode.
+  - Automatically presents the contextual highlight floating toolbar (`#floating-toolbar`) upon release, allowing readers to select their desired highlight color after completing the selection.
+- Isolated all mobile styling in `frontend/css/mobile/mobile-reader.css` to keep core desktop stylesheets and their SHA-256 fixture intact.
+- Bumped Service Worker shell cache to `lunabria-v1.1.0-mobile-suite` and API version to `1.1.0`.
 - Refined selection and saved-highlight toolbars with consistent icon sizing, theme-aware opaque surfaces, responsive spacing and viewport/HUD-aware placement above selected text when space permits.
 
 ### Fixed
+- **Unblocked Page Stroke Wipe Action (Eliminated UI Freeze)**:
+  - Removed the blocking `window.confirm()` dialog from `clearCurrentPageDrawings()`. In browser touch emulation (especially Firefox Responsive Design Mode) and mobile fullscreen viewports, modal confirm dialogs trapped touch focus and permanently froze event dispatching across all buttons on the page.
+  - Tapping `#mobile-wipe-strokes-btn` now instantly wipes the active page strokes and cleanly resets internal drawing state without freezing UI buttons or interrupting user interaction.
+- **Mobile Drawing Tools Drawer Exclusion (No Self-Inclusion)**:
+  - Updated `MobileDrawingToolbarView.render()` to dynamically exclude the currently active tool from the unfolded drawer list, displaying only the remaining tools (e.g., when the Pen is active on the main FAB, only Eraser and Pan appear in the drawer).
+  - Automatically collapses the tools drawer and updates the main button upon tool selection, presenting the color picker adjacent to the main Pen button.
+  - Dismisses both the drawer and contextual color palette when tapping outside or touching the reader canvas.
+- **Mobile Touch Freehand Drawing & Palm Rejection Bypass**:
+  - Resolved an issue where touch drawing was blocked on mobile devices and touch screens due to strict desktop palm rejection rejecting finger pointer events (`pointerType === 'touch'`).
+  - Bypassed desktop palm rejection in `ReaderDrawingViewModel` when running in mobile reader mode, allowing finger drawing to proceed with smooth Bezier ink curves.
+  - Ensured `isDrawMode` is automatically activated when selecting the Pen or Eraser tool on mobile.
+  - Enforced `touch-action: none !important;` on `#reader-body`, `#pdf-viewport`, `.pdf-viewport-container`, and `.pdf-page-wrapper` when `mobile-drawing-active` is present, preventing mobile browsers from canceling ink strokes with `pointercancel` or scrolling the page while drawing.
+  - Suppressed long-press text selection in `MobileSelectionController` while Pen or Eraser tool is active.
+- **Mobile Circular Button Geometry & SVG Icon Stroke Visibility**:
+  - Converted mobile HUD action buttons into completely round circular buttons (`border-radius: 50%`, `36x36px`) with centered SVG icons (`19x19px`).
+  - Wrapped textual labels in `<span class="hud-btn-label">` to cleanly hide text on mobile via CSS without using `color: transparent` or `font-size: 0`, preventing SVG icon stroke colors and dimensions from collapsing.
+- **Firefox & Touchscreen Event Bubbling in Mobile Drawing FAB**:
+  - Extracted `#mobile-color-contextual-menu` outside of `<button id="mobile-draw-main-btn">` in `index.html` to adhere to HTML5 interactive content nesting specifications, resolving swallowed click events on color swatches in Firefox.
+- **Text Layer Hit-Testing & Overlay Canvas Piercing**:
+  - Implemented `document.elementsFromPoint()` in `MobileSelectionController` to pierce through the drawing canvas overlay (`z-index: 12`) to reach typographical lines (`.precise-line` and `.textLayer span`).
+  - Synchronized `selectedRange`, `selectedText`, `selectedPage`, and `selectedRects` in `ReaderModel` during long-press selection so `applyHighlight()` commits successfully and presents the quick color palette.
+- **Firefox Asynchronous Panning & Native Touch Scrolling**:
+  - Prevented `ReaderDrawingViewModel` pan handler from invoking `preventDefault()` or `stopPropagation()` on mobile/touch pointers, eliminating the Firefox *"scroll-linked positioning effect"* warning, restoring native GPU compositor scrolling, and unblocking touch long-press selection.
+  - Coordinated `mobile-drawing-active` class to keep `.pdf-drawing-canvas` pointer-events disabled during pan/reading mode and enabled during active pen/eraser drawing.
+- **Dual Pointer and Native Touch Event Handling**:
+  - Added native `touchstart`, `touchmove`, `touchend`, and `touchcancel` event listeners in `MobileSelectionController` to support Firefox Responsive Design Mode with or without touch simulation enabled.
+  - Broadened `DeviceEnvironment` detection with mobile user agent regex and expanded width threshold to `1024px` for coarse pointers.
 - **Multiline Selection Leading Artifact & In-Flow Linebreak Positioning**: Fixed a visual selection glitch where selecting text starting from the middle of a line downwards across subsequent lines rendered a spurious blue selection block at the start (`(0,0)`) of the initial line.
   - *Root Cause*: In the 3-phase text layer layout, `.precise-word` and `.precise-space` elements are positioned with `position: absolute`. Appending a raw in-flow text node `document.createTextNode('\n')` directly to `.precise-line` caused the browser engine (Blink/WebKit) to place the newline at coordinate `(0,0)` of the line container. When a selection spanned across lines, the browser included the initial line's trailing newline, painting its `::selection` background at `(0,0)` (before the first word of the line).
   - *Fix*: Encapsulated the trailing newline in an absolute-positioned zero-width element `<span class="precise-linebreak">` anchored at the exact end of the line (`left: width; width: 0px`). This completely prevents the browser from painting a selection box at `(0,0)` while fully preserving standard multi-line clipboard text copy/paste fidelity.

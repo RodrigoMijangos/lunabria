@@ -4,7 +4,7 @@
 class LocalDB {
   constructor() {
     this.dbName = 'moon_calibre_local';
-    this.version = 5;
+    this.version = 6;
     this.db = null;
   }
 
@@ -39,6 +39,10 @@ class LocalDB {
         if (!db.objectStoreNames.contains('page_drawings')) {
           const store = db.createObjectStore('page_drawings', { keyPath: 'key' });
           store.createIndex('by_book', 'bookId', { unique: false });
+        }
+        // 6. Store for cached book metadata for offline library catalog
+        if (!db.objectStoreNames.contains('cached_books')) {
+          db.createObjectStore('cached_books', { keyPath: 'id' });
         }
       };
 
@@ -261,6 +265,114 @@ class LocalDB {
       tx.oncomplete = () => resolve(true);
       tx.onerror = (e) => reject(e);
     });
+  }
+
+  // --- Cached Books Metadata (for Offline Catalog) ---
+  async saveCachedBook(book) {
+    if (!book || !book.id) return;
+    const item = {
+      id: Number(book.id),
+      title: book.title || 'Untitled',
+      authors: book.authors || '',
+      cover_path: book.cover_path || '',
+      total_pages: Number(book.total_pages || book.totalPages || 0),
+      cachedAt: Date.now(),
+      isOfflineComplete: Boolean(book.isOfflineComplete)
+    };
+    try {
+      const db = await this.open();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('cached_books', 'readwrite');
+        const store = tx.objectStore('cached_books');
+        store.put(item);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e);
+      });
+    } catch (e) {}
+
+    // Fallback sync to localStorage
+    try {
+      const raw = localStorage.getItem('moon_offline_books');
+      const list = raw ? JSON.parse(raw) : [];
+      const idx = list.findIndex(b => Number(b.id) === item.id);
+      if (idx >= 0) list[idx] = { ...list[idx], ...item };
+      else list.push(item);
+      localStorage.setItem('moon_offline_books', JSON.stringify(list));
+    } catch (e) {}
+  }
+
+  async saveCachedBooks(books) {
+    if (!Array.isArray(books)) return;
+    for (const b of books) {
+      await this.saveCachedBook(b);
+    }
+  }
+
+  async getAllCachedBooks() {
+    try {
+      const db = await this.open();
+      const books = await new Promise((resolve) => {
+        const tx = db.transaction('cached_books', 'readonly');
+        const store = tx.objectStore('cached_books');
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+      if (books && books.length > 0) return books;
+    } catch (e) {}
+
+    // Fallback from localStorage
+    try {
+      const raw = localStorage.getItem('moon_offline_books');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async getAllCachedPdfBookIds() {
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction('pdf_cache', 'readonly');
+        const store = tx.objectStore('pdf_cache');
+        const req = store.getAllKeys();
+        req.onsuccess = () => resolve((req.result || []).map(Number));
+        req.onerror = () => resolve([]);
+      });
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async getOfflineCompleteBooks() {
+    const allCached = await this.getAllCachedBooks();
+    const pdfBookIds = new Set(await this.getAllCachedPdfBookIds());
+    const completeBooks = [];
+
+    for (const book of allCached) {
+      const bId = Number(book.id);
+      let hasPdf = pdfBookIds.has(bId);
+      if (!hasPdf) {
+        hasPdf = await this.isPdfCached(bId);
+      }
+      if (!hasPdf) continue;
+
+      const totalPages = book.total_pages || book.totalPages;
+      if (totalPages && totalPages > 0) {
+        const hasAllLayouts = await this.hasAllLayoutsCached(bId, totalPages);
+        if (hasAllLayouts || book.isOfflineComplete) {
+          completeBooks.push(book);
+        }
+      } else {
+        const cachedPages = await this.getCachedLayoutPages(bId);
+        if (cachedPages.size > 0 || book.isOfflineComplete) {
+          completeBooks.push(book);
+        }
+      }
+    }
+
+    return completeBooks;
   }
 }
 

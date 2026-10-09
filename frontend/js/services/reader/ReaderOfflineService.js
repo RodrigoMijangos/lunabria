@@ -62,6 +62,25 @@ class ReaderOfflineService {
     if (!(await localDB.hasAllLayoutsCached(bookId, totalPages))) {
       throw new Error('Download completed, but some layouts could not be saved. Please try again.');
     }
+
+    try {
+      if (typeof localDB?.saveCachedBook === 'function') {
+        const appBook = window.app?.model?.getBookById?.(Number(bookId));
+        const titleEl = document.getElementById('reader-book-title');
+        const authorEl = document.getElementById('reader-book-author');
+        await localDB.saveCachedBook({
+          id: Number(bookId),
+          title: appBook?.title || titleEl?.textContent || `Book ${bookId}`,
+          authors: appBook?.authors || authorEl?.textContent || '',
+          cover_path: appBook?.cover_path || '',
+          total_pages: totalPages,
+          isOfflineComplete: true
+        });
+      }
+    } catch (err) {
+      console.warn('[ReaderOfflineService] Could not persist book metadata for offline catalog:', err);
+    }
+
     return true;
   }
 
