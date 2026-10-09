@@ -142,7 +142,20 @@ class MobileDrawingToolbarView {
     this.populateColorSwatches();
   }
 
+  isMobileActive() {
+    const mobileDevice = this.reader?.mobile?.device || (typeof window !== 'undefined' && window.reader?.mobile?.device);
+    if (typeof mobileDevice?.isMobileReaderActive === 'function') {
+      return Boolean(mobileDevice.isMobileReaderActive());
+    }
+    if (typeof document !== 'undefined' && document.body?.classList?.contains('mobile-reader-active')) {
+      return true;
+    }
+    return false;
+  }
+
   syncActiveDrawingMode() {
+    if (!this.isMobileActive()) return;
+
     const isDrawing = this.model.drawTool === 'pen' || this.model.drawTool === 'eraser';
     if (isDrawing && !this.model.isDrawMode) {
       this.reader?.drawing?.toggleDrawMode(true);

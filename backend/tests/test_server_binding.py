@@ -46,5 +46,22 @@ class TestServerBinding(unittest.TestCase):
             self.assertEqual(host, "10.0.0.1")
             self.assertEqual(port, 8000)
 
+    def test_frontend_static_and_health_endpoints(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        client = TestClient(app)
+
+        res_health = client.get("/api/health")
+        self.assertEqual(res_health.status_code, 200)
+        self.assertEqual(res_health.json(), {"status": "ok", "app": "Lunabria"})
+
+        res_sw = client.get("/sw.js")
+        self.assertEqual(res_sw.status_code, 200)
+        self.assertTrue(res_sw.headers.get("content-type", "").startswith(("text/javascript", "application/javascript")))
+
+        res_root = client.get("/")
+        self.assertEqual(res_root.status_code, 200)
+        self.assertTrue(res_root.headers.get("content-type", "").startswith("text/html"))
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,7 @@ class ReaderModel {
     this.currentPage = 1;
     this.scale = 1.3;
     this.fitMode = localStorage.getItem('moon_reader_fit_mode') || 'width';
+    this.isDrawMode = false;
     this.viewMode = this.normalizeViewMode(localStorage.getItem('moon_reader_view_mode'));
     this.drawTool = 'pen'; // 'pen' | 'highlighter' | 'eraser' | 'pan'
     this.drawColor = '#1e293b';
@@ -68,6 +69,7 @@ class ReaderModel {
     this.currentPage = 1;
     this.scale = 1.3;
     this.fitMode = localStorage.getItem('moon_reader_fit_mode') || 'width';
+    this.isDrawMode = false;
     this.annotations = [];
     this.pageStrokes.clear();
     this.activeHighlight = null;

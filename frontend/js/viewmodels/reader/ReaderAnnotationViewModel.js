@@ -256,7 +256,7 @@ class ReaderAnnotationViewModel {
       }
 
       if (range && range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
-        const textContent = range.startContainer.textContent;
+        const textContent = range.startContainer.textContent || '';
         const offset = range.startOffset;
         let start = offset;
         let end = offset;

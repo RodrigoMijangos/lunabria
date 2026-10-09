@@ -1129,6 +1129,57 @@ test('ReaderToolbarManager wheel zoom uses fast 0.25 step with delta intensity s
   assert.equal(currentZoom, 1.0, 'Zoom out should step by -0.25 on standard wheel tick');
 });
 
+test('ReaderToolbarManager continuous trackpad pinch zoom scales proportionally without discrete jumps', () => {
+  const frames = [];
+  const registeredListeners = [];
+  let currentZoom = null;
+  let currentFocal = null;
+
+  const context = vm.createContext({
+    document: {
+      getElementById: () => ({ addEventListener: () => {} }),
+      addEventListener: () => {}
+    },
+    window: {
+      addEventListener: (type, fn, opts) => registeredListeners.push({ type, fn, opts }),
+      innerHeight: 800
+    },
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    Element: class {},
+    requestAnimationFrame: fn => { frames.push(fn); return 1; }
+  });
+
+  vm.runInContext(source('models/ReaderModel.js'), context);
+  vm.runInContext(source('viewmodels/reader/ReaderToolbarManager.js'), context);
+
+  const model = new context.window.ReaderModel();
+  model.scale = 1.0;
+  const container = { style: { display: 'flex' } };
+  const viewportEl = { classList: { remove: () => {} } };
+  const nav = { setZoom: (scale, clearFit, focal) => { currentZoom = scale; currentFocal = focal; } };
+
+  const toolbar = new context.window.ReaderToolbarManager(model, { container, viewportEl }, { nav });
+  toolbar.bindWheelZoom();
+
+  const wheelListener = registeredListeners.find(l => l.type === 'wheel')?.fn;
+  assert.ok(wheelListener, 'Wheel listener must be registered');
+
+  // Small trackpad pinch movement (deltaY: -15, slow gentle pinch)
+  wheelListener({ ctrlKey: true, metaKey: false, deltaY: -15, clientX: 250, clientY: 350, preventDefault: () => {} });
+  assert.equal(frames.length, 1);
+  frames.shift()();
+  assert.ok(currentZoom > 1.0 && currentZoom < 1.10, 'Expected continuous fractional zoom, got ' + currentZoom);
+  assert.equal(currentFocal?.clientX, 250);
+  assert.equal(currentFocal?.clientY, 350);
+
+  // Faster trackpad pinch movement (deltaY: -60, higher velocity)
+  model.scale = 1.0;
+  wheelListener({ ctrlKey: true, metaKey: false, deltaY: -60, clientX: 300, clientY: 400, preventDefault: () => {} });
+  assert.equal(frames.length, 1);
+  frames.shift()();
+  assert.ok(currentZoom > 1.10, 'Faster pinch velocity should yield larger continuous zoom, got ' + currentZoom);
+});
+
 test('TextLayerView keeps the text layer selectable without leaking selection into empty containers', () => {
   let selectionStyle = null;
   const context = vm.createContext({
@@ -1235,7 +1286,7 @@ test('TextLayerView renders 3-phase subpixel layout with precise words, spaces, 
   const spaces = lineSpan.querySelectorAll('.precise-space');
   assert.equal(spaces.length, 1);
   assert.equal(spaces[0].style.left, '60px'); // (50 - 10) * 1.5
-  assert.equal(spaces[0].style.width, '7.5px'); // (55 - 50) * 1.5
+  // The layout engine now measures " " and scales it, width is not forced to gap * scale directly.
   assert.equal(spaces[0].attributes['role'], 'presentation');
 
   // Check Phase 3: trailing newline text node inside a positioning span

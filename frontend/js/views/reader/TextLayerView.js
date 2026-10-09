@@ -3,17 +3,37 @@
  * Creates textLayer container and renders precise typographical lines for text selection.
  */
 const TextLayerView = {
+  _round2(value) { return Math.round(value * 100) / 100; },
+  _round4(value) { return Math.round(value * 10000) / 10000; },
+
+  // Lazily created 2D context used to measure text without touching layout.
+  // `null` = not probed yet, `false` = unavailable (DOM measurement fallback).
+  _measureCtx: null,
+  // Browser minimum font size (user/accessibility setting). `null` = not probed yet.
+  _minFontSize: null,
+
   _ensureSelectionStyles() {
     if (typeof document === 'undefined' || !document.head || typeof document.head.appendChild !== 'function') return;
     if (document.getElementById('lunabria-precise-selection-styles')) return;
     const style = document.createElement('style');
     style.id = 'lunabria-precise-selection-styles';
+    // Inherited typography is neutralised so the DOM glyph run has exactly the
+    // width measured on the canvas (same font, no extra spacing or transforms).
     style.textContent = `
       .textLayer {
         opacity: 0.42 !important;
         mix-blend-mode: multiply !important;
         user-select: text !important;
         -webkit-user-select: text !important;
+        font-style: normal;
+        font-weight: normal;
+        font-variant: normal;
+        font-stretch: normal;
+        font-feature-settings: normal;
+        letter-spacing: normal;
+        word-spacing: normal;
+        text-transform: none;
+        text-rendering: geometricPrecision;
       }
       .textLayer :is(.precise-line, .precise-word, .precise-space, span) {
         user-select: text !important;
@@ -69,6 +89,109 @@ const TextLayerView = {
     div.style.height = `${height}px`;
     div.style.setProperty('--scale-factor', scale);
     return div;
+  },
+
+  _measureContext() {
+    if (this._measureCtx !== null) return this._measureCtx || null;
+    let ctx = false;
+    try {
+      if (typeof OffscreenCanvas === 'function') {
+        ctx = new OffscreenCanvas(1, 1).getContext('2d') || false;
+      }
+      if (!ctx && typeof document !== 'undefined' && typeof document.createElement === 'function') {
+        const canvas = document.createElement('canvas');
+        ctx = (canvas && typeof canvas.getContext === 'function' && canvas.getContext('2d')) || false;
+      }
+    } catch (error) {
+      ctx = false;
+    }
+    this._measureCtx = ctx;
+    return ctx || null;
+  },
+
+  /**
+   * Browsers with a minimum font size setting silently enlarge tiny text (low zoom,
+   * footnotes), which would invalidate any width measured for the requested size.
+   * Same probe as PDF.js: a 1px "X" with line-height 1 reports the clamped size.
+   */
+  _browserMinFontSize() {
+    if (this._minFontSize !== null) return this._minFontSize;
+    let minFontSize = 1;
+    try {
+      const body = typeof document !== 'undefined' ? document.body : null;
+      if (body && typeof body.appendChild === 'function') {
+        const probe = document.createElement('div');
+        probe.style.position = 'absolute';
+        probe.style.visibility = 'hidden';
+        probe.style.fontFamily = 'sans-serif';
+        probe.style.fontSize = '1px';
+        probe.style.lineHeight = '1';
+        probe.style.whiteSpace = 'pre';
+        probe.textContent = 'X';
+        body.appendChild(probe);
+        const height = probe.getBoundingClientRect().height;
+        if (typeof probe.remove === 'function') probe.remove();
+        else if (typeof body.removeChild === 'function') body.removeChild(probe);
+        if (Number.isFinite(height) && height > 1 && height <= 72) minFontSize = height;
+      }
+    } catch (error) {
+      minFontSize = 1;
+    }
+    this._minFontSize = minFontSize;
+    return minFontSize;
+  },
+
+  /**
+   * Natural (unscaled) width of `text` rendered at `fontSize` px sans-serif.
+   * Canvas measurement works on detached nodes (single/dual page wrappers are built
+   * off-DOM) and avoids one forced reflow per word. DOM measurement is only a fallback
+   * and is skipped for detached nodes, where it would report 0.
+   */
+  _naturalTextWidth(span, text, fontSize) {
+    const ctx = this._measureContext();
+    if (ctx) {
+      ctx.font = `normal normal ${fontSize}px sans-serif`;
+      const width = ctx.measureText(text).width;
+      if (Number.isFinite(width) && width > 0) return width;
+    }
+    if (span.isConnected === false || typeof span.getBoundingClientRect !== 'function') return 0;
+    const width = span.getBoundingClientRect().width;
+    return Number.isFinite(width) ? width : 0;
+  },
+
+  /**
+   * Sizes `span` so its glyph run covers exactly `targetWidth` x `boxHeight` CSS px.
+   * Selection rectangles, caret hit-testing and saved highlights all derive from the
+   * glyph run, so it must match the PDF word box drawn on the canvas.
+   */
+  _fitTextToBox(span, text, targetWidth, boxHeight) {
+    const requestedFont = this._round2(boxHeight * 0.88);
+    const renderFont = Math.max(requestedFont, this._browserMinFontSize());
+    const yScale = renderFont > 0 ? requestedFont / renderFont : 1;
+    const layoutHeight = this._round2(yScale > 0 && yScale < 1 ? boxHeight / yScale : boxHeight);
+
+    span.style.fontSize = `${renderFont}px`;
+    span.style.height = `${layoutHeight}px`;
+    span.style.lineHeight = `${layoutHeight}px`;
+    span.style.transform = '';
+
+    const naturalWidth = this._round2(this._naturalTextWidth(span, text, renderFont));
+    if (naturalWidth > 0 && targetWidth > 0) {
+      const scaleX = targetWidth / naturalWidth;
+      if (scaleX > 0.05 && scaleX < 20) {
+        span.style.width = `${naturalWidth}px`;
+        span.style.transform = yScale < 1
+          ? `scale(${this._round4(scaleX)}, ${this._round4(yScale)})`
+          : `scaleX(${this._round4(scaleX)})`;
+        span.style.transformOrigin = '0% 0%';
+        return;
+      }
+    }
+    span.style.width = `${this._round2(Math.max(0, targetWidth))}px`;
+    if (yScale < 1) {
+      span.style.transform = `scale(1, ${this._round4(yScale)})`;
+      span.style.transformOrigin = '0% 0%';
+    }
   },
 
   groupWordsIntoLines(words) {
@@ -150,33 +273,25 @@ const TextLayerView = {
       const width = (line.x1 - line.x0) * scale;
       const height = (line.y1 - line.y0) * scale;
 
-      lineSpan.style.left = `${Math.round(left * 100) / 100}px`;
-      lineSpan.style.top = `${Math.round(top * 100) / 100}px`;
-      lineSpan.style.width = `${Math.round(width * 100) / 100}px`;
-      lineSpan.style.height = `${Math.round(height * 100) / 100}px`;
-      lineSpan.style.fontSize = `${Math.round(height * 0.88 * 100) / 100}px`;
-      lineSpan.style.lineHeight = `${Math.round(height * 100) / 100}px`;
+      lineSpan.style.left = `${this._round2(left)}px`;
+      lineSpan.style.top = `${this._round2(top)}px`;
+      lineSpan.style.width = `${this._round2(width)}px`;
+      lineSpan.style.height = `${this._round2(height)}px`;
+      lineSpan.style.fontSize = `${this._round2(height * 0.88)}px`;
+      lineSpan.style.lineHeight = `${this._round2(height)}px`;
       lineSpan.style.fontFamily = 'sans-serif';
       lineSpan.style.display = 'inline-block';
       lineSpan.style.position = 'absolute';
+
+      // Attach before measuring so the DOM fallback measures a connected node.
+      container.appendChild(lineSpan);
 
       const words = Array.isArray(line.words) && line.words.length > 0 ? line.words : null;
 
       if (!words) {
         // Fallback for legacy layout objects without words array
         lineSpan.textContent = line.text;
-        container.appendChild(lineSpan);
-        const naturalWidth = lineSpan.getBoundingClientRect().width;
-        if (naturalWidth > 0 && width > 0) {
-          const scaleX = width / naturalWidth;
-          if (scaleX > 0.1 && scaleX < 10.0) {
-            lineSpan.style.transform = `scaleX(${Math.round(scaleX * 10000) / 10000})`;
-            lineSpan.style.transformOrigin = '0% 0%';
-            lineSpan.style.width = `${Math.round(naturalWidth * 100) / 100}px`;
-          } else {
-            lineSpan.style.width = `${Math.round(width * 100) / 100}px`;
-          }
-        }
+        this._fitTextToBox(lineSpan, line.text || '', width, height);
         continue;
       }
 
@@ -197,33 +312,17 @@ const TextLayerView = {
         const wWidth = (w.x1 - w.x0) * scale;
         const wHeight = (w.y1 - w.y0) * scale;
 
-        wordSpan.style.left = `${Math.round(wRelLeft * 100) / 100}px`;
-        wordSpan.style.top = `${Math.round(wRelTop * 100) / 100}px`;
-        wordSpan.style.height = `${Math.round(wHeight * 100) / 100}px`;
-        wordSpan.style.fontSize = `${Math.round(wHeight * 0.88 * 100) / 100}px`;
-        wordSpan.style.lineHeight = `${Math.round(wHeight * 100) / 100}px`;
+        wordSpan.style.left = `${this._round2(wRelLeft)}px`;
+        wordSpan.style.top = `${this._round2(wRelTop)}px`;
         wordSpan.style.fontFamily = 'sans-serif';
         wordSpan.style.display = 'inline-block';
         wordSpan.style.position = 'absolute';
         wordSpan.style.whiteSpace = 'pre';
-        wordSpan.style.width = 'auto';
 
         lineSpan.appendChild(wordSpan);
 
         // Subpixel scale calibration per-word
-        const naturalWordWidth = wordSpan.getBoundingClientRect().width;
-        if (naturalWordWidth > 0 && wWidth > 0) {
-          const wordScaleX = wWidth / naturalWordWidth;
-          if (wordScaleX > 0.1 && wordScaleX < 10.0) {
-            wordSpan.style.transform = `scaleX(${Math.round(wordScaleX * 10000) / 10000})`;
-            wordSpan.style.transformOrigin = '0% 0%';
-            wordSpan.style.width = `${Math.round(naturalWordWidth * 100) / 100}px`;
-          } else {
-            wordSpan.style.width = `${Math.round(wWidth * 100) / 100}px`;
-          }
-        } else {
-          wordSpan.style.width = `${Math.round(wWidth * 100) / 100}px`;
-        }
+        this._fitTextToBox(wordSpan, w.text || '', wWidth, wHeight);
 
         // Phase 2: Render Inter-word Space layouts
         if (j < words.length - 1) {
@@ -236,18 +335,17 @@ const TextLayerView = {
 
           const sRelLeft = (w.x1 - line.x0) * scale;
           const sWidth = Math.max(0, gap * scale);
-          spaceSpan.style.left = `${Math.round(sRelLeft * 100) / 100}px`;
-          spaceSpan.style.top = `${Math.round(wRelTop * 100) / 100}px`;
-          spaceSpan.style.width = `${Math.round(sWidth * 100) / 100}px`;
-          spaceSpan.style.height = `${Math.round(wHeight * 100) / 100}px`;
-          spaceSpan.style.fontSize = `${Math.round(wHeight * 0.88 * 100) / 100}px`;
-          spaceSpan.style.lineHeight = `${Math.round(wHeight * 100) / 100}px`;
+          spaceSpan.style.left = `${this._round2(sRelLeft)}px`;
+          spaceSpan.style.top = `${this._round2(wRelTop)}px`;
           spaceSpan.style.fontFamily = 'sans-serif';
           spaceSpan.style.display = 'inline-block';
           spaceSpan.style.position = 'absolute';
           spaceSpan.style.whiteSpace = 'pre';
 
           lineSpan.appendChild(spaceSpan);
+          // The space glyph must fill the gap exactly: a natural-width space would
+          // leave holes in the selection bar or overlap the next word.
+          this._fitTextToBox(spaceSpan, ' ', sWidth, wHeight);
         }
       }
 
@@ -255,15 +353,13 @@ const TextLayerView = {
       const breakSpan = document.createElement('span');
       breakSpan.className = 'precise-linebreak';
       breakSpan.style.position = 'absolute';
-      breakSpan.style.left = `${Math.round(width * 100) / 100}px`;
+      breakSpan.style.left = `${this._round2(width)}px`;
       breakSpan.style.top = '0px';
       breakSpan.style.width = '0px';
-      breakSpan.style.height = `${Math.round(height * 100) / 100}px`;
+      breakSpan.style.height = `${this._round2(height)}px`;
       breakSpan.style.whiteSpace = 'pre';
       breakSpan.textContent = '\n';
       lineSpan.appendChild(breakSpan);
-
-      container.appendChild(lineSpan);
     }
   }
 };

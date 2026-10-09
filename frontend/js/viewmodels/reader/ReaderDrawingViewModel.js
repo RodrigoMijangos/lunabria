@@ -31,6 +31,20 @@ class ReaderDrawingViewModel {
     this.drawingSyncTimers = new Map();
   }
 
+  isMobileReader() {
+    const mobileDevice = (this.reader?.mobile?.device || (typeof window !== 'undefined' && window.reader?.mobile?.device));
+    if (typeof mobileDevice?.isMobileReaderActive === 'function') {
+      return Boolean(mobileDevice.isMobileReaderActive());
+    }
+    if (typeof document !== 'undefined' && document.body?.classList?.contains('mobile-reader-active')) {
+      return true;
+    }
+    if (typeof window !== 'undefined' && typeof window.innerWidth === 'number') {
+      return window.innerWidth <= 850;
+    }
+    return false;
+  }
+
   async setupDrawingLayer(drawCanvas, pageWrapper, pageNumber, effectiveScale, outputScale) {
     if (!this.model.pageStrokes.has(pageNumber)) {
       try {
@@ -106,11 +120,7 @@ class ReaderDrawingViewModel {
     const isMiddleClick = (e.button === 1 || e.buttons === 4) && !isPen;
     const isPanToolActive = this.model.isSpacePanActive || this.model.drawTool === 'pan' || isMiddleClick;
 
-    const isMobileReader = Boolean(
-      (this.reader?.mobile?.device || window.reader?.mobile?.device)?.isMobileReaderActive?.() ||
-      document.body.classList.contains('mobile-reader-active') ||
-      (typeof window !== 'undefined' && window.innerWidth <= 850)
-    );
+    const isMobileReader = this.isMobileReader();
 
     if (isPanToolActive) {
       if (isTouch || isMobileReader) {
@@ -172,8 +182,8 @@ class ReaderDrawingViewModel {
       return;
     }
 
-    // Ensure draw mode is active when pen or eraser is selected
-    if ((this.model.drawTool === 'pen' || this.model.drawTool === 'eraser') && !this.model.isDrawMode) {
+    // Ensure draw mode is active when pen or eraser is selected on mobile reader
+    if (isMobileReader && (isTouch || isPen) && (this.model.drawTool === 'pen' || this.model.drawTool === 'eraser') && !this.model.isDrawMode) {
       this.model.isDrawMode = true;
       this.viewportEl.classList.add('draw-mode-active');
       this.bodyEl.classList.add('draw-mode-active');
@@ -395,7 +405,7 @@ class ReaderDrawingViewModel {
     this.lastTapTime = 0;
     this.model.setDrawTool(tool);
 
-    if ((tool === 'pen' || tool === 'eraser') && !this.model.isDrawMode) {
+    if (this.isMobileReader() && (tool === 'pen' || tool === 'eraser') && !this.model.isDrawMode) {
       this.toggleDrawMode(true);
     }
 

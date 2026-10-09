@@ -1,6 +1,8 @@
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query, Response, Body
 from app.services.reader_service import reader_service
+from app.services.calibre_service import calibre_service
+from app.services import notes_export
 from app.models import (
     ReadingProgressUpdate, 
     ReadingProgressResponse, 
@@ -10,6 +12,7 @@ from app.models import (
     AnnotationResponse,
     HighlightColor
 )
+from datetime import datetime
 
 router = APIRouter(tags=["Reader & Annotations"])
 
@@ -85,18 +88,54 @@ def delete_annotation(annot_id: str):
 @router.get("/api/books/{book_id}/export")
 def export_annotations(
     book_id: int, 
+    format: str = Query("md", pattern="^(md|json|jsonl|yaml|toml)$"),
+    group_by: str = Query("color", pattern="^(color|page|hierarchy)$"),
     color: Optional[str] = Query(None),
-    group_by: str = Query("color", pattern="^(color|page)$")
+    stamp: bool = Query(False)
 ):
-    markdown_content = reader_service.export_annotations_markdown(
-        book_id=book_id,
+    book_info = calibre_service.get_book(book_id) or {"id": book_id, "title": f"Book {book_id}", "authors": "Unknown"}
+    annotations = reader_service.list_annotations(book_id=book_id)
+    highlight_colors = reader_service.get_highlight_colors()
+    
+    pdf_path_obj = calibre_service.get_pdf_path(book_id)
+    pdf_path = str(pdf_path_obj) if pdf_path_obj else None
+    
+    exported_at = datetime.utcnow().isoformat() + "Z" if stamp else None
+    
+    model = notes_export.build_model(
+        annotations=annotations,
+        book_info=book_info,
+        pdf_path=pdf_path,
+        highlight_colors=highlight_colors,
         color_filter=color,
-        group_by=group_by
+        exported_at=exported_at
     )
+    
+    if format == "json":
+        content = notes_export.render_json(model)
+        media_type = "application/json"
+        ext = "json"
+    elif format == "jsonl":
+        content = notes_export.render_jsonl(model)
+        media_type = "application/x-ndjson"
+        ext = "jsonl"
+    elif format == "yaml":
+        content = notes_export.render_yaml(model)
+        media_type = "application/yaml"
+        ext = "yaml"
+    elif format == "toml":
+        content = notes_export.render_toml(model)
+        media_type = "application/toml"
+        ext = "toml"
+    else:
+        content = notes_export.render_md(model, group_by)
+        media_type = "text/markdown"
+        ext = "md"
+        
     return Response(
-        content=markdown_content,
-        media_type="text/markdown",
-        headers={"Content-Disposition": f"attachment; filename=notes_book_{book_id}.md"}
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename=notes_book_{book_id}.{ext}"}
     )
 
 # --- Customizable Highlight Colors ---
@@ -123,4 +162,3 @@ def save_page_drawings(book_id: int, page: int, data: Dict[str, Any] = Body(...)
 def clear_page_drawings(book_id: int, page: int):
     reader_service.clear_page_drawings(book_id=book_id, page=page)
     return {"message": "Page drawings deleted"}
-

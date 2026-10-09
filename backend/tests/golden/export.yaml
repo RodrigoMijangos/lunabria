@@ -1,0 +1,145 @@
+schema_version: '1.0'
+source:
+  id: 42
+  title: Golden Book
+  authors:
+  - Jane Doe
+  - John Smith
+  exported_at: '2026-10-04T00:00:00Z'
+legend:
+- key: key_idea
+  label: Key Idea / Concept
+  aliases:
+  - concept
+  color_id: yellow
+  hex: '#ffeb3b'
+  description: ''
+- key: definition
+  label: Definition / Explanation
+  aliases:
+  - explanation
+  color_id: green
+  hex: '#f0c08a'
+  description: ''
+- key: question
+  label: Question / Analisis
+  aliases:
+  - analisis
+  color_id: blue
+  hex: '#93c5fd'
+  description: ''
+- key: example
+  label: Example / Content / Exemption
+  aliases:
+  - content
+  - exemption
+  color_id: red
+  hex: '#a6fcc4'
+  description: ''
+- key: quote
+  label: Quote / Reference / Use Later
+  aliases:
+  - reference
+  - use_later
+  color_id: purple
+  hex: '#d8b4fe'
+  description: ''
+stats:
+  total: 5
+  by_type:
+    key_idea: 1
+    definition: 2
+    question: 0
+    example: 0
+    quote: 2
+  legacy: 0
+  uncategorized: 0
+  slot_conflict: 1
+sections:
+- id: s_default_no_index
+  title: (sin índice)
+  level: 0
+  parent: null
+  children: []
+  page_start: 1
+  page_end: 2
+  path:
+  - (sin índice)
+runs:
+- id: r_217c46629f
+  section: s_default_no_index
+  type: key_idea
+  label: Key Idea / Concept
+  pages:
+  - 1
+  - 1
+  text: Chapter 1 Introduction
+  marks:
+  - id: annot-1
+    section: s_default_no_index
+    page: 1
+    text: Chapter 1 Introduction
+    type: key_idea
+    text_source: stored
+    note: Main chapter title note
+    is_heading: false
+    meaning_source: category
+    category_raw: Key Idea
+- id: r_3907954c00
+  section: s_default_no_index
+  type: definition
+  label: Definition / Explanation
+  pages:
+  - 1
+  - 1
+  text: knowledge … sharing
+  marks:
+  - id: annot-2
+    section: s_default_no_index
+    page: 1
+    text: knowledge
+    type: definition
+    text_source: stored
+    note: null
+    is_heading: false
+    meaning_source: category
+    category_raw: Definition
+  - id: annot-3
+    section: s_default_no_index
+    page: 1
+    text: sharing
+    type: definition
+    text_source: stored
+    note: null
+    is_heading: false
+    meaning_source: category
+    category_raw: Definition
+- id: r_bab8678c43
+  section: s_default_no_index
+  type: quote
+  label: Quote / Reference / Use Later
+  pages:
+  - 1
+  - 2
+  text: faster … Line one first word
+  marks:
+  - id: annot-4
+    section: s_default_no_index
+    page: 1
+    text: faster
+    type: quote
+    text_source: stored
+    note: null
+    is_heading: false
+    meaning_source: category
+    category_raw: Reference
+    slot_conflict: true
+  - id: annot-5
+    section: s_default_no_index
+    page: 2
+    text: Line one first word
+    type: quote
+    text_source: stored
+    note: Note on line one
+    is_heading: false
+    meaning_source: color

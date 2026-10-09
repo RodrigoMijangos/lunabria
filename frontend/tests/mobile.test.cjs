@@ -323,6 +323,133 @@ test('ReaderDrawingViewModel allows touch drawing on mobile reader bypassing str
   assert.equal(model.isDrawMode, true, 'Draw mode must be activated when drawing with pen');
 });
 
+test('ReaderDrawingViewModel does not auto-activate draw mode on desktop mouse clicks when draw mode is off', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderDrawingViewModel = context.window.ReaderDrawingViewModel || context.ReaderDrawingViewModel;
+
+  const model = new ReaderModel();
+  model.setDrawTool('pen');
+  assert.equal(model.isDrawMode, false, 'Draw mode must default to false');
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  // Desktop environment: mobile reader is inactive
+  const fakeReader = {
+    viewportEl,
+    mobile: {
+      device: {
+        isMobileReaderActive: () => false
+      }
+    }
+  };
+
+  const drawingVM = new ReaderDrawingViewModel(model, viewportEl, bodyEl, () => null, fakeReader);
+
+  const pageWrapper = new context.Element('div');
+  const drawCanvas = new context.Element('canvas');
+  drawCanvas.getContext = () => ({
+    clearRect() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {},
+    quadraticCurveTo() {}, stroke() {}, fill() {}, arc() {}
+  });
+
+  // 1. Simulate desktop mouse click when draw mode is off
+  let prevented = false;
+  let stopped = false;
+  const mouseDownEvent = {
+    type: 'pointerdown',
+    pointerType: 'mouse',
+    pointerId: 1,
+    clientX: 200,
+    clientY: 300,
+    button: 0,
+    buttons: 1,
+    target: pageWrapper,
+    preventDefault() { prevented = true; },
+    stopPropagation() { stopped = true; }
+  };
+
+  drawingVM.handleDrawingPointerDown(mouseDownEvent, 1, pageWrapper, drawCanvas, 1, 1);
+
+  assert.equal(model.isDrawMode, false, 'Desktop mouse click must NOT activate draw mode');
+  assert.equal(drawingVM.isDrawing, false, 'Desktop mouse click must NOT start drawing when draw mode is off');
+  assert.equal(viewportEl.classList.contains('draw-mode-active'), false, 'Viewport must not have draw-mode-active class');
+  assert.equal(bodyEl.classList.contains('draw-mode-active'), false, 'Body must not have draw-mode-active class');
+  assert.equal(prevented, false, 'Default action must not be prevented so text selection can proceed');
+  assert.equal(stopped, false, 'Event propagation must not be stopped');
+
+  // 2. setDrawTool on desktop must not force draw mode on
+  drawingVM.setDrawTool('eraser');
+  assert.equal(model.isDrawMode, false, 'Switching tool on desktop must not force draw mode on');
+  drawingVM.setDrawTool('pen');
+  assert.equal(model.isDrawMode, false, 'Switching tool to pen on desktop must not force draw mode on');
+
+  // 3. Explicitly activating draw mode enables mouse drawing
+  drawingVM.toggleDrawMode(true);
+  assert.equal(model.isDrawMode, true, 'Explicit toggle must activate draw mode');
+
+  drawingVM.handleDrawingPointerDown(mouseDownEvent, 1, pageWrapper, drawCanvas, 1, 1);
+  assert.equal(drawingVM.isDrawing, true, 'Mouse click must draw when draw mode is explicitly on');
+
+  // 4. Closing draw mode stops mouse drawing
+  drawingVM.toggleDrawMode(false);
+  assert.equal(model.isDrawMode, false, 'Toggling draw mode off must deactivate it');
+  drawingVM.isDrawing = false;
+
+  prevented = false;
+  stopped = false;
+  drawingVM.handleDrawingPointerDown(mouseDownEvent, 1, pageWrapper, drawCanvas, 1, 1);
+  assert.equal(model.isDrawMode, false, 'Mouse click after turning off draw mode must not reactivate it');
+  assert.equal(drawingVM.isDrawing, false, 'Mouse must not draw after draw mode is turned off');
+});
+
+test('MobileDrawingToolbarView does not auto-activate draw mode on desktop environment initialization', () => {
+  const { context, elementsById, documentStub } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+  loadScript(context, 'js/mobile/MobileDrawingToolbarView.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const MobileDrawingToolbarView = context.window.MobileDrawingToolbarView || context.MobileDrawingToolbarView;
+
+  const model = new ReaderModel();
+  let toggleDrawModeCalled = false;
+  const fakeReader = {
+    viewportEl: elementsById.get('pdf-viewport'),
+    container: elementsById.get('reader-container'),
+    mobile: {
+      device: {
+        isMobileReaderActive: () => false
+      }
+    },
+    drawing: {
+      setDrawTool: (tool) => { model.setDrawTool(tool); },
+      setDrawColor: (c) => { model.setDrawColor(c); },
+      undoLastStroke: () => {},
+      toggleDrawMode: () => { toggleDrawModeCalled = true; return true; }
+    }
+  };
+
+  const fab = new MobileDrawingToolbarView(fakeReader, model);
+  fab.init();
+
+  assert.equal(toggleDrawModeCalled, false, 'MobileDrawingToolbarView.init must NOT activate draw mode on desktop');
+  assert.equal(model.isDrawMode, false, 'Model isDrawMode must remain false');
+  assert.equal(documentStub.body.classList.contains('mobile-drawing-active'), false, 'Body must not have mobile-drawing-active on desktop');
+});
+
 test('clearCurrentPageDrawings wipes strokes immediately without blocking browser with confirm dialog', () => {
   const { context, elementsById } = createDOMContext();
 
@@ -887,4 +1014,86 @@ test('MobileSelectionController preserves scroll position and targets correct pa
   assert.equal(model.currentPage, 2, 'ReaderModel currentPage must remain page 2');
   assert.equal(selectionController.lockedScrollTop, 1250, 'lockedScrollTop must capture readerBody.scrollTop');
   assert.equal(selectionController.pageWrapper, page2, 'pageWrapper must be page 2, not page 1');
+});
+
+
+test('MobileHUDView performs real-time live GPU scaling on viewportEl during pinch-to-zoom without waiting for touchend', async () => {
+  const { context, elementsById, documentStub } = createDOMContext();
+
+  const frames = [];
+  context.requestAnimationFrame = (fn) => {
+    frames.push(fn);
+    return frames.length;
+  };
+  context.window.requestAnimationFrame = context.requestAnimationFrame;
+  context.cancelAnimationFrame = () => {};
+  context.window.cancelAnimationFrame = context.cancelAnimationFrame;
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/mobile/MobileHUDView.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const MobileHUDView = context.window.MobileHUDView || context.MobileHUDView;
+
+  const model = new ReaderModel();
+  model.scale = 1.0;
+
+  const bodyEl = elementsById.get('reader-body');
+  const viewportEl = elementsById.get('pdf-viewport');
+  viewportEl.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 1000 });
+
+  let committedScale = null;
+  let committedFocal = null;
+
+  const fakeReader = {
+    bodyEl,
+    viewportEl,
+    nav: {
+      setZoom: (scale, clearFit, focal) => {
+        committedScale = scale;
+        committedFocal = focal;
+      }
+    },
+    drawing: { isDrawing: false }
+  };
+
+  const hudView = new MobileHUDView(fakeReader, model);
+  hudView.init();
+
+  // 1. Two fingers touch down (distance = 100)
+  await bodyEl.emit('touchstart', {
+    touches: [
+      { clientX: 200, clientY: 300 },
+      { clientX: 300, clientY: 300 }
+    ]
+  });
+
+  assert.equal(hudView.isPinching, true, 'Pinch should be active');
+  assert.equal(viewportEl.style.transformOrigin, '250px 300px', 'transformOrigin must be anchored at focal midpoint');
+
+  // 2. Fingers move apart during gesture (distance = 150 -> 1.5x zoom)
+  await bodyEl.emit('touchmove', {
+    cancelable: true,
+    touches: [
+      { clientX: 175, clientY: 300 },
+      { clientX: 325, clientY: 300 }
+    ]
+  });
+
+  assert.equal(frames.length, 1, 'RAF frame must be scheduled during move');
+  frames.shift()();
+
+  // In live gesture: viewportEl MUST have real-time live GPU transform BEFORE touchend
+  assert.ok(viewportEl.style.transform.includes('scale(1.5)'), 'viewportEl must scale live in real time during pinch');
+  assert.equal(committedScale, null, 'setZoom must NOT be called before gesture completes (avoiding render cancellation)');
+
+  // 3. User finishes gesture (fingers lift)
+  await bodyEl.emit('touchend', {
+    touches: []
+  });
+
+  assert.equal(hudView.isPinching, false, 'Pinch must end');
+  assert.equal(committedScale, 1.5, 'Final committed scale must be 1.5');
+  assert.equal(committedFocal?.clientX, 250);
+  assert.equal(committedFocal?.clientY, 300);
 });

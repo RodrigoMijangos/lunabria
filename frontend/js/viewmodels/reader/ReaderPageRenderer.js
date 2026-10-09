@@ -44,7 +44,17 @@ class ReaderPageRenderer {
   calculateZoomAnchor(focalPoint) {
     if (!focalPoint || !this.bodyEl || !this.viewportEl) return null;
     const bodyRect = this.bodyEl.getBoundingClientRect();
+    const savedTransform = this.viewportEl.style ? this.viewportEl.style.transform : "";
+    const savedOrigin = this.viewportEl.style ? this.viewportEl.style.transformOrigin : "";
+    if (savedTransform && this.viewportEl.style) {
+      this.viewportEl.style.transform = "";
+      this.viewportEl.style.transformOrigin = "";
+    }
     const viewportRect = this.viewportEl.getBoundingClientRect();
+    if (savedTransform && this.viewportEl.style) {
+      this.viewportEl.style.transform = savedTransform;
+      this.viewportEl.style.transformOrigin = savedOrigin;
+    }
     if (!bodyRect.width || !bodyRect.height) return null;
 
     const cx = (typeof focalPoint.clientX === 'number')
@@ -89,6 +99,12 @@ class ReaderPageRenderer {
     const pageWrapper = await this.createAndPopulatePageWrapper(pageNumber, null, generation);
     if (!this.isCurrentGeneration(generation)) return;
 
+    if (this.viewportEl && this.viewportEl.style) {
+      this.viewportEl.style.transform = "";
+      this.viewportEl.style.transformOrigin = "";
+      this.viewportEl.style.willChange = "";
+    }
+
     this.viewportEl.replaceChildren(pageWrapper);
     this.renderedScale = this.model.scale;
 
@@ -117,6 +133,12 @@ class ReaderPageRenderer {
 
     const wrappers = await Promise.all(wrapperPromises);
     if (!this.isCurrentGeneration(generation)) return;
+
+    if (this.viewportEl && this.viewportEl.style) {
+      this.viewportEl.style.transform = "";
+      this.viewportEl.style.transformOrigin = "";
+      this.viewportEl.style.willChange = "";
+    }
 
     this.viewportEl.replaceChildren(...wrappers);
     this.renderedScale = this.model.scale;
@@ -148,6 +170,12 @@ class ReaderPageRenderer {
       pageWrapper.style.width = `${Math.floor(referenceViewport.width)}px`;
       pageWrapper.style.height = `${Math.floor(referenceViewport.height)}px`;
       fragment.appendChild(pageWrapper);
+    }
+
+    if (this.viewportEl && this.viewportEl.style) {
+      this.viewportEl.style.transform = "";
+      this.viewportEl.style.transformOrigin = "";
+      this.viewportEl.style.willChange = "";
     }
 
     this.viewportEl.replaceChildren(fragment);

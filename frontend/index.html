@@ -19,7 +19,7 @@
   <!-- PDF.js official textLayer stylesheet -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/web/pdf_viewer.min.css">
   <link rel="stylesheet" href="./css/style.css?v=1.0.10-selection-layout">
-  <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.1">
+  <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.2">
   
   <!-- PDF.js library -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs" type="module"></script>
@@ -486,7 +486,7 @@
         </button>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span style="font-size: 0.82rem; font-weight: 600;">Filter by Color:</span>
-          <button id="export-notes-btn" class="btn btn-sm btn-primary" style="font-size: 0.78rem;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Export (.md)</button>
+          <select id="export-format-select" style="font-size: 0.78rem; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"><option value="md_hierarchy">Hierarchical Markdown</option><option value="md_color">Markdown by color</option><option value="json">JSON</option><option value="jsonl">JSONL</option><option value="yaml">YAML</option><option value="toml">TOML</option></select><button id="export-notes-btn" class="btn btn-sm btn-primary" style="font-size: 0.78rem; margin-left: 4px;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Export</button>
         </div>
       </div>
 
@@ -778,7 +778,7 @@
   <script src="./js/api.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Models -->
-  <script src="./js/models/ReaderModel.js?v=1.0.6"></script>
+  <script src="./js/models/ReaderModel.js?v=1.0.7"></script>
   <script src="./js/models/LibraryModel.js?v=0.8.1"></script>
 
   <!-- MVVM Architecture: Modular Reader Views -->
@@ -816,18 +816,18 @@
   <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.6"></script>
   <script src="./js/viewmodels/reader/ReaderTextHighlightController.js?v=1.0.10"></script>
   <script src="./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.0.10-selection-anchor-v6"></script>
-  <script src="./js/viewmodels/reader/ReaderDrawingViewModel.js?v=0.6.15"></script>
+  <script src="./js/viewmodels/reader/ReaderDrawingViewModel.js?v=0.6.16"></script>
   <script src="./js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout"></script>
   <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.1.1"></script>
-  <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.0.6"></script>
+  <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.0.7"></script>
   <script src="./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9"></script>
-  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.0.10"></script>
+  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.0.12"></script>
   <script src="./js/services/reader/ReaderOfflineService.js?v=1.0.8"></script>
   <script src="./js/viewmodels/reader/ReaderEventBindings.js?v=1.0.8"></script>
   <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.1.1"></script>
   <script src="./js/mobile/DeviceEnvironment.js?v=1.1.1"></script>
-  <script src="./js/mobile/MobileHUDView.js?v=1.1.0"></script>
-  <script src="./js/mobile/MobileDrawingToolbarView.js?v=1.1.1"></script>
+  <script src="./js/mobile/MobileHUDView.js?v=1.1.2"></script>
+  <script src="./js/mobile/MobileDrawingToolbarView.js?v=1.1.2"></script>
   <script src="./js/mobile/MobileSelectionController.js?v=1.1.1"></script>
   <script src="./js/mobile/MobileReaderController.js?v=1.1.1"></script>
   <script src="./js/viewmodels/ReaderViewModel.js?v=1.0.8"></script>

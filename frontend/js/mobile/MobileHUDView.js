@@ -75,42 +75,116 @@ class MobileHUDView {
 
     let touchStartDist = 0;
     let baseScale = 1.0;
+    let liveScale = 1.0;
+    let startFocal = null;
+    let currentFocal = null;
+    let pinchRaf = null;
 
     const getDistance = (touches) => {
-      if (touches.length < 2) return 0;
+      if (!touches || touches.length < 2) return 0;
       return Math.hypot(
         touches[0].clientX - touches[1].clientX,
         touches[0].clientY - touches[1].clientY
       );
     };
 
+    const getFocalPoint = (touches) => {
+      if (!touches || touches.length < 2) return null;
+      return {
+        clientX: (touches[0].clientX + touches[1].clientX) / 2,
+        clientY: (touches[0].clientY + touches[1].clientY) / 2
+      };
+    };
+
     bodyEl.addEventListener('touchstart', (e) => {
-      if (e.touches.length === 2) {
+      if (e.touches && e.touches.length === 2) {
+        if (this.reader?.drawing && this.reader.drawing.isDrawing) {
+          this.reader.drawing.isDrawing = false;
+          this.reader.drawing.currentStroke = null;
+          this.reader.drawing.strokePoints = [];
+          const activePage = this.reader.drawing.activeDrawPage || this.model.currentPage;
+          const canvas = document.querySelector(`.pdf-drawing-canvas[data-page="${activePage}"]`);
+          if (canvas) this.reader.drawing.renderStrokes(canvas, activePage);
+        }
         touchStartDist = getDistance(e.touches);
         baseScale = this.model.scale || 1.0;
+        liveScale = baseScale;
+        startFocal = getFocalPoint(e.touches);
+        currentFocal = startFocal;
         this.isPinching = true;
-      }
-    }, { passive: true });
 
-    bodyEl.addEventListener('touchmove', (e) => {
-      if (this.isPinching && e.touches.length === 2) {
-        const currentDist = getDistance(e.touches);
-        if (touchStartDist > 0 && currentDist > 0) {
-          const ratio = currentDist / touchStartDist;
-          // Clamp target scale between 0.6 and 3.5
-          const newScale = Math.max(0.6, Math.min(3.5, baseScale * ratio));
-          // Apply pinch zoom update when noticeable
-          if (Math.abs(newScale - this.model.scale) > 0.08) {
-            this.reader.nav.setZoom(Math.round(newScale * 100) / 100, true);
+        const viewportEl = this.reader.viewportEl || document.getElementById('pdf-viewport');
+        if (viewportEl && startFocal && typeof viewportEl.getBoundingClientRect === 'function') {
+          const vRect = viewportEl.getBoundingClientRect();
+          const originX = startFocal.clientX - vRect.left;
+          const originY = startFocal.clientY - vRect.top;
+          if (viewportEl.style) {
+            viewportEl.style.transformOrigin = `${originX}px ${originY}px`;
+            viewportEl.style.willChange = 'transform';
+            viewportEl.style.transition = 'none';
           }
         }
       }
     }, { passive: true });
 
+    bodyEl.addEventListener('touchmove', (e) => {
+      if (this.isPinching && e.touches && e.touches.length === 2) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        const currentDist = getDistance(e.touches);
+        if (touchStartDist > 0 && currentDist > 0) {
+          const ratio = currentDist / touchStartDist;
+          liveScale = Math.max(0.25, Math.min(5.0, baseScale * ratio));
+          currentFocal = getFocalPoint(e.touches);
+
+          if (!pinchRaf) {
+            pinchRaf = requestAnimationFrame(() => {
+              pinchRaf = null;
+              if (!this.isPinching) return;
+              const viewportEl = this.reader.viewportEl || document.getElementById('pdf-viewport');
+              if (viewportEl && viewportEl.style) {
+                const liveRatio = liveScale / baseScale;
+                const panX = currentFocal && startFocal ? currentFocal.clientX - startFocal.clientX : 0;
+                const panY = currentFocal && startFocal ? currentFocal.clientY - startFocal.clientY : 0;
+                viewportEl.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${liveRatio})`;
+              }
+              const zoomLabel = document.getElementById('reader-zoom-reset-btn');
+              if (zoomLabel) {
+                zoomLabel.textContent = `${Math.round(liveScale * 100)}%`;
+              }
+            });
+          }
+        }
+      }
+    }, { passive: false });
+
     const endPinch = (e) => {
-      if (this.isPinching && e.touches.length < 2) {
+      if (this.isPinching && (!e.touches || e.touches.length < 2)) {
         this.isPinching = false;
+        if (pinchRaf) {
+          cancelAnimationFrame(pinchRaf);
+          pinchRaf = null;
+        }
+
+        const finalScale = Math.max(0.25, Math.min(5.0, Math.round(liveScale * 100) / 100));
+        const focal = currentFocal || startFocal;
+
+        const viewportEl = this.reader.viewportEl || document.getElementById('pdf-viewport');
+        if (viewportEl && viewportEl.style && finalScale === this.model.scale) {
+          viewportEl.style.transform = '';
+          viewportEl.style.transformOrigin = '';
+          viewportEl.style.willChange = '';
+          viewportEl.style.transition = '';
+        }
+
         touchStartDist = 0;
+        startFocal = null;
+        currentFocal = null;
+
+        if (finalScale !== this.model.scale) {
+          this.reader.nav.setZoom(finalScale, true, focal);
+        }
       }
     };
 

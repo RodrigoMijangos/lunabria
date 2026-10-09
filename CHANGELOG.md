@@ -13,6 +13,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.2.0] - 2026-10-04
+
+### Added
+- Multi-format deterministic annotations export (Hierarchical Markdown, Markdown by color/page, JSON, JSONL, YAML, and TOML) driven by PDF table of contents hierarchy and high-fidelity text reconstruction.
+
+### Changed
+- Smooth, continuous pinch-to-zoom for trackpads and touchscreens with real-time GPU preview during gestures that scales dynamically with finger velocity and commits crisp vector rendering on release.
+
+---
+
 ## [1.1.1] - 2026-10-04
 
 ### Fixed
@@ -187,7 +197,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [1.0.2] - Selection Hit Gap & Calibre Documentation
 
 ### Added
-- **Selection Proximity Hit-Testing (QoL)**: Implemented `findTextTargetWithinGap` in `ReaderNativeSelectionLoupeController` with a generous hit area (28px horizontal, 16px vertical). Users can now initiate text selection by clicking near the beginning of a line, in line spacing gaps, or on spaces between words without needing subpixel accuracy.
+- **Selection Proximity Hit-Testing (QoL)**: Implemented `findTextTargetWithinGap` in `ReaderNativeSelectionLoupeController` with a generous hit area (28px horizontal, 16px vertical). Users can point near the beginning of a line, in line spacing gaps, or on spaces between words without needing subpixel accuracy.
 - **Visual Highlight Integrity**: Preserved exact typographic character bounds and highlight rectangles (`pdf-highlight-rect`) so the expanded interactive radius does not distort or inflate visual selection or annotation rendering.
 - **Stylus & Highlighter Hit Tolerance**: Extended proximity tolerance in `ReaderTextHighlightController` and `ReaderAnnotationViewModel` to make freehand text highlighting and double-tap gesture lookups effortless.
 - **Calibre Prerequisites Documentation**: Added clear guidance and warnings in `README.md` and `.env.example` regarding Calibre desktop SQLite database locks, Windows path length limitations (< 75 characters), and cloud storage synchronization hazards.
@@ -400,7 +410,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.0.11...v1.1.0
 [1.0.11]: https://github.com/RodrigoMijangos/lunabria/compare/v1.0.0...v1.0.11

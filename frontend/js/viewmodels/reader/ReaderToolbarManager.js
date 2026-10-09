@@ -150,8 +150,41 @@ class ReaderToolbarManager {
       this.toggleDrawer(false);
       this.nav.setViewMode('notes');
     });
-    document.getElementById('export-notes-btn')?.addEventListener('click', () => {
-      window.location.href = `/api/books/${this.model.bookId}/export`;
+    const exportBtn = document.getElementById('export-notes-btn');
+    const exportSelect = document.getElementById('export-format-select');
+
+    const updateExportOnlineState = () => {
+      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (exportBtn) {
+        exportBtn.disabled = isOffline;
+        exportBtn.title = isOffline ? 'Export is unavailable offline (processed on server)' : 'Export annotations';
+      }
+      if (exportSelect) {
+        exportSelect.disabled = isOffline;
+        exportSelect.title = isOffline ? 'Export is unavailable offline (processed on server)' : 'Select export format';
+      }
+    };
+
+    window.addEventListener('online', updateExportOnlineState);
+    window.addEventListener('offline', updateExportOnlineState);
+    updateExportOnlineState();
+
+    exportBtn?.addEventListener('click', () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        alert('Export is unavailable while offline as it is processed on the server.');
+        return;
+      }
+      const formatVal = exportSelect ? exportSelect.value : 'md_hierarchy';
+      let fmt = formatVal;
+      let groupBy = 'color';
+      if (formatVal === 'md_hierarchy') {
+        fmt = 'md';
+        groupBy = 'hierarchy';
+      } else if (formatVal === 'md_color') {
+        fmt = 'md';
+        groupBy = 'color';
+      }
+      window.location.href = `/api/books/${this.model.bookId}/export?format=${fmt}&group_by=${groupBy}`;
     });
   }
 
@@ -428,37 +461,86 @@ class ReaderToolbarManager {
   }
 
   bindWheelZoom() {
-    let pendingScale = null;
+    let continuousScale = null;
+    let gestureBaseScale = null;
     let pendingFocalPoint = null;
     let wheelRaf = null;
+    let idleTimer = null;
 
     const handleWheel = (e) => {
       if (!e.ctrlKey && !e.metaKey) return;
-      if (this.container.style.display !== 'flex') return;
+      if (this.container && this.container.style.display !== 'flex') return;
 
       e.preventDefault();
 
-      const current = pendingScale !== null ? pendingScale : this.model.scale;
-      const deltaMag = Math.abs(e.deltaY);
-      const intensity = deltaMag >= 100 ? Math.min(3, Math.max(1, Math.round(deltaMag / 100))) : 1;
-      const baseStep = 0.25;
-      const step = (e.deltaY < 0 ? baseStep : -baseStep) * intensity;
-      const nextScale = Math.max(0.25, Math.min(5.0, Math.round((current + step) * 100) / 100));
+      let delta = e.deltaY;
+      if (e.deltaMode === 1) delta *= 16;
+      else if (e.deltaMode === 2) delta *= 800;
+
+      // Continuous exponential pinch-to-zoom formula:
+      // Scales continuously according to the velocity and distance of the gesture.
+      // Small trackpad movements adjust smoothly by tiny fractions, while rapid pinches scale fast.
+      const SENSITIVITY = 0.0022314355;
+      const zoomFactor = Math.exp(-delta * SENSITIVITY);
+
+      if (continuousScale === null) {
+        continuousScale = this.model.scale || 1.0;
+        gestureBaseScale = this.model.scale || 1.0;
+        if (this.viewportEl && this.viewportEl.style && typeof this.viewportEl.getBoundingClientRect === 'function') {
+          const vRect = this.viewportEl.getBoundingClientRect();
+          const ox = e.clientX - vRect.left;
+          const oy = e.clientY - vRect.top;
+          this.viewportEl.style.transformOrigin = `${ox}px ${oy}px`;
+          this.viewportEl.style.willChange = 'transform';
+        }
+      }
+      continuousScale = Math.max(0.25, Math.min(5.0, continuousScale * zoomFactor));
 
       pendingFocalPoint = { clientX: e.clientX, clientY: e.clientY };
-      if (nextScale === current) return;
-      pendingScale = nextScale;
+
+      // Immediate hardware-accelerated visual scale preview
+      if (this.viewportEl && this.viewportEl.style && gestureBaseScale > 0) {
+        const liveRatio = continuousScale / gestureBaseScale;
+        this.viewportEl.style.transform = `scale(${liveRatio})`;
+      }
+
+      const zoomLabel = document.getElementById('reader-zoom-reset-btn');
+      if (zoomLabel) {
+        zoomLabel.textContent = `${Math.round(continuousScale * 100)}%`;
+      }
+
+      if (typeof clearTimeout === 'function') clearTimeout(idleTimer);
+      else if (typeof window !== 'undefined' && typeof window.clearTimeout === 'function') window.clearTimeout(idleTimer);
+
+      const commitPinch = () => {
+        continuousScale = null;
+        gestureBaseScale = null;
+        if (this.viewportEl && this.viewportEl.style) {
+          this.viewportEl.style.transform = '';
+          this.viewportEl.style.transformOrigin = '';
+          this.viewportEl.style.willChange = '';
+        }
+      };
+
+      if (typeof setTimeout === 'function') {
+        idleTimer = setTimeout(commitPinch, 200);
+      } else if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+        idleTimer = window.setTimeout(commitPinch, 200);
+      }
+
+      const targetScale = Math.max(0.25, Math.min(5.0, Math.round(continuousScale * 100) / 100));
+      if (targetScale === this.model.scale && !wheelRaf) return;
 
       if (!wheelRaf) {
         wheelRaf = requestAnimationFrame(() => {
-          if (pendingScale !== null) {
-            const focal = pendingFocalPoint;
-            const targetScale = pendingScale;
-            pendingScale = null;
-            pendingFocalPoint = null;
-            this.nav.setZoom(targetScale, true, focal);
-          }
           wheelRaf = null;
+          if (continuousScale !== null) {
+            const scaleToApply = Math.max(0.25, Math.min(5.0, Math.round(continuousScale * 100) / 100));
+            const focal = pendingFocalPoint;
+            if (scaleToApply !== this.model.scale) {
+              this.nav.setZoom(scaleToApply, true, focal);
+            }
+          }
         });
       }
     };
@@ -468,3 +550,4 @@ class ReaderToolbarManager {
 }
 
 window.ReaderToolbarManager = ReaderToolbarManager;
+

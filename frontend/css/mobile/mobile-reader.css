@@ -444,7 +444,7 @@ body.mobile-reader-active #reader-body,
 body.mobile-reader-active #pdf-viewport,
 body.mobile-reader-active .pdf-viewport-container,
 body.mobile-reader-active .pdf-page-wrapper {
-  touch-action: pan-x pan-y pinch-zoom !important;
+  touch-action: pan-x pan-y !important;
 }
 
 /* When mobile drawing is active, lock touch-action to none to prevent browser gesture interception/cancellation */
