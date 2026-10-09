@@ -292,6 +292,25 @@ class TestNotesExportDeterministic(unittest.TestCase):
                 self.assertIn("section", m)
                 self.assertIn("is_heading", m)
 
+    def test_reconstruction_handles_middle_dot_em_dash_fallback(self):
+        class FakePage:
+            def get_text(self, _kind):
+                return [(142.0, 285.0, 192.0, 305.0, "faster\u00b7not", 0, 0, 0)]
+
+        class FakeDocument:
+            page_count = 1
+
+            def __getitem__(self, _page_num):
+                return FakePage()
+
+        rects = [{"x0": 140.0, "y0": 285.0, "x1": 175.0, "y1": 305.0}]
+        reconstructed, _, source, _, _ = notes_export.extract_reconstructed_text(
+            FakeDocument(), 1, rects, "faster"
+        )
+
+        self.assertEqual(reconstructed, "faster")
+        self.assertEqual(source, "pdf")
+
     def test_text_reconstruction_em_dash(self):
         palette = self.get_sample_palette()
         annot = {

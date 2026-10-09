@@ -67,8 +67,9 @@ def split_words_with_dashes(words: List[Tuple]) -> List[Tuple]:
     new_words = []
     for w in words:
         x0, y0, x1, y1, text, block, line, word_idx = w[:8]
-        if "\u2014" in text or "\u2013" in text:
-            parts = re.split(r"([\u2014\u2013])", text)
+        # Some PDF fonts substitute unsupported em dashes with a middle dot.
+        if "\u2014" in text or "\u2013" in text or "\u00b7" in text:
+            parts = re.split(r"([\u2014\u2013\u00b7])", text)
             total_len = len(text)
             curr_x0 = x0
             total_w = x1 - x0
@@ -78,7 +79,7 @@ def split_words_with_dashes(words: List[Tuple]) -> List[Tuple]:
                     continue
                 p_len = len(p)
                 p_x1 = curr_x0 + (total_w * (p_len / total_len) if total_len > 0 else 0)
-                if p not in ("\u2014", "\u2013"):
+                if p not in ("\u2014", "\u2013", "\u00b7"):
                     new_words.append((curr_x0, y0, p_x1, y1, p, block, line, word_idx, sub_idx))
                     sub_idx += 1
                 curr_x0 = p_x1

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.3.0';
+const CACHE_NAME = 'lunabria-v1.3.1';
 // Match the HTML query strings exactly: CacheStorage keys include search parameters.
 const STATIC_ASSETS = [
   './',
