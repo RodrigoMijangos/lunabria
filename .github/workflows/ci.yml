@@ -1,0 +1,62 @@
+name: CI (Develop)
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  test-backend:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements.txt'
+
+      - name: Install System Dependencies (Calibre)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y calibre
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Backend Test Suite
+        working-directory: backend
+        run: |
+          python -m unittest discover -s tests -v
+
+  validate-frontend:
+    name: Frontend & Config Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate JSON & Manifest Integrity
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('frontend/manifest.json', 'utf8')); console.log('✓ manifest.json is valid JSON');"
+
+      - name: Validate Systemd & Caddy Configurations
+        run: |
+          test -f systemd/lunabria.service && echo "✓ systemd unit exists"
+          test -f caddy/Caddyfile && echo "✓ Caddyfile exists"
+          test -f .env.example && echo "✓ .env.example exists"
