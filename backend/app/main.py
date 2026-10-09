@@ -23,7 +23,7 @@ logging.getLogger("asyncio").addFilter(_SuppressSocketSendErrorFilter())
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.4.1"
+    version="1.5.0"
 )
 
 import time
@@ -80,9 +80,9 @@ app.include_router(media.router)
 def startup_event():
     init_db()
 
-@app.get("/api/health")
+@app.get("/api/health", status_code=204, response_class=FastAPIResponse)
 def health_check():
-    return {"status": "ok", "app": "Lunabria"}
+    return FastAPIResponse(status_code=204)
 
 # Mount frontend static directory if exists
 frontend_dir = WORKSPACE_DIR / "frontend"

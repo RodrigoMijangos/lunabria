@@ -138,6 +138,10 @@ class ReaderViewModel {
     return this.documentLifecycle.loadPdfDocument(bookId, sequence);
   }
 
+  reconcileServerConnection() {
+    return this.documentLifecycle.reconcileServerConnection();
+  }
+
   cacheCurrentPdf(onProgress = () => {}) {
     return this.offlineService.cacheCurrentPdf(onProgress);
   }

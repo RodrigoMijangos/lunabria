@@ -3,10 +3,15 @@
 from pathlib import Path
 
 
-def convert_epub_to_pdf(
+class SourceConversionError(RuntimeError):
+    """Raised when Calibre cannot turn a particular source file into a PDF."""
+
+
+def convert_to_pdf(
     self,
     book_id: int,
-    epub_path: Path,
+    source_path: Path,
+    source_format: str,
     *,
     EBOOK_CONVERT_BIN,
     Path,
@@ -15,10 +20,12 @@ def convert_epub_to_pdf(
     tempfile,
     threading,
 ) -> Path:
-    """Converts an EPUB into a cached PDF without modifying the Calibre library."""
-    source_stats = epub_path.stat()
+    """Converts a Calibre source file into a cached PDF without changing the library."""
+    source_format = source_format.strip().upper()
+    source_stats = source_path.stat()
     cache_path = self.converted_pdf_dir / (
-        f"{book_id}-{source_stats.st_size}-{source_stats.st_mtime_ns}.pdf"
+        f"{book_id}-{source_format.lower()}-{source_stats.st_size}-"
+        f"{source_stats.st_mtime_ns}.pdf"
     )
     if self._is_valid_pdf(cache_path):
         return cache_path
@@ -40,13 +47,15 @@ def convert_epub_to_pdf(
 
         try:
             subprocess.run(
-                [EBOOK_CONVERT_BIN, str(epub_path), str(temp_path)],
+                [EBOOK_CONVERT_BIN, str(source_path), str(temp_path)],
                 capture_output=True,
                 text=True,
                 check=True,
             )
             if not self._is_valid_pdf(temp_path):
-                raise RuntimeError("Calibre did not generate a valid PDF when converting the EPUB.")
+                raise SourceConversionError(
+                    f"Calibre did not generate a valid PDF when converting {source_format}."
+                )
             temp_path.replace(cache_path)
         except FileNotFoundError as error:
             raise RuntimeError(
@@ -54,16 +63,32 @@ def convert_epub_to_pdf(
             ) from error
         except subprocess.CalledProcessError as error:
             detail = (error.stderr or error.stdout or "").strip()
-            message = "Calibre could not convert the EPUB to PDF."
+            message = f"Calibre could not convert the {source_format} to PDF."
             if detail:
                 message = f"{message} {detail}"
-            raise RuntimeError(message) from error
+            raise SourceConversionError(message) from error
         except OSError as error:
             raise RuntimeError(f"Could not execute ebook-convert: {error}") from error
         finally:
             temp_path.unlink(missing_ok=True)
 
         return cache_path
+
+
+def convert_epub_to_pdf(
+    self,
+    book_id: int,
+    epub_path: Path,
+    **dependencies,
+) -> Path:
+    """Compatibility wrapper for callers that explicitly convert EPUB files."""
+    return convert_to_pdf(
+        self,
+        book_id,
+        epub_path,
+        "EPUB",
+        **dependencies,
+    )
 
 
 def _is_valid_pdf(file_path: Path) -> bool:

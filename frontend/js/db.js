@@ -7,6 +7,7 @@ class LocalDB {
     this.version = 7;
     this.db = null;
     this._outboxProcessing = false;
+    this._outboxPromise = null;
   }
 
   async open() {
@@ -540,80 +541,84 @@ class LocalDB {
   }
 
   async processOutboxQueue(apiClient) {
-    if (this._outboxProcessing) return { processed: 0, pending: await this.getOutboxCount() };
+    if (this._outboxPromise) return this._outboxPromise;
     const client = apiClient || (typeof api !== 'undefined' ? api : null);
     if (!client) return { processed: 0, pending: await this.getOutboxCount() };
 
     this._outboxProcessing = true;
+    this._outboxPromise = this.processOutboxQueueInternal(client).finally(() => {
+      this._outboxProcessing = false;
+      this._outboxPromise = null;
+    });
+    return this._outboxPromise;
+  }
+
+  async processOutboxQueueInternal(client) {
     let processed = 0;
-    try {
-      const ops = await this.getPendingOutboxOps();
-      const now = Date.now();
+    const ops = await this.getPendingOutboxOps();
+    const now = Date.now();
 
-      for (const op of ops) {
-        // Exponential backoff: 1s, 2s, 4s, 8s, up to 60s
-        const backoffMs = op.attempts > 0 ? Math.min(60000, 1000 * Math.pow(2, op.attempts - 1)) : 0;
-        if (op.lastAttempt && (now - op.lastAttempt) < backoffMs) {
-          continue;
-        }
+    for (const op of ops) {
+      // Exponential backoff: 1s, 2s, 4s, 8s, up to 60s
+      const backoffMs = op.attempts > 0 ? Math.min(60000, 1000 * Math.pow(2, op.attempts - 1)) : 0;
+      if (op.lastAttempt && (now - op.lastAttempt) < backoffMs) {
+        continue;
+      }
 
-        let success = false;
-        try {
-          if (op.type === 'annotation') {
-            if (op.action === 'create') {
-              await client.createAnnotation(op.bookId, op.payload);
+      let success = false;
+      try {
+        if (op.type === 'annotation') {
+          if (op.action === 'create') {
+            await client.createAnnotation(op.bookId, op.payload);
+            success = true;
+          } else if (op.action === 'update') {
+            await client.updateAnnotation(op.entityId, op.payload);
+            success = true;
+          } else if (op.action === 'delete') {
+            try {
+              await client.deleteAnnotation(op.entityId);
               success = true;
-            } else if (op.action === 'update') {
-              await client.updateAnnotation(op.entityId, op.payload);
-              success = true;
-            } else if (op.action === 'delete') {
-              try {
-                await client.deleteAnnotation(op.entityId);
+            } catch (delErr) {
+              // Accept 404 as idempotent deletion success
+              if (delErr?.message?.includes('404') || delErr?.status === 404) {
                 success = true;
-              } catch (delErr) {
-                // Accept 404 as idempotent deletion success
-                if (delErr?.message?.includes('404') || delErr?.status === 404) {
-                  success = true;
-                } else {
-                  throw delErr;
-                }
+              } else {
+                throw delErr;
               }
             }
-          } else if (op.type === 'progress') {
-            const res = await fetch(`/api/books/${op.bookId}/progress`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(op.payload)
-            });
-            if (res.ok) {
-              success = true;
-            }
-          } else if (op.type === 'drawing') {
-            if (op.action === 'save') {
-              const res = await client.savePageDrawings(op.bookId, op.page, op.payload.strokes);
-              if (res !== null) success = true;
-            } else if (op.action === 'clear') {
-              const res = await client.clearPageDrawings(op.bookId, op.page);
-              if (res) success = true;
-            }
           }
-        } catch (execErr) {
-          console.warn(`[LocalDB] Outbox operation ${op.id} attempt failed:`, execErr);
-          success = false;
+        } else if (op.type === 'progress') {
+          const res = await fetch(`/api/books/${op.bookId}/progress`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(op.payload)
+          });
+          if (res.ok) {
+            success = true;
+          }
+        } else if (op.type === 'drawing') {
+          if (op.action === 'save') {
+            const res = await client.savePageDrawings(op.bookId, op.page, op.payload.strokes);
+            if (res !== null) success = true;
+          } else if (op.action === 'clear') {
+            const res = await client.clearPageDrawings(op.bookId, op.page);
+            if (res) success = true;
+          }
         }
-
-        if (success) {
-          await this.removeOutboxOp(op.id);
-          processed++;
-        } else {
-          op.attempts = (op.attempts || 0) + 1;
-          op.lastAttempt = Date.now();
-          op.status = 'failed';
-          await this.updateOutboxOp(op);
-        }
+      } catch (execErr) {
+        console.warn(`[LocalDB] Outbox operation ${op.id} attempt failed:`, execErr);
+        success = false;
       }
-    } finally {
-      this._outboxProcessing = false;
+
+      if (success) {
+        await this.removeOutboxOp(op.id);
+        processed++;
+      } else {
+        op.attempts = (op.attempts || 0) + 1;
+        op.lastAttempt = Date.now();
+        op.status = 'failed';
+        await this.updateOutboxOp(op);
+      }
     }
 
     const remaining = await this.getOutboxCount();
@@ -624,16 +629,27 @@ class LocalDB {
 const localDB = new LocalDB();
 
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  window.addEventListener('online', () => {
-    if (typeof localDB !== 'undefined' && typeof localDB.processOutboxQueue === 'function') {
+  const processOutboxIfServerAvailable = async () => {
+    const monitor = window.serverConnectivity;
+    if (!monitor || typeof monitor.checkServer !== 'function') return;
+    const available = await monitor.checkServer();
+    if (available && typeof localDB.processOutboxQueue === 'function') {
+      localDB.processOutboxQueue();
+    }
+  };
+
+  window.addEventListener('online', processOutboxIfServerAvailable);
+  window.addEventListener('offline', processOutboxIfServerAvailable);
+  window.addEventListener('lunabria:server-connectivity-change', event => {
+    const reader = window.reader;
+    const readerIsOpen = reader?.model?.bookId && reader.container?.style.display === 'flex';
+    if (event.detail?.available && !readerIsOpen && typeof localDB.processOutboxQueue === 'function') {
       localDB.processOutboxQueue();
     }
   });
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && typeof localDB !== 'undefined' && typeof localDB.processOutboxQueue === 'function') {
-        localDB.processOutboxQueue();
-      }
+      if (document.visibilityState === 'visible') processOutboxIfServerAvailable();
     });
   }
 }

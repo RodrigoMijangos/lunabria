@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
+from app.services.calibre_conversion import SourceConversionError
 from app.services.calibre_service import calibre_service
 
 router = APIRouter(prefix="/api/books", tags=["Media"])
@@ -105,11 +106,16 @@ def range_requests_response(
 def stream_pdf(book_id: int, request: Request):
     try:
         pdf_path = calibre_service.get_pdf_path(book_id)
+    except SourceConversionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
 
     if not pdf_path or not pdf_path.exists():
-        raise HTTPException(status_code=404, detail="No compatible PDF or EPUB found for this book")
+        raise HTTPException(
+            status_code=404,
+            detail="No PDF or convertible ebook format was found for this book",
+        )
     return range_requests_response(request, pdf_path, "application/pdf")
 
 @router.get("/{book_id}/cover")

@@ -125,6 +125,77 @@ test('BookCardView displays the cached cover Blob for an offline book', () => {
   assert.deepEqual(urls, [['create', coverBlob], ['revoke', 'blob:cached-cover']]);
 });
 
+test('viewed covers are persisted once and shared between simultaneous cards', async () => {
+  const { Element, document } = createDOM();
+  const coverBlob = new Blob(['cover bytes'], { type: 'image/jpeg' });
+  const savedBooks = [];
+  let fetchCount = 0;
+  const context = vm.createContext({
+    document,
+    window: {},
+    Blob,
+    LibraryModel: { formatReadingProgress: () => '0' },
+    fetch: async () => {
+      fetchCount++;
+      return { ok: true, status: 200, blob: async () => coverBlob };
+    },
+    localDB: { async saveCachedBook(book) { savedBooks.push(book); } }
+  });
+  vm.runInContext(source('views/library/BookCardView.js'), context);
+  const BookCardView = vm.runInContext('BookCardView', context);
+  const firstBook = { id: 42, title: 'Book', has_cover: true, cover_url: '/api/books/42/cover' };
+  const secondBook = { ...firstBook };
+  const firstCard = BookCardView.createBookCard(firstBook, null, null, { allowEdit: false });
+  const secondCard = BookCardView.createBookCard(secondBook, null, null, { allowEdit: false });
+
+  await Promise.all([
+    firstCard._bookCardElements.img.onload(),
+    secondCard._bookCardElements.img.onload()
+  ]);
+
+  assert.equal(fetchCount, 1);
+  assert.equal(savedBooks.length, 1);
+  assert.equal(savedBooks[0].coverBlob, coverBlob);
+  assert.equal(firstBook.coverBlob, coverBlob);
+  assert.equal(secondBook.coverBlob, coverBlob);
+});
+
+test('recent-read rerenders keep existing cover images and refresh progress', () => {
+  const { Element, document } = createDOM();
+  const window = { getComputedStyle: () => ({ gridTemplateColumns: '1fr' }) };
+  const context = vm.createContext({
+    document,
+    window,
+    LibraryModel: {
+      formatReadingProgress: (current, total) => Math.round((current / total) * 100)
+    }
+  });
+  vm.runInContext(source('views/library/BookCardView.js'), context);
+  vm.runInContext(source('views/library/RecentReadsView.js'), context);
+  const RecentReadsView = vm.runInContext('RecentReadsView', context);
+  const container = new Element('div');
+  const section = new Element('section');
+  const book = {
+    id: 42,
+    title: 'Test book',
+    authors: 'Author',
+    has_cover: true,
+    cover_url: '/api/books/42/cover',
+    current_page: 2,
+    total_pages: 10
+  };
+
+  RecentReadsView.renderRecentReads(container, section, [book], () => {}, () => {});
+  const card = container.children[0];
+  const cover = card.children[0].children[0];
+
+  RecentReadsView.renderRecentReads(container, section, [{ ...book, current_page: 4 }], () => {}, () => {});
+
+  assert.equal(container.children[0], card);
+  assert.equal(card.children[0].children[0], cover);
+  assert.equal(card._bookCardElements.progressText.textContent, '40% read');
+});
+
 test('HighlightColorSettingsManager caches palette to localStorage and recovers offline', async () => {
   const { elements, document } = createDOM();
   const storage = new Map();

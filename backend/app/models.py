@@ -23,6 +23,12 @@ class BookWithProgress(BookBase):
     percentage: Optional[float] = None
     last_read_at: Optional[str] = None
 
+class PaginatedBooksResponse(BaseModel):
+    books: List[BookBase]
+    total: int
+    page: int
+    page_size: int
+
 class VirtualLibraryBase(BaseModel):
     name: str
     type: str = "query"  # "query" or "manual"

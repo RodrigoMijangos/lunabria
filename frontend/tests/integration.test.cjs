@@ -169,6 +169,7 @@ function workerWorld() {
   const opened = [], added = [], networkRequests = [], matched = [];
   let skipped = 0;
   const self = {
+    location: new URL(origin),
     addEventListener(type, handler) {
       assert.ok(!listeners.has(type), `Duplicate worker handler: ${type}`);
       listeners.set(type, handler);
@@ -230,6 +231,7 @@ test('all local HTML scripts exist and instantiate real singletons in HTML order
     'reader instanceof MoonReader', 'reader instanceof ReaderViewModel',
     'reader.model instanceof ReaderModel', 'app instanceof LibraryViewModel',
     'app.model instanceof LibraryModel', 'localDB instanceof LocalDB',
+    'window.serverConnectivity instanceof ServerConnectivityMonitor',
     'reader.eventBindings instanceof ReaderEventBindings',
     'reader.documentLifecycle instanceof ReaderDocumentLifecycle',
     'reader.offlineService instanceof ReaderOfflineService',
@@ -306,7 +308,7 @@ test('STATIC_ASSETS are unique local existing resources and cache release matche
   const backend = fs.readFileSync(path.join(frontend, '..', 'backend', 'app', 'main.py'), 'utf8');
   const version = backend.match(/\bversion\s*=\s*['"]([^'"]+)['"]/);
   assert.ok(version, 'Backend FastAPI version not found');
-  assert.equal(version[1], '1.4.1');
+  assert.equal(version[1], '1.5.0');
   // Frontend-only revisions refresh the shell without publishing a new API release.
   const cacheVersion = cacheName.match(/^lunabria-v(\d+\.\d+\.\d+)(?:-[a-z0-9-]+)?$/);
   assert.ok(cacheVersion, 'Invalid shell cache name');

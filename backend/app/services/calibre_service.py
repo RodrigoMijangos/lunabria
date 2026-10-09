@@ -155,7 +155,7 @@ class CalibreService:
             conn.close()
 
     def get_pdf_path(self, book_id: int) -> Optional[Path]:
-        """Returns a native PDF or converts an EPUB to a cached PDF on demand."""
+        """Returns a native PDF or converts an available Calibre format on demand."""
         conn = self.get_db_connection()
         if not conn:
             return None
@@ -181,10 +181,79 @@ class CalibreService:
                 if file_path.suffix.lower() == ".pdf":
                     return file_path
 
-        epub_path = self.get_epub_path(book_id)
-        if epub_path:
-            return self.convert_epub_to_pdf(book_id, epub_path)
+        conversion_errors = []
+        last_conversion_error = None
+        for source_format, source_path in self._get_convertible_source_paths(book_id):
+            try:
+                return self.convert_format_to_pdf(book_id, source_path, source_format)
+            except calibre_conversion.SourceConversionError as error:
+                conversion_errors.append(f"{source_format}: {error}")
+                last_conversion_error = error
+
+        if conversion_errors:
+            details = "; ".join(conversion_errors)
+            raise calibre_conversion.SourceConversionError(
+                f"Calibre could not convert any available format to PDF. {details}"
+            ) from last_conversion_error
         return None
+
+    def _get_convertible_source_paths(self, book_id: int) -> List[tuple[str, Path]]:
+        """Returns available non-PDF formats, preferring common ebook formats."""
+        conn = self.get_db_connection()
+        if not conn:
+            return []
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT b.path AS book_path, d.name, UPPER(d.format) AS format
+                FROM books b
+                JOIN data d ON b.id = d.book
+                WHERE b.id = ? AND UPPER(d.format) != 'PDF'
+            """, (book_id,))
+            rows = cursor.fetchall()
+        finally:
+            conn.close()
+
+        priority = {"EPUB": 0, "MOBI": 1, "AZW3": 2, "AZW": 3}
+        rows.sort(key=lambda row: (priority.get(row["format"], 4), row["format"] or ""))
+
+        book_path = next((row["book_path"] for row in rows if row["book_path"]), None)
+        book_dir = self.library_path / book_path if book_path else None
+        directory_files = (
+            list(book_dir.iterdir())
+            if book_dir and book_dir.is_dir()
+            else []
+        )
+
+        sources = []
+        seen_paths = set()
+        for row in rows:
+            source_format = (row["format"] or "").strip().upper()
+            if not source_format.isalnum():
+                continue
+
+            source_path = None
+            if book_dir and row["name"]:
+                registered_path = book_dir / f"{row['name']}.{source_format.lower()}"
+                if registered_path.is_file():
+                    source_path = registered_path
+
+            if source_path is None:
+                source_path = next(
+                    (
+                        file_path
+                        for file_path in directory_files
+                        if file_path.is_file()
+                        and file_path.suffix.upper() == f".{source_format}"
+                    ),
+                    None,
+                )
+
+            if source_path is not None and source_path not in seen_paths:
+                sources.append((source_format, source_path))
+                seen_paths.add(source_path)
+
+        return sources
 
     def get_epub_path(self, book_id: int) -> Optional[Path]:
         """Returns the EPUB file registered for a book in Calibre."""
@@ -214,8 +283,25 @@ class CalibreService:
                     return file_path
         return None
 
+    def convert_format_to_pdf(
+        self, book_id: int, source_path: Path, source_format: str
+    ) -> Path:
+        """Converts a Calibre format into a cached PDF without changing the library."""
+        return calibre_conversion.convert_to_pdf(
+            self,
+            book_id,
+            source_path,
+            source_format,
+            EBOOK_CONVERT_BIN=EBOOK_CONVERT_BIN,
+            Path=Path,
+            os=os,
+            subprocess=subprocess,
+            tempfile=tempfile,
+            threading=threading,
+        )
+
     def convert_epub_to_pdf(self, book_id: int, epub_path: Path) -> Path:
-        """Converts an EPUB into a cached PDF without modifying the Calibre library."""
+        """Compatibility wrapper for converting an EPUB into a cached PDF."""
         return calibre_conversion.convert_epub_to_pdf(
             self,
             book_id,

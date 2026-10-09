@@ -1,11 +1,13 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from app.routers.media import range_requests_response
+from app.routers.media import range_requests_response, stream_pdf
+from app.services.calibre_conversion import SourceConversionError
 
 
 class TestPdfByteRanges(unittest.IsolatedAsyncioTestCase):
@@ -36,6 +38,28 @@ class TestPdfByteRanges(unittest.IsolatedAsyncioTestCase):
 
     async def read_response(self, response):
         return b"".join([chunk async for chunk in response.body_iterator])
+
+    def test_conversion_failure_returns_actionable_unprocessable_response(self):
+        conversion_error = SourceConversionError(
+            "Calibre could not convert the ZIP to PDF. Unsupported contents"
+        )
+        with patch(
+            "app.routers.media.calibre_service.get_pdf_path",
+            side_effect=conversion_error,
+        ), self.assertRaises(HTTPException) as error:
+            stream_pdf(1, self.make_request())
+
+        self.assertEqual(error.exception.status_code, 422)
+        self.assertEqual(error.exception.detail, str(conversion_error))
+
+    def test_missing_convertible_format_returns_not_found(self):
+        with patch(
+            "app.routers.media.calibre_service.get_pdf_path", return_value=None
+        ), self.assertRaises(HTTPException) as error:
+            stream_pdf(1, self.make_request())
+
+        self.assertEqual(error.exception.status_code, 404)
+        self.assertIn("convertible ebook format", error.exception.detail)
 
     async def test_standard_range_returns_partial_content(self):
         response = range_requests_response(self.make_request("bytes=2-5"), self.pdf_path)

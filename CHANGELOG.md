@@ -11,6 +11,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-09
+
+### Added
+- Books in Calibre formats beyond EPUB can be converted to PDF on demand when supported by Calibre.
+- An in-app banner lets users reload when a new version is available.
+- The app detects restored server connections, refreshes the catalogue and syncs reading data.
+- Covers viewed in the library are saved locally for reuse.
+
+### Changed
+- The catalogue, including “Last opened”, paginates by default and lets users navigate locally available books without downloading them again.
+
+### Fixed
+- The systemd installer rejects missing or unusable Linux virtual environments instead of installing a service that cannot start.
+- The installed app starts immediately without an internet connection.
+- Downloaded books open without waiting for network timeouts when offline.
+- Reading annotations and progress no longer trigger network error alerts while offline.
+- Catalogue errors show offline mode only when the server cannot be reached.
+
 ## [1.4.1] - 2026-10-06
 
 ### Fixed
@@ -454,7 +472,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.3.0...v1.3.1

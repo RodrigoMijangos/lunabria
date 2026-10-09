@@ -85,7 +85,7 @@ Tailored stylus interactions with strict palm rejection, double-tap pen/highligh
    - **Markdown Export:** Export annotations and excerpts directly to **Markdown (`.md`)** ready for Obsidian, Logseq, or notes apps.
    - **Offline Reading (PWA):** Cached books appear in the library immediately on startup. Download books, their cover art, and pre-buffered page layouts into IndexedDB; an offline banner shows connection status and the number of books available offline.
    - **Offline Annotation Sync:** Saved annotations and highlight colors remain available offline. Highlights, notes, drawings, and reading progress created without a connection are queued locally and synchronize when connectivity returns.
-   - **On-Demand EPUB Conversion:** If a book is only available in EPUB format, it is automatically converted to PDF when opened and cached without altering the original Calibre library.
+   - **On-Demand Format Conversion:** If a book has no PDF, an available format supported by Calibre is automatically converted to PDF when opened and cached without altering the original library.
 
 3. **Add New Books:**
    - Drag-and-drop or select one or multiple PDF files.
@@ -195,9 +195,15 @@ Close the Calibre desktop application before uploading books or saving metadata,
    ```
 
 4. **Enable the systemd service:**
-   Run the automated installer (detects current directory, user, and virtualenv paths automatically):
+   Run the automated installer (detects the current directory and user):
    ```bash
    bash systemd/install.sh
+   ```
+   If the repository is on `/mnt/c` and its `.venv` is a Windows environment, create a Linux virtual environment and pass it with `LUNABRIA_VENV`:
+   ```bash
+   python3 -m venv "$HOME/.venvs/lunabria"
+   "$HOME/.venvs/lunabria/bin/pip" install -r backend/requirements.txt
+   LUNABRIA_VENV="$HOME/.venvs/lunabria" bash systemd/install.sh
    ```
    *Or configure manually by copying `systemd/lunabria.service` to `/etc/systemd/system/` with your absolute paths.*
 

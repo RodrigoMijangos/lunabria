@@ -10,6 +10,9 @@ class VirtualLibraryManager {
     this.books = null;
     this.mode = 'query';
     this.openSequence = 0;
+    this.manualPage = 0;
+    this.manualTotal = 0;
+    this.manualRequestSequence = 0;
   }
 
   async openVirtualLibraryModal(options = {}) {
@@ -35,7 +38,11 @@ class VirtualLibraryManager {
       : [];
     this.selectedBookIds = new Set(preselectedBookIds);
     this.books = null;
+    this.manualPage = 0;
+    this.manualTotal = 0;
+    this.manualRequestSequence++;
     this.mode = 'query';
+    let searchTimeout = null;
 
     const setMode = (mode) => {
       this.mode = mode;
@@ -45,20 +52,41 @@ class VirtualLibraryManager {
       manualTab.classList.toggle('active', mode === 'manual');
     };
 
-    const loadManualBooks = async () => {
+    const loadManualBooks = async ({ append = false, force = false } = {}) => {
       setMode('manual');
-      if (this.books !== null) {
-        this.renderManualBooks(manualList, searchInput?.value || '');
+      if (this.books !== null && !append && !force) {
+        this.renderManualBooks(manualList, searchInput?.value || '', () => loadManualBooks({ append: true }));
         return;
       }
-      if (manualList) manualList.textContent = 'Loading books...';
+
+      const query = searchInput?.value.trim() || '';
+      const page = append ? this.manualPage + 1 : 1;
+      const requestSequence = ++this.manualRequestSequence;
+      if (!append) {
+        this.books = [];
+        this.manualPage = 0;
+        this.manualTotal = 0;
+      }
+      if (manualList) manualList.textContent = append ? 'Loading more books...' : 'Loading books...';
+
       try {
-        const books = await api.getBooks();
-        if (sequence !== this.openSequence) return;
-        this.books = books;
-        this.renderManualBooks(manualList, searchInput?.value || '');
+        const response = await api.getBooks(null, null, {
+          query,
+          page,
+          pageSize: 24,
+          sort: 'title'
+        });
+        if (sequence !== this.openSequence || requestSequence !== this.manualRequestSequence) return;
+        const pageBooks = Array.isArray(response)
+          ? response
+          : (Array.isArray(response?.books) ? response.books : []);
+        this.books = append ? [...(this.books || []), ...pageBooks] : pageBooks;
+        this.manualPage = Array.isArray(response) ? 1 : Number(response?.page) || page;
+        const total = Array.isArray(response) ? pageBooks.length : Number(response?.total);
+        this.manualTotal = Number.isFinite(total) ? total : this.books.length;
+        this.renderManualBooks(manualList, query, () => loadManualBooks({ append: true }));
       } catch (error) {
-        if (sequence !== this.openSequence) return;
+        if (sequence !== this.openSequence || requestSequence !== this.manualRequestSequence) return;
         this.books = [];
         if (manualList) manualList.textContent = 'Could not load book catalog.';
       }
@@ -82,7 +110,18 @@ class VirtualLibraryManager {
       };
     }
     if (searchInput) {
-      searchInput.oninput = () => this.renderManualBooks(manualList, searchInput.value);
+      searchInput.oninput = () => {
+        if (searchTimeout !== null) window.clearTimeout(searchTimeout);
+        this.manualRequestSequence++;
+        this.books = null;
+        this.manualPage = 0;
+        this.manualTotal = 0;
+        if (manualList) manualList.textContent = 'Searching books...';
+        searchTimeout = window.setTimeout(() => {
+          searchTimeout = null;
+          return loadManualBooks({ force: true });
+        }, 250);
+      };
     }
 
     if (saveBtn) {
@@ -124,12 +163,14 @@ class VirtualLibraryManager {
     if (initialMode === 'manual') loadManualBooks();
   }
 
-  renderManualBooks(container, query = '') {
+  renderManualBooks(container, query = '', onLoadMore = null) {
     if (!container || !Array.isArray(this.books)) return;
     const normalizedQuery = query.toLowerCase().trim();
-    const books = this.books.filter(book =>
-      !normalizedQuery || `${book.title} ${book.authors}`.toLowerCase().includes(normalizedQuery)
-    );
+    const books = this.books.filter(book => {
+      const tags = Array.isArray(book.tags) ? book.tags.join(' ') : (book.tags || '');
+      const searchableText = `${book.title || ''} ${book.authors || ''} ${tags}`.toLowerCase();
+      return !normalizedQuery || searchableText.includes(normalizedQuery);
+    });
     container.replaceChildren();
 
     if (!books.length) {
@@ -149,6 +190,15 @@ class VirtualLibraryManager {
       label.append(checkbox, description);
       container.appendChild(label);
     });
+
+    if (this.books.length < this.manualTotal && typeof onLoadMore === 'function') {
+      const loadMoreButton = document.createElement('button');
+      loadMoreButton.type = 'button';
+      loadMoreButton.className = 'btn';
+      loadMoreButton.textContent = 'Load more books';
+      loadMoreButton.onclick = onLoadMore;
+      container.appendChild(loadMoreButton);
+    }
   }
 }
 

@@ -25,6 +25,37 @@
   stroke: currentColor;
 }
 
+/* App Update Banner */
+.app-update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background-color: var(--bg-surface, #ffffff);
+  color: var(--text-primary, #1e293b);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-left: 4px solid var(--accent-color, #a85222);
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.app-update-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-update-banner-content .ui-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  stroke: var(--accent-color, #a85222);
+}
+
 /* PWA Install Button */
 #pwa-install-btn {
   display: none;
@@ -239,7 +270,7 @@
   }
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 

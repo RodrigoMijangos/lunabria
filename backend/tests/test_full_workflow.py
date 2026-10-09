@@ -46,7 +46,9 @@ class TestLunabriaWorkflow(unittest.TestCase):
     def test_01_list_books(self):
         res = self.client.get("/api/books")
         self.assertEqual(res.status_code, 200)
-        books = res.json()
+        page = res.json()
+        books = page["books"]
+        self.assertGreaterEqual(page["total"], 2)
         self.assertGreaterEqual(len(books), 2)
         self.assertIn("date_added", books[0])
         self.assertIn("last_read_at", books[0])
@@ -159,7 +161,7 @@ class TestLunabriaWorkflow(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             get_recent.assert_called_once_with(limit=10)
 
-        books = self.client.get("/api/books").json()
+        books = self.client.get("/api/books", params={"page_size": 100}).json()["books"]
         read_book = next(book for book in books if book["id"] == 1)
         self.assertIsNotNone(read_book["last_read_at"])
         print("✓ test_04_reading_progress_and_top10_recents passed")

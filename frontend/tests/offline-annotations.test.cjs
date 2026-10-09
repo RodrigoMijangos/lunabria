@@ -51,7 +51,14 @@ test('successful annotation refresh is persisted in the local database', async (
   assert.equal(writes[0].annotations, annotations);
 });
 
-function createLifecycleHarness({ getAnnotations, cachedAnnotations, saveCachedAnnotations = async () => {} }) {
+function createLifecycleHarness({
+  getAnnotations,
+  cachedAnnotations,
+  saveCachedAnnotations = async () => {},
+  getProgress = async () => null,
+  processOutboxQueue = async () => ({ processed: 0, pending: 0 }),
+  pendingOutboxOps = []
+}) {
   const model = {
     annotations: [],
     fitMode: 'page',
@@ -77,13 +84,18 @@ function createLifecycleHarness({ getAnnotations, cachedAnnotations, saveCachedA
     model,
     renderer: { resetViewportDOM() {} },
     toolbar: { setOfflineStatus() {} },
-    container: { style: {} },
+    container: { style: { display: 'none' } },
     drawing: { toggleDrawMode() {}, setDrawTool() {} },
-    annotations: { renderFloatingColors() {}, renderDrawerAnnotations() {} },
+    annotations: {
+      renderFloatingColors() {},
+      renderDrawerAnnotations() {},
+      refreshPageHighlights() {}
+    },
     nav: {
       async calculateFitPageScale() { return 1; },
       syncViewModeUI() {},
-      updateHUD() {}
+      updateHUD() {},
+      goToPage(page) { model.setCurrentPage(page); }
     },
     async updateBookInfo() {},
     destroyPdfResource() {},
@@ -94,12 +106,14 @@ function createLifecycleHarness({ getAnnotations, cachedAnnotations, saveCachedA
     async isPdfCached() { return false; },
     async hasAllLayoutsCached() { return false; },
     async getCachedAnnotations() { return cachedAnnotations; },
+    async processOutboxQueue() { return processOutboxQueue(); },
+    async getPendingOutboxOps() { return pendingOutboxOps; },
     saveCachedAnnotations
   };
   const context = vm.createContext({
     api: {
       async getColors() { return []; },
-      async getProgress() { return null; },
+      getProgress,
       async markBookOpened() {},
       getAnnotations
     },
@@ -113,7 +127,8 @@ function createLifecycleHarness({ getAnnotations, cachedAnnotations, saveCachedA
 
   return {
     lifecycle: new context.window.ReaderDocumentLifecycle(reader),
-    model
+    model,
+    reader
   };
 }
 
@@ -161,4 +176,64 @@ test('reader opening waits for a successful annotation cache write', async () =>
   assert.equal(model.annotations, annotations);
   assert.equal(writeArgs[0], 42);
   assert.equal(writeArgs[1], annotations);
+});
+
+test('reconnecting with a book open flushes queued changes before refreshing annotations and progress', async () => {
+  const syncOrder = [];
+  const remoteAnnotations = [{ id: 'remote-1', page: 2, comment: 'Synced' }];
+  const { lifecycle, model, reader } = createLifecycleHarness({
+    getAnnotations: async bookId => {
+      syncOrder.push(['annotations', bookId]);
+      return remoteAnnotations;
+    },
+    getProgress: async bookId => {
+      syncOrder.push(['progress', bookId]);
+      return { current_page: 7 };
+    },
+    processOutboxQueue: async () => {
+      syncOrder.push(['outbox']);
+      return { processed: 1, pending: 0 };
+    },
+    saveCachedAnnotations: async (bookId, annotations) => {
+      syncOrder.push(['cache', bookId, annotations]);
+    }
+  });
+  model.bookId = 42;
+  model.currentPage = 3;
+  reader.openSequence = 5;
+  reader.container.style.display = 'flex';
+  reader.annotations.renderDrawerAnnotations = () => syncOrder.push(['render-drawer']);
+  reader.annotations.refreshPageHighlights = page => syncOrder.push(['refresh-highlights', page]);
+  reader.nav.goToPage = page => {
+    syncOrder.push(['go-to-page', page]);
+    model.setCurrentPage(page);
+  };
+
+  assert.equal(await lifecycle.reconcileServerConnection(), true);
+  assert.deepEqual(model.annotations, remoteAnnotations);
+  assert.equal(model.currentPage, 7);
+  assert.deepEqual(syncOrder.map(([operation]) => operation), [
+    'outbox', 'annotations', 'progress', 'cache', 'render-drawer', 'refresh-highlights', 'go-to-page'
+  ]);
+});
+
+test('reconnect does not replace local annotations while their queued mutations remain pending', async () => {
+  const localAnnotations = [{ id: 'local-1', page: 1, comment: 'Still queued' }];
+  let serverAnnotationReads = 0;
+  const { lifecycle, model, reader } = createLifecycleHarness({
+    getAnnotations: async () => {
+      serverAnnotationReads++;
+      return [];
+    },
+    pendingOutboxOps: [{ id: 'op_update_local-1', type: 'annotation', bookId: 42 }],
+    processOutboxQueue: async () => ({ processed: 0, pending: 1 })
+  });
+  model.bookId = 42;
+  model.currentPage = 1;
+  model.annotations = localAnnotations;
+  reader.container.style.display = 'flex';
+
+  assert.equal(await lifecycle.reconcileServerConnection(), true);
+  assert.equal(serverAnnotationReads, 0);
+  assert.deepEqual(model.annotations, localAnnotations);
 });

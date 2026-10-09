@@ -138,18 +138,30 @@ class ReaderAnnotationViewModel {
   }
 
   async refreshAnnotations() {
-    const annots = await api.getAnnotations(this.model.bookId);
-    if (!Array.isArray(annots)) throw new Error('Invalid annotations response');
-    this.model.setAnnotations(annots);
-    if (typeof localDB !== 'undefined' && typeof localDB.saveCachedAnnotations === 'function') {
-      try {
-        await localDB.saveCachedAnnotations(this.model.bookId, annots);
-      } catch (error) {
-        console.warn('[ReaderAnnotationViewModel] Could not cache annotations:', error);
+    try {
+      const annots = await api.getAnnotations(this.model.bookId);
+      if (!Array.isArray(annots)) throw new Error('Invalid annotations response');
+      this.model.setAnnotations(annots);
+      if (typeof localDB !== 'undefined' && localDB && typeof localDB.saveCachedAnnotations === 'function') {
+        try {
+          await localDB.saveCachedAnnotations(this.model.bookId, annots);
+        } catch (error) {
+          console.warn('[ReaderAnnotationViewModel] Could not cache annotations:', error);
+        }
       }
+      this.renderDrawerAnnotations();
+      return annots;
+    } catch (err) {
+      if (typeof localDB !== 'undefined' && localDB && typeof localDB.getCachedAnnotations === 'function') {
+        const cached = await localDB.getCachedAnnotations(this.model.bookId).catch(() => null);
+        if (cached && Array.isArray(cached)) {
+          this.model.setAnnotations(cached);
+          this.renderDrawerAnnotations();
+          return cached;
+        }
+      }
+      throw err;
     }
-    this.renderDrawerAnnotations();
-    return annots;
   }
 
   renderPageHighlights(layer, pageNumber) {
@@ -325,12 +337,12 @@ class ReaderAnnotationViewModel {
       if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
         await localDB.removeOutboxOp(`op_update_${annotId}`).catch(() => {});
       }
+      await this.refreshAnnotations();
     } catch (err) {
       console.warn('[ReaderAnnotationViewModel] Error updating annotation color, queued in outbox:', err);
     }
 
-    // 4. Refresh annotations data from server and re-render target page highlights
-    await this.refreshAnnotations();
+    // 4. Refresh target page highlights
     this.refreshPageHighlights(targetPage);
   }
 
@@ -578,10 +590,10 @@ class ReaderAnnotationViewModel {
             if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
               await localDB.removeOutboxOp(`op_del_${annot.id}`).catch(() => {});
             }
+            await this.refreshAnnotations();
           } catch (delErr) {
             console.warn('[ReaderAnnotationViewModel] Delete failed, queued in outbox:', delErr);
           }
-          await this.refreshAnnotations();
           this.refreshPageHighlights(annot.page);
         };
       }

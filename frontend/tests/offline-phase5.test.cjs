@@ -39,6 +39,8 @@ function createWorkerWorld(options = {}) {
   }
 
   const self = {
+    location: { origin: 'https://lunabria.local' },
+    navigator: options.navigator,
     addEventListener: (type, fn) => listeners.set(type, fn),
     skipWaiting: () => { skipped++; },
     clients: {
@@ -70,6 +72,8 @@ function createWorkerWorld(options = {}) {
     URL,
     caches,
     fetch: options.fetch || (async () => { throw new Error('Network offline'); }),
+    setTimeout: options.setTimeout || setTimeout,
+    clearTimeout: options.clearTimeout || clearTimeout,
     Response: class {
       constructor(body, init = {}) {
         this.body = body;
@@ -130,6 +134,100 @@ test('SW fetch handles /api/ by returning 503 JSON response when offline', async
   assert.equal(response.status, 503);
   const data = JSON.parse(response.body);
   assert.equal(data.offline, true);
+});
+
+test('SW allows slower API responses while keeping longer transfer timeout', async () => {
+  const delays = [];
+  const response = { status: 200 };
+  const { listeners } = createWorkerWorld({
+    fetch: async () => response,
+    setTimeout: (_callback, delay) => {
+      delays.push(delay);
+      return delays.length;
+    },
+    clearTimeout: () => {}
+  });
+
+  for (const url of [
+    'https://lunabria.local/api/books',
+    'https://lunabria.local/api/books/42/pdf'
+  ]) {
+    let responsePromise = null;
+    listeners.get('fetch')({
+      request: { url, method: 'GET' },
+      respondWith: promise => { responsePromise = promise; }
+    });
+    assert.equal(await responsePromise, response);
+  }
+
+  assert.deepEqual(delays, [10000, 60000]);
+});
+
+test('SW caches viewed covers across page requests and worker activation', async () => {
+  const coverResponse = {
+    status: 200,
+    headers: { get: () => 'image/jpeg' },
+    clone() { return this; }
+  };
+  let networkRequests = 0;
+  const { listeners, cacheStorage } = createWorkerWorld({
+    fetch: async () => {
+      networkRequests++;
+      return coverResponse;
+    }
+  });
+  const request = { url: 'https://lunabria.local/api/books/42/cover', method: 'GET' };
+  const fetchCover = async () => {
+    let responsePromise = null;
+    listeners.get('fetch')({ request, respondWith: promise => { responsePromise = promise; } });
+    return responsePromise;
+  };
+
+  assert.equal(await fetchCover(), coverResponse);
+  assert.equal(networkRequests, 1);
+  assert.equal(cacheStorage.has('lunabria-covers-v1'), true);
+
+  let activationPromise = null;
+  listeners.get('activate')({ waitUntil: promise => { activationPromise = promise; } });
+  await activationPromise;
+
+  assert.equal(cacheStorage.has('lunabria-covers-v1'), true);
+  assert.equal(await fetchCover(), coverResponse);
+  assert.equal(networkRequests, 1, 'A cached cover should not be downloaded again');
+});
+
+test('SW leaves unrelated cross-origin requests to the browser', () => {
+  const { listeners, cacheStorage } = createWorkerWorld();
+  let intercepted = false;
+
+  listeners.get('fetch')({
+    request: { url: 'https://ff.kis.v2.scr.kaspersky-labs.com/longpooling', method: 'GET' },
+    respondWith: () => { intercepted = true; }
+  });
+
+  assert.equal(intercepted, false);
+  assert.equal(cacheStorage.size, 0);
+});
+
+test('SW attempts API requests even when navigator reports offline', async () => {
+  const serverResponse = { status: 200, body: JSON.stringify({ status: 'ok' }) };
+  let networkRequests = 0;
+  const { listeners } = createWorkerWorld({
+    navigator: { onLine: false },
+    fetch: async () => {
+      networkRequests++;
+      return serverResponse;
+    }
+  });
+  let responsePromise = null;
+  listeners.get('fetch')({
+    request: { url: 'https://lunabria.local/api/health', method: 'GET' },
+    respondWith: promise => { responsePromise = promise; }
+  });
+
+  const response = await responsePromise;
+  assert.equal(networkRequests, 1);
+  assert.equal(response, serverResponse);
 });
 
 test('SW fetch falls back to cache on network failure for app assets', async () => {

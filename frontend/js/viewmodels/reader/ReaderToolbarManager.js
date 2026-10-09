@@ -158,25 +158,28 @@ class ReaderToolbarManager {
     const exportBtn = document.getElementById('export-notes-btn');
     const exportSelect = document.getElementById('export-format-select');
 
-    const updateExportOnlineState = () => {
-      const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const updateExportServerState = () => {
+      const isUnavailable = window.serverConnectivity?.state === 'unavailable';
       if (exportBtn) {
-        exportBtn.disabled = isOffline;
-        exportBtn.title = isOffline ? 'Export is unavailable offline (processed on server)' : 'Export annotations';
+        exportBtn.title = isUnavailable
+          ? 'Export is unavailable because the Lunabria server cannot be reached'
+          : 'Export annotations';
       }
       if (exportSelect) {
-        exportSelect.disabled = isOffline;
-        exportSelect.title = isOffline ? 'Export is unavailable offline (processed on server)' : 'Select export format';
+        exportSelect.title = isUnavailable
+          ? 'The Lunabria server cannot be reached'
+          : 'Select export format';
       }
     };
 
-    window.addEventListener('online', updateExportOnlineState);
-    window.addEventListener('offline', updateExportOnlineState);
-    updateExportOnlineState();
+    window.addEventListener('lunabria:server-connectivity-change', updateExportServerState);
+    updateExportServerState();
 
-    exportBtn?.addEventListener('click', () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        alert('Export is unavailable while offline as it is processed on the server.');
+    exportBtn?.addEventListener('click', async () => {
+      const monitor = window.serverConnectivity;
+      if (monitor?.checkServer && !(await monitor.checkServer())) {
+        alert('Export is unavailable because the Lunabria server cannot be reached.');
+        updateExportServerState();
         return;
       }
       const formatVal = exportSelect ? exportSelect.value : 'md_hierarchy';

@@ -152,7 +152,8 @@ function loadNativeSelectionController(context) {
 test('public methods and constructor-owned state remain available', () => {
   const old = world(true), current = world();
   const names = w => Object.getOwnPropertyNames(Object.getPrototypeOf(w.reader));
-  assert.deepStrictEqual(names(current), names(old));
+  assert.deepStrictEqual(names(current).filter(name => name !== 'reconcileServerConnection'), names(old));
+  assert.equal(typeof current.reader.reconcileServerConnection, 'function');
   assert.deepStrictEqual(clone(current.reader.model), clone(old.reader.model));
   for (const key of Object.keys(old.reader)) assert.ok(Object.hasOwn(current.reader, key), key);
   assert.equal(current.reader.openSequence, 0);
@@ -460,21 +461,49 @@ test('opening failures alert and close, metadata and mark-open failures remain n
   });
 });
 
-test('PDF loading preserves online, offline, network fallback and cancellation paths', async () => {
-  for (const mode of ['online', 'offline', 'fallback', 'missing', 'cancelled']) await differential(async w => {
-    w.context.navigator.onLine = mode !== 'offline';
-    w.localDB.getPdfBlob = async id => { w.trace.push(['cached-blob', id]); return mode === 'missing' ? null : { arrayBuffer: async () => Uint8Array.from([37, 80, 68, 70, 45]).buffer }; };
-    w.context.pdfjsLib.getDocument = arg => {
-      w.trace.push(['get-document', typeof arg === 'string' ? arg : Array.from(arg.data)]);
-      const task = { destroy: () => w.trace.push(['destroy-task']) };
-      task.promise = typeof arg === 'string' && mode !== 'online' ? Promise.reject(new Error('network')) : Promise.resolve(w.pdf);
-      return task;
+test('PDF loading checks the server even when navigator reports offline and falls back to cache', async () => {
+  const onlineServer = world();
+  onlineServer.trace.length = 0;
+  onlineServer.context.navigator.onLine = false;
+  onlineServer.context.pdfjsLib.getDocument = arg => {
+    onlineServer.trace.push(['get-document', typeof arg === 'string' ? arg : Array.from(arg.data)]);
+    return { promise: Promise.resolve(onlineServer.pdf), destroy() {} };
+  };
+  const onlineResult = await onlineServer.reader.loadPdfDocument(42, 0);
+  assert.equal(onlineResult, onlineServer.pdf);
+  assert.deepEqual(onlineServer.trace, [['get-document', '/api/books/42/pdf']]);
+
+  const offlineServer = world();
+  offlineServer.trace.length = 0;
+  offlineServer.context.navigator.onLine = false;
+  offlineServer.localDB.getPdfBlob = async id => {
+    offlineServer.trace.push(['cached-blob', id]);
+    return { arrayBuffer: async () => Uint8Array.from([37, 80, 68, 70, 45]).buffer };
+  };
+  offlineServer.context.pdfjsLib.getDocument = arg => {
+    offlineServer.trace.push(['get-document', typeof arg === 'string' ? arg : Array.from(arg.data)]);
+    return {
+      promise: typeof arg === 'string' ? Promise.reject(new Error('network')) : Promise.resolve(offlineServer.pdf),
+      destroy: () => offlineServer.trace.push(['destroy-task'])
     };
-    try {
-      const result = await w.reader.loadPdfDocument(42, mode === 'cancelled' ? -1 : 0);
-      return { pages: result.numPages, hasLoadingTask: !!w.reader.loadingTask };
-    } catch (error) { return { error: error.message, hasLoadingTask: !!w.reader.loadingTask }; }
+  };
+  const offlineResult = await offlineServer.reader.loadPdfDocument(42, 0);
+  assert.equal(offlineResult, offlineServer.pdf);
+  assert.deepEqual(offlineServer.trace, [
+    ['get-document', '/api/books/42/pdf'],
+    ['destroy-task'],
+    ['cached-blob', 42],
+    ['get-document', [37, 80, 68, 70, 45]]
+  ]);
+
+  const cancelled = world();
+  cancelled.trace.length = 0;
+  cancelled.context.pdfjsLib.getDocument = () => ({
+    promise: Promise.reject(new Error('network')),
+    destroy: () => cancelled.trace.push(['destroy-task'])
   });
+  await assert.rejects(cancelled.reader.loadPdfDocument(42, -1), /network/);
+  assert.deepEqual(cancelled.trace, [['destroy-task']]);
 });
 
 test('offline cache preserves validation, batches, cached-page counting and progress ordering', async () => {

@@ -129,6 +129,55 @@ test('LocalDB outbox queues, idempotently deduplicates, and removes processed op
   assert.equal(count, 0);
 });
 
+test('concurrent outbox processing waits for the active run instead of returning early', async () => {
+  const { fakeIndexedDB } = createFakeIndexedDB();
+  const context = vm.createContext({
+    indexedDB: fakeIndexedDB,
+    localStorage: { getItem: () => null, setItem: () => {} },
+    window: { addEventListener: () => {} },
+    document: { addEventListener: () => {} },
+    console,
+    setTimeout,
+    clearTimeout
+  });
+  vm.runInContext(source('db.js'), context);
+  const localDB = vm.runInContext('localDB', context);
+  await localDB.enqueueOutboxOp({
+    id: 'op_create_concurrent',
+    type: 'annotation',
+    action: 'create',
+    bookId: 1,
+    payload: { id: 'concurrent', text: 'Queued' }
+  });
+
+  let releaseRequest;
+  let markRequestStarted;
+  let apiCalls = 0;
+  const requestStarted = new Promise(resolve => { markRequestStarted = resolve; });
+  const waitingRequest = new Promise(resolve => { releaseRequest = resolve; });
+  const apiClient = {
+    async createAnnotation() {
+      apiCalls++;
+      markRequestStarted();
+      await waitingRequest;
+    }
+  };
+
+  const firstRun = localDB.processOutboxQueue(apiClient);
+  await requestStarted;
+  const secondRun = localDB.processOutboxQueue(apiClient);
+  let secondRunFinished = false;
+  secondRun.then(() => { secondRunFinished = true; });
+  await Promise.resolve();
+  assert.equal(secondRunFinished, false);
+
+  releaseRequest();
+  const [firstResult, secondResult] = await Promise.all([firstRun, secondRun]);
+  assert.equal(apiCalls, 1);
+  assert.equal(firstResult.pending, 0);
+  assert.equal(secondResult.pending, 0);
+});
+
 test('LocalDB outbox tolerates 404 on deletion as idempotent success', async () => {
   const { fakeIndexedDB } = createFakeIndexedDB();
 

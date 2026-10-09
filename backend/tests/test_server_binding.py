@@ -52,8 +52,8 @@ class TestServerBinding(unittest.TestCase):
         client = TestClient(app)
 
         res_health = client.get("/api/health")
-        self.assertEqual(res_health.status_code, 200)
-        self.assertEqual(res_health.json(), {"status": "ok", "app": "Lunabria"})
+        self.assertEqual(res_health.status_code, 204)
+        self.assertEqual(res_health.content, b"")
 
         res_sw = client.get("/sw.js")
         self.assertEqual(res_sw.status_code, 200)

@@ -718,7 +718,7 @@ test('facade preserves global identity, own keys/order, descriptors and unchange
       assert.equal(b.value.name, a.value.name, key);
       assert.equal(b.value.length, a.value.length, key);
       // HTTP errors must reject here so the reader can use its IndexedDB fallback.
-      if (key !== 'getAnnotations') {
+      if (!['getAnnotations', 'getBooks'].includes(key)) {
         assert.equal(b.value.toString(), a.value.toString(), key + ' must be a mechanical extraction');
       }
       assert.equal(Object.hasOwn(b.value, 'prototype'), Object.hasOwn(a.value, 'prototype'), key);
@@ -769,6 +769,19 @@ parity('getBooks retains empty query and falsy filtering', {}, async ({ api }) =
   assert.deepEqual(env.calls.filter(call => call[0] === 'fetch').map(call => call[1]), [
     '/api/books?', '/api/books?', '/api/books?search=0&virtual_library_id=0'
   ]);
+});
+
+test('getBooks supports server-side catalog pages and exclusions', async () => {
+  const env = harness();
+  await env.api.getBooks(null, 4, {
+    query: 'luna & sol',
+    page: 2,
+    pageSize: 12,
+    sort: 'date_added',
+    excludeIds: [3, 8]
+  });
+  assert.equal(env.calls.find(call => call[0] === 'fetch')[1],
+    '/api/books?virtual_library_id=4&q=luna+%26+sol&page=2&page_size=12&sort=date_added&exclude_ids=3&exclude_ids=8');
 });
 parity('getAnnotations retains optional color query', {}, async ({ api }) => [
   await api.getAnnotations(4), await api.getAnnotations(4, ''), await api.getAnnotations(4, 'blue & red')

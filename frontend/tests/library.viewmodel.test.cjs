@@ -65,8 +65,14 @@ function setup({ missing = [], localDB: localDb, fetch: fetchImpl } = {}) {
     getComputedStyle: element => ({ gridTemplateColumns: element.columns }),
     addEventListener(name, callback) { this.listeners[name] = callback; },
     clearTimeout(id) { calls.push(['clearTimeout', id]); },
-    setTimeout(callback, delay) { this.pendingResize = callback; calls.push(['timeout', delay]); return 17; },
-    reader: { open: (...args) => calls.push(['open', ...args]) }
+    setTimeout(callback, delay) {
+      calls.push(['timeout', delay]);
+      if (delay === 120) { this.pendingResize = callback; return 17; }
+      this.pendingSearch = callback;
+      return 18;
+    },
+    reader: { open: (...args) => calls.push(['open', ...args]) },
+    serverConnectivity: { start: () => calls.push(['connectivity']) }
   };
   class Manager {
     constructor(...args) { this.args = args; }
@@ -140,6 +146,8 @@ test('preserves the public facade and initial state', () => {
     'clearCollectionFilter', 'openBook', 'openUploadModal', 'closeUploadModal', 'openEditModal', 'openVirtualLibraryModal', 'bindEvents'];
   for (const method of methods) assert.equal(typeof l[method], 'function', method);
   assert.equal(l.catalogPageCount, 1);
+  assert.equal(l.catalogServerPage, null);
+  assert.equal(l.catalogSearchTimeout, null);
   assert.equal(l.catalogGridColumns, 0);
   assert.equal(l.catalogResizeTimeout, null);
   assert.equal(l.selectionMode, false);
@@ -165,8 +173,9 @@ test('catalog pages retain all ellipsis boundaries', () => {
 test('pagination preserves focused input, aria, buttons and live page callbacks', () => {
   const { library: l, document } = setup();
   let renders = 0;
-  l.renderBooks = () => renders++;
+  l.loadBookGrid = () => renders++;
   l.model.catalogPage = 5;
+  l.catalogServerPage = { page: 5, pageSize: 12, total: 144 };
   l.catalogPageInput.value = 'draft';
   document.activeElement = l.catalogPageInput;
   l.updateCatalogPagination(12);
@@ -211,8 +220,9 @@ test('pagination retains public-helper call order and skips it when page numbers
 });
 
 test('initialization retains manager, binding and sequential load order', async () => {
-  const { library: l, calls } = setup();
+  const { library: l, window, calls } = setup();
   const order = [];
+  window.serverConnectivity.start = () => order.push(['connectivity']);
   l.applyTheme = theme => order.push(['theme', theme]);
   l.initServiceWorker = () => order.push(['worker']);
   l.bindEvents = () => order.push(['bind']);
@@ -220,16 +230,18 @@ test('initialization retains manager, binding and sequential load order', async 
   l.loadVirtualLibraries = async () => { order.push(['libraries']); await Promise.resolve(); order.push(['loadedLibraries']); };
   l.loadHome = async () => order.push(['home']);
   await l.init();
-  assert.deepEqual(order, [['theme', 'sepia'], ['worker'], ['bind'], ['controls'], ['libraries'], ['loadedLibraries'], ['home']]);
+  assert.deepEqual(order, [['theme', 'sepia'], ['worker'], ['bind'], ['controls'], ['connectivity'], ['libraries'], ['loadedLibraries'], ['home']]);
+
   assert.equal(calls.filter(call => call[0] === 'initManager').length, 3);
 });
 
 test('page input accepts only safe positive decimal integers and clamps to page count', () => {
   const { library: l } = setup();
   let renders = 0;
-  l.renderBooks = () => renders++;
+  l.loadBookGrid = () => renders++;
   l.catalogPageCount = 8;
   l.model.catalogPage = 3;
+  l.catalogServerPage = { page: 3, pageSize: 12, total: 96 };
   for (const value of ['', '0', '-1', '1.5', '2e1', '+2', 'Infinity', '9007199254740992', 'text']) {
     l.catalogPageInput.value = value;
     l.submitCatalogPageInput();
@@ -433,24 +445,181 @@ test('creation delegates a snapshot and library-change callback retains original
   assert.equal(l.catalogSelectionStatus.textContent, 'Created «Single» with 1 book.');
 });
 
-test('data loading preserves API arguments and presentation order including failure fallbacks', async () => {
+test('data loading requests one catalog page and preserves presentation order', async () => {
   const { library: l, api, calls } = setup();
-  api.getBooks = async (...args) => { calls.push(['books', ...args]); return books(2); };
-  api.getRecents = async () => [{ id: 1 }];
+  api.getBooks = async (...args) => {
+    calls.push(['books', ...args]);
+    return { books: books(2), total: 40, page: 1, page_size: 12 };
+  };
+  api.getRecents = async () => { calls.push(['recents']); return [{ id: 1 }]; };
   l.renderRecents = () => calls.push(['renderRecents']);
   l.renderBooks = () => calls.push(['renderBooks']);
   l.updateActiveCollectionChip = () => calls.push(['chip']);
   await l.loadHome();
-  assert.deepEqual(plain(calls), [['books'], ['renderRecents'], ['renderBooks'], ['chip']]);
+  assert.deepEqual(plain(calls), [
+    ['recents'],
+    ['books', null, null, { query: '', page: 1, pageSize: 12, sort: 'title', excludeIds: [1] }],
+    ['renderRecents'], ['renderBooks'], ['chip']
+  ]);
+  assert.equal(l.catalogServerPage.total, 40);
   l.model.activeVirtualLibraryId = 4;
   calls.length = 0;
   await l.loadBookGrid();
-  assert.deepEqual(plain(calls), [['books', null, 4], ['renderBooks']]);
+  assert.deepEqual(plain(calls), [
+    ['books', null, 4, { query: '', page: 1, pageSize: 12, sort: 'title', excludeIds: [1] }],
+    ['renderBooks']
+  ]);
   api.getVirtualLibraries = async () => { throw new Error('offline'); };
   l.model.virtualLibraries = [{ id: 3 }];
   await l.loadVirtualLibraries();
   assert.equal(l.model.virtualLibraries.length, 0);
   assert.equal(l.catalogSelectionLibrary.disabled, true);
+});
+
+test('last-opened catalog requests every page from the paginated books endpoint', async () => {
+  const { library: l, api } = setup();
+  let request;
+  let recentRequests = 0;
+  api.getBooks = async (...args) => {
+    request = args;
+    return { books: [{ id: 305, title: 'Recently opened', last_read_at: '2026-10-09 02:00:00' }], total: 83, page: 1, page_size: 12 };
+  };
+  api.getRecents = async () => { recentRequests++; return [{ id: 305 }]; };
+  l.model.setCatalogSort('last_read_at');
+  l.renderBooks = () => {};
+  l.updateActiveCollectionChip = () => {};
+
+  await l.loadHome();
+
+  assert.equal(recentRequests, 0);
+  assert.deepEqual(plain(request), [null, null, {
+    query: '', page: 1, pageSize: 12, sort: 'last_read_at', excludeIds: []
+  }]);
+  assert.equal(l.catalogServerPage.total, 83);
+  assert.equal(l.model.allBooks[0].id, 305);
+  assert.equal(l.recentsSection.style.display, 'none');
+});
+
+
+test('catalog requests include the current server page, search and sort', async () => {
+  const { library: l, api } = setup();
+  let request;
+  api.getBooks = async (...args) => {
+    request = args;
+    return { books: [{ id: 42, title: 'Science' }], total: 35, page: 3, page_size: 12 };
+  };
+  l.model.setActiveVirtualLibrary(8);
+  l.model.setSearchQuery('science');
+  l.model.setCatalogSort('date_added');
+  l.model.setCatalogPage(3);
+  l.renderBooks = () => {};
+
+  await l.loadBookGrid();
+
+  assert.deepEqual(plain(request), [null, 8, {
+    query: 'science', page: 3, pageSize: 12, sort: 'date_added', excludeIds: []
+  }]);
+  assert.equal(l.catalogServerPage.total, 35);
+  assert.equal(l.catalogServerPage.page, 3);
+  assert.equal(l.model.allBooks[0].id, 42);
+});
+
+test('search is debounced and sends the text to the paginated catalog endpoint', async () => {
+  const { library: l, api, window } = setup();
+  let request;
+  api.getBooks = async (...args) => {
+    request = args;
+    return { books: [], total: 0, page: 1, page_size: 12 };
+  };
+  l.renderBooks = () => {};
+  l.filterBooks('  SCIENCE  ');
+  assert.equal(l.model.searchQuery, 'science');
+  await window.pendingSearch();
+  assert.deepEqual(plain(request), [null, null, {
+    query: 'science', page: 1, pageSize: 12, sort: 'title', excludeIds: []
+  }]);
+});
+
+test('catalog API errors do not show offline mode when health checks succeed', async () => {
+  const { library: l, api, window, calls } = setup();
+  let offlineFallbacks = 0;
+  l.showOfflineBooks = async () => { offlineFallbacks++; };
+  window.serverConnectivity.checkServer = async () => true;
+  api.getBooks = async () => { throw new Error('HTTP 500'); };
+
+  await l.loadBookGrid();
+
+  assert.equal(offlineFallbacks, 0);
+  assert.ok(calls.some(call => call[0] === 'error' && call[1].includes('server is reachable')));
+});
+
+test('catalog page requests fall back to locally paginated offline books on failure', async () => {
+  const offlineBooks = books(15);
+  const localDB = { async getOfflineCompleteBooks() { return offlineBooks; } };
+  const { library: l, api } = setup({ localDB });
+  api.getBooks = async () => { throw new Error('offline'); };
+  l.model.setCatalogPage(2);
+  l.renderBooks = () => {};
+
+  await l.loadBookGrid();
+
+  assert.equal(l.catalogServerPage, null);
+  assert.equal(l.model.allBooks.length, 15);
+  assert.equal(l.model.catalogPage, 2);
+});
+
+test('a delayed offline fallback cannot replace a newer online page', async () => {
+  let finishOfflineRead;
+  let markOfflineReadStarted;
+  const offlineReadStarted = new Promise(resolve => { markOfflineReadStarted = resolve; });
+  const offlineBooks = new Promise(resolve => { finishOfflineRead = resolve; });
+  const localDB = {
+    getOfflineCompleteBooks() {
+      markOfflineReadStarted();
+      return offlineBooks;
+    }
+  };
+  const { library: l, api } = setup({ localDB });
+  let requests = 0;
+  api.getBooks = async () => {
+    requests++;
+    if (requests === 1) throw new Error('temporarily unavailable');
+    return { books: [{ id: 99, title: 'New online page' }], total: 1, page: 1, page_size: 12 };
+  };
+  l.renderBooks = () => {};
+
+  const delayedOfflineRequest = l.loadBookGrid();
+  await offlineReadStarted;
+  await l.loadBookGrid();
+  finishOfflineRead([{ id: 1, title: 'Stale offline book' }]);
+  await delayedOfflineRequest;
+
+  assert.deepEqual(plain(l.model.allBooks.map(book => book.id)), [99]);
+  assert.equal(l.catalogServerPage.total, 1);
+});
+
+test('online catalog and recents restore covers saved from previous visits', async () => {
+  const coverBlob = new Blob(['cover bytes'], { type: 'image/jpeg' });
+  const localDB = {
+    async getAllCachedBooks() { return [{ id: 42, coverBlob }]; },
+    async saveCachedBooks() {},
+    async getOfflineCompleteBooks() { return []; },
+    async saveCachedBook() {}
+  };
+  const { library: l, api } = setup({ localDB });
+  api.getBooks = async () => [{ id: 42, title: 'Book 42', has_cover: true, cover_url: '/api/books/42/cover' }];
+  api.getRecents = async () => [{ id: 42, current_page: 3, total_pages: 10, has_cover: true, cover_url: '/api/books/42/cover' }];
+  l.renderRecents = () => {};
+  l.renderBooks = () => {};
+
+  await l.loadHome();
+  assert.equal(l.model.allBooks[0].coverBlob, coverBlob);
+  assert.equal(l.model.recentBooks[0].coverBlob, coverBlob);
+
+  l.model.activeVirtualLibraryId = 7;
+  api.getBooks = async () => ({ books: [{ id: 42, title: 'Book 42', has_cover: true, cover_url: '/api/books/42/cover' }], total: 1, page: 1, page_size: 12 });
+  await l.loadBookGrid();
+  assert.equal(l.model.allBooks[0].coverBlob, coverBlob);
 });
 
 test('catalog refresh backfills covers for previously downloaded offline books', async () => {
@@ -493,8 +662,11 @@ test('event bindings preserve page submission, search, selection and debounced r
   const { library: l, window, document, storage } = setup();
   let renders = 0;
   let recents = 0;
+  let pageRequests = 0;
   l.renderBooks = () => renders++;
   l.renderRecents = () => recents++;
+  l.loadHome = () => renders++;
+  l.loadBookGrid = () => { pageRequests++; renders++; };
   l.bindEvents();
   l.catalogSortSelect.value = 'date_added';
   l.catalogSortSelect.fire('change');
@@ -513,6 +685,20 @@ test('event bindings preserve page submission, search, selection and debounced r
   assert.equal(prevented, true);
   assert.equal(l.model.catalogPage, 3);
   assert.equal(renders, beforeEnter + 1);
+  assert.equal(pageRequests, 0);
+
+  const beforeLocalNavigation = renders;
+  l.catalogNextButton.fire('click');
+  assert.equal(l.model.catalogPage, 4);
+  l.catalogPreviousButton.fire('click');
+  assert.equal(l.model.catalogPage, 3);
+  assert.equal(renders, beforeLocalNavigation + 2);
+  assert.equal(pageRequests, 0);
+
+  l.catalogServerPage = { page: 3, pageSize: 12, total: 120 };
+  l.catalogNextButton.fire('click');
+  assert.equal(l.model.catalogPage, 4);
+  assert.equal(pageRequests, 1);
   const input = document.getElementById('search-input');
   input.value = '  BOOK  ';
   input.oninput({ target: input });
@@ -521,6 +707,7 @@ test('event bindings preserve page submission, search, selection and debounced r
   document.getElementById('search-clear-btn').onclick();
   assert.equal(l.model.searchQuery, '');
   assert.equal(document.activeElement, input);
+  assert.equal(typeof window.pendingSearch, 'function');
   l.catalogGridColumns = 4;
   window.listeners.resize();
   assert.equal(l.catalogResizeTimeout, 17);
@@ -532,6 +719,37 @@ test('event bindings preserve page submission, search, selection and debounced r
   window.listeners.resize();
   window.pendingResize();
   assert.equal(renders, beforeResize + 1);
+});
+
+test('server recovery reconciles the active reader without reopening the book', () => {
+  const { library: l, window } = setup();
+  let reconciliations = 0;
+  let homeLoads = 0;
+  window.reader.model = { bookId: 42 };
+  window.reader.container = { style: { display: 'flex' } };
+  window.reader.reconcileServerConnection = () => { reconciliations++; };
+  l.loadHome = () => { homeLoads++; };
+  l.bindEvents();
+
+  window.listeners['lunabria:server-connectivity-change']({
+    detail: { available: true, previousState: 'unavailable' }
+  });
+
+  assert.equal(reconciliations, 1);
+  assert.equal(homeLoads, 1);
+});
+
+test('initial server detection does not duplicate the startup catalog load', () => {
+  const { library: l, window } = setup();
+  let homeLoads = 0;
+  l.loadHome = () => { homeLoads++; };
+  l.bindEvents();
+
+  window.listeners['lunabria:server-connectivity-change']({
+    detail: { available: true, previousState: 'unknown' }
+  });
+
+  assert.equal(homeLoads, 0);
 });
 
 test('collection commands preserve reset semantics, cancellation and delete failures', async () => {
