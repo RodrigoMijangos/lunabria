@@ -4,8 +4,9 @@
 class LocalDB {
   constructor() {
     this.dbName = 'moon_calibre_local';
-    this.version = 6;
+    this.version = 7;
     this.db = null;
+    this._outboxProcessing = false;
   }
 
   async open() {
@@ -44,6 +45,10 @@ class LocalDB {
         if (!db.objectStoreNames.contains('cached_books')) {
           db.createObjectStore('cached_books', { keyPath: 'id' });
         }
+        // 7. Store for last-known annotations per book
+        if (!db.objectStoreNames.contains('cached_annotations')) {
+          db.createObjectStore('cached_annotations', { keyPath: 'bookId' });
+        }
       };
 
       request.onsuccess = (e) => {
@@ -73,7 +78,7 @@ class LocalDB {
       const store = tx.objectStore('pdf_cache');
       const req = store.get(Number(bookId));
       req.onsuccess = () => resolve(req.result ? req.result.blob : null);
-      req.onerror = (e) => reject(e);
+      req.onerror = () => resolve(null);
     });
   }
 
@@ -108,7 +113,7 @@ class LocalDB {
         const store = tx.objectStore('local_progress');
         const req = store.get(bId);
         req.onsuccess = () => resolve(req.result || null);
-        req.onerror = (e) => reject(e);
+        req.onerror = () => resolve(null);
       });
       if (local && local.current_page) return local;
     } catch (e) {}
@@ -140,7 +145,7 @@ class LocalDB {
   }
 
   async saveLayoutsBatch(bookId, layoutsObj) {
-    if (!layoutsObj || typeof layoutsObj !== 'object') return;
+    if (!layoutsObj) return;
     const db = await this.open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('page_layouts', 'readwrite');
@@ -170,7 +175,7 @@ class LocalDB {
       const store = tx.objectStore('page_layouts');
       const req = store.get(`${Number(bookId)}_${Number(pageNumber)}`);
       req.onsuccess = () => resolve(req.result ? req.result.layout : null);
-      req.onerror = (e) => reject(e);
+      req.onerror = () => resolve(null);
     });
   }
 
@@ -270,14 +275,29 @@ class LocalDB {
   // --- Cached Books Metadata (for Offline Catalog) ---
   async saveCachedBook(book) {
     if (!book || !book.id) return;
+    const bId = Number(book.id);
+    let existing = null;
+    try {
+      const db = await this.open();
+      existing = await new Promise((resolve) => {
+        const tx = db.transaction('cached_books', 'readonly');
+        const store = tx.objectStore('cached_books');
+        const req = store.get(bId);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (e) {}
+
     const item = {
-      id: Number(book.id),
-      title: book.title || 'Untitled',
-      authors: book.authors || '',
-      cover_path: book.cover_path || '',
-      total_pages: Number(book.total_pages || book.totalPages || 0),
+      id: bId,
+      title: book.title || existing?.title || 'Untitled',
+      authors: book.authors || existing?.authors || '',
+      cover_path: book.cover_path || existing?.cover_path || '',
+      total_pages: Number(book.total_pages || book.totalPages || existing?.total_pages || 0),
       cachedAt: Date.now(),
-      isOfflineComplete: Boolean(book.isOfflineComplete)
+      isOfflineComplete: (book.isOfflineComplete !== undefined)
+        ? Boolean(book.isOfflineComplete)
+        : Boolean(existing?.isOfflineComplete)
     };
     try {
       const db = await this.open();
@@ -374,6 +394,245 @@ class LocalDB {
 
     return completeBooks;
   }
+
+  async isBookOfflineComplete(bookId) {
+    if (!bookId) return false;
+    try {
+      const bId = Number(bookId);
+      const isPdf = await this.isPdfCached(bId);
+      if (!isPdf) return false;
+      const db = await this.open();
+      const book = await new Promise((resolve) => {
+        const tx = db.transaction('cached_books', 'readonly');
+        const store = tx.objectStore('cached_books');
+        const req = store.get(bId);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      });
+      if (book && book.isOfflineComplete) return true;
+      const totalPages = book?.total_pages || book?.totalPages;
+      if (totalPages && totalPages > 0) {
+        return await this.hasAllLayoutsCached(bId, totalPages);
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // --- Cached Annotations (last known server copy for offline reading) ---
+  async saveCachedAnnotations(bookId, annotations) {
+    if (!bookId || !Array.isArray(annotations)) return;
+    try {
+      const db = await this.open();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('cached_annotations', 'readwrite');
+        const store = tx.objectStore('cached_annotations');
+        store.put({ bookId: Number(bookId), annotations, updatedAt: Date.now() });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e);
+      });
+    } catch (e) {}
+  }
+
+  async getCachedAnnotations(bookId) {
+    if (!bookId) return null;
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction('cached_annotations', 'readonly');
+        const store = tx.objectStore('cached_annotations');
+        const req = store.get(Number(bookId));
+        req.onsuccess = () => resolve(req.result ? req.result.annotations : null);
+        req.onerror = () => resolve(null);
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // --- Persistent Outbox Queue (pending_annotations) ---
+  async enqueueOutboxOp(op) {
+    if (!op || !op.id) return false;
+    const entry = {
+      attempts: 0,
+      createdAt: Date.now(),
+      lastAttempt: 0,
+      status: 'pending',
+      ...op
+    };
+    try {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('pending_annotations', 'readwrite');
+        const store = tx.objectStore('pending_annotations');
+        store.put(entry);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e);
+      });
+    } catch (e) {
+      console.warn('[LocalDB] Failed to enqueue outbox op:', e);
+      return false;
+    }
+  }
+
+  async getPendingOutboxOps() {
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction('pending_annotations', 'readonly');
+        const store = tx.objectStore('pending_annotations');
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async removeOutboxOp(opId) {
+    if (!opId) return false;
+    try {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('pending_annotations', 'readwrite');
+        const store = tx.objectStore('pending_annotations');
+        store.delete(opId);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e);
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async updateOutboxOp(op) {
+    if (!op || !op.id) return false;
+    try {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('pending_annotations', 'readwrite');
+        const store = tx.objectStore('pending_annotations');
+        store.put(op);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e);
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async getOutboxCount() {
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction('pending_annotations', 'readonly');
+        const store = tx.objectStore('pending_annotations');
+        const req = store.count();
+        req.onsuccess = () => resolve(req.result || 0);
+        req.onerror = () => resolve(0);
+      });
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  async processOutboxQueue(apiClient) {
+    if (this._outboxProcessing) return { processed: 0, pending: await this.getOutboxCount() };
+    const client = apiClient || (typeof api !== 'undefined' ? api : null);
+    if (!client) return { processed: 0, pending: await this.getOutboxCount() };
+
+    this._outboxProcessing = true;
+    let processed = 0;
+    try {
+      const ops = await this.getPendingOutboxOps();
+      const now = Date.now();
+
+      for (const op of ops) {
+        // Exponential backoff: 1s, 2s, 4s, 8s, up to 60s
+        const backoffMs = op.attempts > 0 ? Math.min(60000, 1000 * Math.pow(2, op.attempts - 1)) : 0;
+        if (op.lastAttempt && (now - op.lastAttempt) < backoffMs) {
+          continue;
+        }
+
+        let success = false;
+        try {
+          if (op.type === 'annotation') {
+            if (op.action === 'create') {
+              await client.createAnnotation(op.bookId, op.payload);
+              success = true;
+            } else if (op.action === 'update') {
+              await client.updateAnnotation(op.entityId, op.payload);
+              success = true;
+            } else if (op.action === 'delete') {
+              try {
+                await client.deleteAnnotation(op.entityId);
+                success = true;
+              } catch (delErr) {
+                // Accept 404 as idempotent deletion success
+                if (delErr?.message?.includes('404') || delErr?.status === 404) {
+                  success = true;
+                } else {
+                  throw delErr;
+                }
+              }
+            }
+          } else if (op.type === 'progress') {
+            const res = await fetch(`/api/books/${op.bookId}/progress`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(op.payload)
+            });
+            if (res.ok) {
+              success = true;
+            }
+          } else if (op.type === 'drawing') {
+            if (op.action === 'save') {
+              const res = await client.savePageDrawings(op.bookId, op.page, op.payload.strokes);
+              if (res !== null) success = true;
+            } else if (op.action === 'clear') {
+              const res = await client.clearPageDrawings(op.bookId, op.page);
+              if (res) success = true;
+            }
+          }
+        } catch (execErr) {
+          console.warn(`[LocalDB] Outbox operation ${op.id} attempt failed:`, execErr);
+          success = false;
+        }
+
+        if (success) {
+          await this.removeOutboxOp(op.id);
+          processed++;
+        } else {
+          op.attempts = (op.attempts || 0) + 1;
+          op.lastAttempt = Date.now();
+          op.status = 'failed';
+          await this.updateOutboxOp(op);
+        }
+      }
+    } finally {
+      this._outboxProcessing = false;
+    }
+
+    const remaining = await this.getOutboxCount();
+    return { processed, pending: remaining };
+  }
 }
 
 const localDB = new LocalDB();
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('online', () => {
+    if (typeof localDB !== 'undefined' && typeof localDB.processOutboxQueue === 'function') {
+      localDB.processOutboxQueue();
+    }
+  });
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && typeof localDB !== 'undefined' && typeof localDB.processOutboxQueue === 'function') {
+        localDB.processOutboxQueue();
+      }
+    });
+  }
+}

@@ -23,7 +23,26 @@ class ReaderDocumentLifecycle {
     reader.destroyPdfResource(previousDocument);
 
     try {
-      const colors = await api.getColors();
+      let colors;
+      try {
+        colors = await api.getColors();
+        if (Array.isArray(colors) && colors.length > 0 && typeof localStorage !== 'undefined' && localStorage) {
+          try { localStorage.setItem('moon_cached_colors', JSON.stringify(colors)); } catch (_) {}
+        }
+      } catch (err) {
+        let cached = null;
+        if (typeof localStorage !== 'undefined' && localStorage) {
+          try {
+            const raw = localStorage.getItem('moon_cached_colors');
+            if (raw) cached = JSON.parse(raw);
+          } catch (_) {}
+        }
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          colors = cached;
+        } else {
+          throw err;
+        }
+      }
       if (sequence !== reader.openSequence) return;
       reader.model.setColors(colors);
       reader.annotations.renderFloatingColors();
@@ -62,7 +81,18 @@ class ReaderDocumentLifecycle {
       }
       if (sequence !== reader.openSequence) return;
 
-      const annots = await api.getAnnotations(bookId);
+      let annots = [];
+      try {
+        annots = await api.getAnnotations(bookId);
+        if (typeof localDB !== 'undefined' && localDB && typeof localDB.saveCachedAnnotations === 'function' && Array.isArray(annots)) {
+          localDB.saveCachedAnnotations(bookId, annots).catch(() => {});
+        }
+      } catch (err) {
+        console.warn('[ReaderViewModel] Failed to fetch annotations from server, trying cached annotations:', err);
+        if (typeof localDB !== 'undefined' && localDB && typeof localDB.getCachedAnnotations === 'function') {
+          annots = (await localDB.getCachedAnnotations(bookId).catch(() => null)) || [];
+        }
+      }
       if (sequence !== reader.openSequence) return;
       reader.model.setAnnotations(annots);
       reader.annotations.renderDrawerAnnotations();
@@ -92,10 +122,24 @@ class ReaderDocumentLifecycle {
     const reader = this.reader;
     const titleElement = document.getElementById('reader-book-title');
     const authorElement = document.getElementById('reader-book-author');
-    const cachedBook = window.app?.model?.getBookById(Number(bookId));
-    const fallbackTitle = `Book ${bookId}`;
+    let cachedBook = window.app?.model?.getBookById(Number(bookId));
+    const fallbackTitle = `Book ${bookId}` || 'Untitled';
 
     ReaderHUDView.updateBookInfo(titleElement, authorElement, cachedBook, fallbackTitle);
+
+    if (!cachedBook && typeof localDB !== 'undefined' && localDB && typeof localDB.open === 'function') {
+      localDB.open().then(db => {
+        const tx = db.transaction('cached_books', 'readonly');
+        const store = tx.objectStore('cached_books');
+        const req = store.get(Number(bookId));
+        req.onsuccess = () => {
+          if (req.result && sequence === reader.openSequence && !cachedBook) {
+            ReaderHUDView.updateBookInfo(titleElement, authorElement, req.result, fallbackTitle);
+          }
+        };
+      }).catch(() => {});
+    }
+
     api.getBook(bookId).then(book => {
       if (sequence !== reader.openSequence) return;
       ReaderHUDView.updateBookInfo(titleElement, authorElement, book, fallbackTitle);
@@ -107,7 +151,14 @@ class ReaderDocumentLifecycle {
   async loadPdfDocument(bookId, sequence) {
     const reader = this.reader;
     let cachedBlob = null;
-    if (navigator.onLine === false) {
+    let isComplete = false;
+    try {
+      if (typeof localDB !== 'undefined' && localDB && typeof localDB.isBookOfflineComplete === 'function') {
+        isComplete = await localDB.isBookOfflineComplete(bookId);
+      }
+    } catch (_) {}
+
+    if (navigator.onLine === false || isComplete) {
       cachedBlob = await localDB.getPdfBlob(bookId).catch(() => null);
       if (cachedBlob) {
         const task = pdfjsLib.getDocument({ data: new Uint8Array(await cachedBlob.arrayBuffer()) });

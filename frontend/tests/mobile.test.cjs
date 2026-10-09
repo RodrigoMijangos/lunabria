@@ -7,10 +7,30 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const frontend = path.resolve(__dirname, '..');
+const loadedScripts = new WeakMap();
+const scriptDependencies = new Map([
+  ['js/mobile/MobileSelectionController.js', ['js/services/reader/ReaderTextTargetGeometry.js']],
+  ['js/viewmodels/reader/ReaderNativeSelectionLoupeController.js', ['js/services/reader/ReaderTextTargetGeometry.js']],
+  ['js/viewmodels/reader/ReaderDrawingViewModel.js', [
+    'js/viewmodels/reader/ReaderDrawingInteractionController.js',
+    'js/viewmodels/reader/ReaderDrawingPersistenceController.js',
+    'js/viewmodels/reader/ReaderDrawingToolController.js'
+  ]]
+]);
 
 function loadScript(context, relativePath) {
+  let loaded = loadedScripts.get(context);
+  if (!loaded) {
+    loaded = new Set();
+    loadedScripts.set(context, loaded);
+  }
+  if (loaded.has(relativePath)) return;
+  for (const dependency of scriptDependencies.get(relativePath) || []) {
+    loadScript(context, dependency);
+  }
   const code = fs.readFileSync(path.join(frontend, relativePath), 'utf8');
-  vm.runInContext(code, context);
+  vm.runInContext(code, context, { filename: relativePath });
+  loaded.add(relativePath);
 }
 
 function createDOMContext() {
@@ -409,6 +429,73 @@ test('ReaderDrawingViewModel does not auto-activate draw mode on desktop mouse c
   drawingVM.handleDrawingPointerDown(mouseDownEvent, 1, pageWrapper, drawCanvas, 1, 1);
   assert.equal(model.isDrawMode, false, 'Mouse click after turning off draw mode must not reactivate it');
   assert.equal(drawingVM.isDrawing, false, 'Mouse must not draw after draw mode is turned off');
+});
+
+test('ReaderDrawingViewModel preserves pressure, strict palm rejection and desktop pan gestures', async () => {
+  const { context, elementsById } = createDOMContext();
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderDrawingViewModel = context.window.ReaderDrawingViewModel || context.ReaderDrawingViewModel;
+  const model = new ReaderModel();
+  model.setDrawTool('pen');
+  model.setAccessibilitySetting('palmRejection', 'strict');
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  const drawingVM = new ReaderDrawingViewModel(model, viewportEl, bodyEl, () => null, {
+    viewportEl,
+    mobile: { device: { isMobileReaderActive: () => false } }
+  });
+  const pageWrapper = new context.Element('div');
+  pageWrapper.getBoundingClientRect = () => ({ left: 100, top: 200, width: 500, height: 800 });
+  const drawCanvas = new context.Element('canvas');
+  drawCanvas.width = 1000;
+  drawCanvas.height = 1600;
+  drawCanvas.getContext = () => ({
+    clearRect() {}, save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {},
+    quadraticCurveTo() {}, stroke() {}, fill() {}, arc() {}
+  });
+  const makeEvent = (pointerType, pointerId, clientX, clientY, pressure = 0.5) => ({
+    pointerType, pointerId, clientX, clientY, pressure, button: 0, buttons: 1, target: drawCanvas,
+    preventDefault() {}, stopPropagation() {}
+  });
+
+  let touchPrevented = false;
+  let touchStopped = false;
+  drawingVM.handleDrawingPointerDown({
+    ...makeEvent('touch', 1, 150, 300),
+    preventDefault() { touchPrevented = true; },
+    stopPropagation() { touchStopped = true; }
+  }, 1, pageWrapper, drawCanvas, 1, 1);
+  assert.equal(touchPrevented, true, 'Strict palm rejection must prevent touch drawing on desktop');
+  assert.equal(touchStopped, true, 'Strict palm rejection must stop touch propagation');
+  assert.equal(drawingVM.isDrawing, false);
+
+  drawingVM.toggleDrawMode(true);
+  drawingVM.handleDrawingPointerDown(makeEvent('pen', 2, 150, 300, 0.75), 1, pageWrapper, drawCanvas, 1, 1);
+  drawingVM.handleDrawingPointerMove(makeEvent('pen', 2, 160, 315, 0.9), 1, pageWrapper, drawCanvas, 1, 1);
+  await drawingVM.handleDrawingPointerUp(makeEvent('pen', 2, 160, 315, 0.9), 1, pageWrapper, drawCanvas, 1, 1);
+
+  const stroke = model.getPageStrokes(1)[0];
+  assert.deepEqual(Array.from(stroke.points, point => point.p), [0.75, 0.9], 'Stroke points must retain pointer pressure');
+
+  bodyEl.scrollLeft = 80;
+  bodyEl.scrollTop = 100;
+  drawingVM.setDrawTool('pan');
+  drawingVM.handleDrawingPointerDown(makeEvent('mouse', 3, 200, 300), 1, pageWrapper, drawCanvas, 1, 1);
+  assert.equal(drawingVM.isPanning, true);
+  drawingVM.handleDrawingPointerMove(makeEvent('mouse', 3, 250, 340), 1, pageWrapper, drawCanvas, 1, 1);
+  assert.equal(bodyEl.scrollLeft, 30);
+  assert.equal(bodyEl.scrollTop, 60);
+  await drawingVM.handleDrawingPointerUp(makeEvent('mouse', 3, 250, 340), 1, pageWrapper, drawCanvas, 1, 1);
+  assert.equal(drawingVM.isPanning, false);
+  assert.equal(viewportEl.classList.contains('panning'), false);
 });
 
 test('MobileDrawingToolbarView does not auto-activate draw mode on desktop environment initialization', () => {
@@ -819,6 +906,52 @@ test('MobileSelectionController allows spatial tolerance slack (holgura) around 
   selectionController.startLongPressSelection({ x: 35, y: 90 });
   assert.equal(selectionController.isSelecting, true, 'Selection must activate with tolerance slack');
   assert.equal(currentSelection.rangeCount > 0, true, 'Text range must be selected despite offset');
+});
+
+test('Mobile selection reuses native nearest-word geometry without requiring controller state', () => {
+  const { context, documentStub } = createDOMContext();
+  context.Node = { TEXT_NODE: 3 };
+  context.NodeFilter = { SHOW_TEXT: 4 };
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderNativeSelectionLoupeController.js');
+  loadScript(context, 'js/mobile/MobileSelectionController.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const model = new ReaderModel();
+  const nodes = ['alpha', 'beta'].map(text => ({ nodeType: 3, textContent: text }));
+  const word = (node, left, width) => {
+    const span = {
+      textContent: node.textContent,
+      firstChild: node,
+      getBoundingClientRect: () => ({ left, top: 0, right: left + width, bottom: 20, width, height: 20 }),
+      contains: candidate => candidate === node,
+      querySelectorAll: () => []
+    };
+    node.parentElement = span;
+    return span;
+  };
+  const words = [word(nodes[0], 0, 40), word(nodes[1], 100, 80)];
+  const line = {
+    textContent: 'alpha beta',
+    firstChild: nodes[0],
+    contains: node => nodes.includes(node),
+    getBoundingClientRect: () => ({ left: 0, top: 0, right: 180, bottom: 20, width: 180, height: 20 }),
+    querySelectorAll: selector => selector === '.precise-word' ? words : []
+  };
+  const textLayer = {
+    querySelectorAll: selector => selector === '.precise-line' ? [line] : []
+  };
+  const pageWrapper = { querySelector: selector => selector === '.textLayer' ? textLayer : null };
+  documentStub.caretPositionFromPoint = () => ({ offsetNode: nodes[0], offset: 1 });
+  documentStub.createTreeWalker = element => ({ nextNode: () => element.firstChild || null });
+
+  const MobileSelectionController = context.window.MobileSelectionController || context.MobileSelectionController;
+  const controller = new MobileSelectionController({}, model);
+  const target = controller.findNearbyTarget(175, 10, pageWrapper, 80, 40);
+
+  assert.equal(target.node, nodes[1]);
+  assert.equal(target.span, words[1]);
+  assert.equal(target.offset, 4);
 });
 
 test('MobileSelectionController locks reader scroll and prevents horizontal page displacement or pointer cancellation during drag', async () => {

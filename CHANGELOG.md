@@ -11,6 +11,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-06
+
+### Added
+- Resilient HTTP fetch helper with configurable timeouts and typed network error reporting.
+- Library catalog displays locally cached books immediately on startup before checking the network.
+- Offline indicator banner communicates connectivity status and the count of books available for reading.
+- Highlight color palette and previous annotations remain available offline during network outages.
+- Missing or unreachable book cover images fall back to an offline vector cover.
+- Downloaded books open directly from their local copy without waiting for network connectivity.
+- Failed PDF page canvas rendering shows a recoverable error card with a retry button instead of a blank page.
+- Persistent outbox queue preserves highlights, notes, freehand drawings, and reading progress created offline and synchronizes them once connected.
+
 ## [1.3.1] - 2026-10-05
 
 ### Fixed
@@ -436,7 +448,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.1.1...v1.2.0

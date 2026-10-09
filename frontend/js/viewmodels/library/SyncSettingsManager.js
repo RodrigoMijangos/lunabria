@@ -70,10 +70,30 @@ class SyncSettingsManager {
     button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Syncing…';
 
     try {
-      const result = await api.syncPendingProgress('manual');
-      button.innerHTML = result.success
+      const [progressResult, outboxResult] = await Promise.all([
+        api.syncPendingProgress('manual').catch(() => ({ success: false })),
+        (typeof localDB !== 'undefined' && typeof localDB.processOutboxQueue === 'function')
+          ? localDB.processOutboxQueue(api).catch(() => ({ pending: 0 }))
+          : Promise.resolve({ pending: 0 })
+      ]);
+
+      const isFullySynced = progressResult.success && (!outboxResult || outboxResult.pending === 0);
+      button.innerHTML = isFullySynced
         ? '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#circle-check"></use></svg> Synced'
         : '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Offline';
+
+      const statusTitle = document.getElementById('sync-status-title');
+      const statusDetail = document.getElementById('sync-status-detail');
+      if (statusTitle && statusDetail) {
+        if (isFullySynced) {
+          statusTitle.textContent = 'Synced';
+          statusDetail.textContent = 'All changes and reading progress are up to date';
+        } else {
+          statusTitle.textContent = 'Pending Sync';
+          const count = (outboxResult?.pending || 0) + (progressResult.success ? 0 : 1);
+          statusDetail.textContent = `${count} change(s) waiting to be synced with the server`;
+        }
+      }
     } catch (error) {
       button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Offline';
       console.error('[SyncSettingsManager] Sync error:', error);

@@ -68,12 +68,17 @@ def range_requests_response(
 
     chunk_length = end - start + 1
 
-    def file_iterator():
+    async def file_iterator():
         with open(file_path, "rb") as f:
             f.seek(start)
             remaining = chunk_length
             chunk_size = 64 * 1024  # 64KB chunks
             while remaining > 0:
+                try:
+                    if await request.is_disconnected():
+                        break
+                except Exception:
+                    pass
                 read_size = min(chunk_size, remaining)
                 data = f.read(read_size)
                 if not data:

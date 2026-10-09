@@ -8,10 +8,22 @@ from app.database import init_db
 from app.routers import books, metadata, virtual_libraries, reader, media
 from app.config import WORKSPACE_DIR
 
+import logging
+
+# Suppress spurious asyncio socket write errors caused by client disconnects
+class _SuppressSocketSendErrorFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if "socket.send() raised exception" in msg or "Fatal write error on socket transport" in msg:
+            return False
+        return True
+
+logging.getLogger("asyncio").addFilter(_SuppressSocketSendErrorFilter())
+
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.3.1"
+    version="1.4.0"
 )
 
 import time

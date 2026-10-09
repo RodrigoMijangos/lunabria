@@ -281,15 +281,22 @@ class ReaderPageRenderer {
     pageWrapper.appendChild(canvas);
     const renderTask = PDFPageView.renderPDFPageToCanvas(page, canvas, viewport, outputScale);
     this.renderTasks.add(renderTask);
+    let renderSuccess = false;
     try {
       await renderTask.promise;
+      renderSuccess = true;
     } catch (error) {
       if (error?.name === 'RenderingCancelledException') return false;
-      console.warn(`[ReaderPageRenderer] Canvas render warning for page ${pageNumber}:`, error);
+      console.error(`[ReaderPageRenderer] Diagnostic render failure: Book ${this.model.bookId || 'unknown'}, Page ${pageNumber}, Cause: ${error?.name || 'Error'} (${error?.message || 'render failed'})`);
     } finally {
       this.renderTasks.delete(renderTask);
     }
     if (!this.isCurrentGeneration(generation)) return false;
+
+    if (!renderSuccess) {
+      this.renderPageErrorState(pageWrapper, pageNumber, effectiveScale, generation);
+      return false;
+    }
 
     // 2. Exact Word Text Layer
     await this.renderTextLayer(pageWrapper, page, pageNumber, pageWidth, pageHeight, viewport, effectiveScale, generation);
@@ -309,6 +316,49 @@ class ReaderPageRenderer {
       await this.drawingCoordinator.setupDrawingLayer(drawCanvas, pageWrapper, pageNumber, effectiveScale, outputScale);
     }
     return this.isCurrentGeneration(generation);
+  }
+
+  renderPageErrorState(pageWrapper, pageNumber, effectiveScale, generation) {
+    pageWrapper.innerHTML = '';
+    const errContainer = document.createElement('div');
+    errContainer.className = 'pdf-page-render-error';
+    errContainer.style.display = 'flex';
+    errContainer.style.flexDirection = 'column';
+    errContainer.style.alignItems = 'center';
+    errContainer.style.justifyContent = 'center';
+    errContainer.style.padding = '24px';
+    errContainer.style.textAlign = 'center';
+    errContainer.style.color = 'var(--text-secondary, #64748b)';
+    errContainer.style.width = '100%';
+    errContainer.style.height = '100%';
+    errContainer.style.minHeight = '280px';
+    errContainer.style.background = 'var(--bg-secondary, rgba(0, 0, 0, 0.03))';
+    errContainer.style.borderRadius = '8px';
+
+    const iconWrap = document.createElement('div');
+    iconWrap.style.marginBottom = '8px';
+    iconWrap.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false" style="width:32px;height:32px;"><use href="./icons.svg#warning"></use></svg>';
+
+    const msg = document.createElement('p');
+    msg.textContent = `No se pudo dibujar la página ${pageNumber}.`;
+    msg.style.margin = '0 0 12px 0';
+    msg.style.fontWeight = '500';
+
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'btn btn-secondary retry-page-render-btn';
+    retryBtn.textContent = 'Reintentar página';
+    retryBtn.style.cursor = 'pointer';
+    retryBtn.onclick = (e) => {
+      e.stopPropagation();
+      delete pageWrapper.dataset.renderState;
+      this.populatePageWrapper(pageWrapper, pageNumber, effectiveScale, this.renderGeneration);
+    };
+
+    errContainer.appendChild(iconWrap);
+    errContainer.appendChild(msg);
+    errContainer.appendChild(retryBtn);
+    pageWrapper.appendChild(errContainer);
   }
 
   async renderTextLayer(pageWrapper, page, pageNumber, width, height, viewport, effectiveScale, generation) {

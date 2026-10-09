@@ -221,11 +221,21 @@ class ReaderViewModel {
   persistProgressNow() {
     if (!this.model.bookId || !this.model.totalPages) return Promise.resolve();
     const pct = LibraryModel.formatReadingProgress(this.model.currentPage, this.model.totalPages);
-    return api.saveProgress(this.model.bookId, {
+    const progressData = {
       current_page: this.model.currentPage,
       total_pages: this.model.totalPages,
       percentage: pct
-    });
+    };
+    if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
+      localDB.enqueueOutboxOp({
+        id: `progress_${this.model.bookId}`,
+        type: 'progress',
+        action: 'save',
+        bookId: Number(this.model.bookId),
+        payload: progressData
+      }).catch(() => {});
+    }
+    return api.saveProgress(this.model.bookId, progressData);
   }
 }
 

@@ -63,23 +63,7 @@ class ReaderNativeSelectionLoupeController {
   }
 
   textTargetInWord(wordSpan, clientX, clientY) {
-    if (!wordSpan) return null;
-    const rect = wordSpan.getBoundingClientRect();
-    const walker = document.createTreeWalker(wordSpan, NodeFilter.SHOW_TEXT);
-    const node = walker.nextNode();
-    if (!node) return null;
-
-    const nativePosition = document.caretPositionFromPoint
-      ? document.caretPositionFromPoint(clientX, clientY)
-      : document.caretRangeFromPoint?.(clientX, clientY);
-    const nativeNode = nativePosition?.offsetNode || nativePosition?.startContainer;
-    const nativeOffset = nativePosition?.offset ?? nativePosition?.startOffset;
-    if (nativeNode?.nodeType === Node.TEXT_NODE && wordSpan.contains(nativeNode)) {
-      return { node: nativeNode, offset: Math.max(0, Math.min(nativeNode.textContent.length, nativeOffset)), span: wordSpan, rect };
-    }
-
-    const ratio = rect.width > 0 ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
-    return { node, offset: Math.round(ratio * (node.textContent || '').length), span: wordSpan, rect };
+    return ReaderTextTargetGeometry.textTargetInWord(wordSpan, clientX, clientY);
   }
 
   directWordTarget(eventTarget, clientX, clientY) {
@@ -207,11 +191,9 @@ class ReaderNativeSelectionLoupeController {
 
     const preciseLines = Array.from(textLayer.querySelectorAll('.precise-line')).filter(s => s.textContent?.trim());
     if (!preciseLines.length) {
-      const nativePosition = document.caretPositionFromPoint
-        ? document.caretPositionFromPoint(clientX, clientY)
-        : document.caretRangeFromPoint?.(clientX, clientY);
-      const nativeNode = nativePosition?.offsetNode || nativePosition?.startContainer;
-      const nativeOffset = nativePosition?.offset ?? nativePosition?.startOffset;
+      const nativePosition = ReaderTextTargetGeometry.caretPosition(clientX, clientY);
+      const nativeNode = nativePosition?.node;
+      const nativeOffset = nativePosition?.offset;
       const nativeSpan = nativeNode?.parentElement?.closest?.('span') || nativeNode?.parentElement;
       const nativeRect = nativeSpan?.getBoundingClientRect?.();
       const pointerIsOverCaretSpan = nativeRect && clientX >= nativeRect.left && clientX <= nativeRect.right &&
@@ -317,11 +299,9 @@ class ReaderNativeSelectionLoupeController {
     // Within horizontal bounds: probe exact character position.
     const wordSpans = Array.from(bestSpan.querySelectorAll('.precise-word'));
     const clampedY = Math.min(bestRect.bottom - 2, Math.max(bestRect.top + 2, bestRect.top + bestRect.height / 2));
-    const nativePosition = document.caretPositionFromPoint
-      ? document.caretPositionFromPoint(clientX, clampedY)
-      : document.caretRangeFromPoint?.(clientX, clampedY);
-    const nativeNode = nativePosition?.offsetNode || nativePosition?.startContainer;
-    const nativeOffset = nativePosition?.offset ?? nativePosition?.startOffset;
+    const nativePosition = ReaderTextTargetGeometry.caretPosition(clientX, clampedY);
+    const nativeNode = nativePosition?.node;
+    const nativeOffset = nativePosition?.offset;
 
     if (nativeNode?.nodeType === Node.TEXT_NODE && bestSpan.contains(nativeNode)) {
       const wordSpan = nativeNode.parentElement?.closest?.('.precise-word');
@@ -345,19 +325,8 @@ class ReaderNativeSelectionLoupeController {
     // Resolve gaps against the nearest actual word. Returning the line's first
     // text node here creates a range anchored at the beginning of every line.
     if (wordSpans.length > 0) {
-      let nearestWord = null;
-      let nearestDistance = Infinity;
-      for (const wordSpan of wordSpans) {
-        const rect = wordSpan.getBoundingClientRect();
-        const dx = clientX < rect.left ? rect.left - clientX : clientX > rect.right ? clientX - rect.right : 0;
-        const dy = clientY < rect.top ? rect.top - clientY : clientY > rect.bottom ? clientY - rect.bottom : 0;
-        const distance = (dx * dx) + (dy * dy);
-        if (distance < nearestDistance) {
-          nearestWord = wordSpan;
-          nearestDistance = distance;
-        }
-      }
-      return this.textTargetInWord(nearestWord, clientX, clientY);
+      const nearest = ReaderTextTargetGeometry.nearestElement(wordSpans, clientX, clientY);
+      return ReaderTextTargetGeometry.textTargetInWord(nearest?.element, clientX, clientY);
     }
 
     // Line-level ratio fallback

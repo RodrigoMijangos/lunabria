@@ -111,7 +111,19 @@ class ReaderEventBindings {
       if (reader.model.activeHighlight) {
         const id = reader.model.activeHighlight.id;
         const page = reader.model.activeHighlight.page;
+        if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
+          await localDB.enqueueOutboxOp({
+            id: `op_del_${id}`,
+            type: 'annotation',
+            action: 'delete',
+            bookId: reader.model.bookId,
+            entityId: id
+          }).catch(() => {});
+        }
         await api.deleteAnnotation(id);
+        if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
+          await localDB.removeOutboxOp(`op_del_${id}`).catch(() => {});
+        }
         reader.highlightActionMenu.style.display = 'none';
         reader.model.activeHighlight = null;
         await reader.annotations.refreshAnnotations();
@@ -126,7 +138,20 @@ class ReaderEventBindings {
         const currentNote = annot.comment || '';
         const newNote = prompt('Edit / Add note to this highlight:', currentNote);
         if (newNote !== null) {
+          if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
+            await localDB.enqueueOutboxOp({
+              id: `op_update_${annot.id}`,
+              type: 'annotation',
+              action: 'update',
+              bookId: reader.model.bookId,
+              entityId: annot.id,
+              payload: { comment: newNote }
+            }).catch(() => {});
+          }
           await api.updateAnnotation(annot.id, { comment: newNote });
+          if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
+            await localDB.removeOutboxOp(`op_update_${annot.id}`).catch(() => {});
+          }
           reader.highlightActionMenu.style.display = 'none';
           reader.model.activeHighlight = null;
           await reader.annotations.refreshAnnotations();

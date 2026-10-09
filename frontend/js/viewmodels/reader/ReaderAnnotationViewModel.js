@@ -82,24 +82,58 @@ class ReaderAnnotationViewModel {
       rects: rects
     };
 
-    try {
-      const savedAnnotation = await api.createAnnotation(this.model.bookId, annotData);
-      if (this.floatingToolbar) {
-        this.floatingToolbar.style.opacity = '0';
-        this.floatingToolbar.style.pointerEvents = 'none';
-      }
-      this.clearTextSelection();
+    const annotId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : ('annot_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9));
+    const fullAnnot = { id: annotId, ...annotData };
 
+    // 1. Optimistic update in model
+    const existingAnnots = Array.isArray(this.model.annotations) ? [...this.model.annotations] : [];
+    existingAnnots.push(fullAnnot);
+    this.model.setAnnotations(existingAnnots);
+
+    // 2. Persist to cached_annotations in localDB
+    if (typeof localDB !== 'undefined' && typeof localDB.saveCachedAnnotations === 'function') {
+      localDB.saveCachedAnnotations(this.model.bookId, existingAnnots).catch(() => {});
+    }
+
+    // 3. Enqueue to outbox
+    if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
+      await localDB.enqueueOutboxOp({
+        id: `op_create_${annotId}`,
+        type: 'annotation',
+        action: 'create',
+        bookId: this.model.bookId,
+        entityId: annotId,
+        payload: fullAnnot
+      }).catch(() => {});
+    }
+
+    if (this.floatingToolbar) {
+      this.floatingToolbar.style.opacity = '0';
+      this.floatingToolbar.style.pointerEvents = 'none';
+    }
+    this.clearTextSelection();
+
+    this.renderDrawerAnnotations();
+    const refreshed = this.refreshPageHighlights(pageNumber);
+    if (!refreshed && this.model.viewMode !== 'flow' && this.onPageNeedsRefresh) {
+      this.onPageNeedsRefresh(pageNumber);
+    }
+    if (options.showQuickPalette) {
+      this.openQuickHighlightPalette(fullAnnot, pageNumber);
+    }
+
+    // 4. Try network sync via outbox or direct api call
+    try {
+      const savedAnnotation = await api.createAnnotation(this.model.bookId, fullAnnot);
+      if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
+        await localDB.removeOutboxOp(`op_create_${annotId}`).catch(() => {});
+      }
       await this.refreshAnnotations();
-      const refreshed = this.refreshPageHighlights(pageNumber);
-      if (!refreshed && this.model.viewMode !== 'flow' && this.onPageNeedsRefresh) {
-        this.onPageNeedsRefresh(pageNumber);
-      }
-      if (options.showQuickPalette) {
-        this.openQuickHighlightPalette(savedAnnotation, pageNumber);
-      }
+      this.refreshPageHighlights(pageNumber);
     } catch (err) {
-      console.error('[ReaderAnnotationViewModel] Error saving highlight:', err);
+      console.warn('[ReaderAnnotationViewModel] Network save failed, kept in outbox queue:', err);
     }
   }
 
@@ -253,14 +287,37 @@ class ReaderAnnotationViewModel {
     this.hideQuickHighlightPalette();
     this.model.activeHighlight = null;
 
+    // Update cached_annotations in localDB
+    if (typeof localDB !== 'undefined' && typeof localDB.saveCachedAnnotations === 'function') {
+      localDB.saveCachedAnnotations(this.model.bookId, this.model.annotations).catch(() => {});
+    }
+
+    // Enqueue update to outbox
+    if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
+      await localDB.enqueueOutboxOp({
+        id: `op_update_${annotId}`,
+        type: 'annotation',
+        action: 'update',
+        bookId: this.model.bookId,
+        entityId: annotId,
+        payload: {
+          color: newColorId,
+          category: colorMeta?.name || ''
+        }
+      }).catch(() => {});
+    }
+
     // 3. Persist change to backend
     try {
       await api.updateAnnotation(annotId, {
         color: newColorId,
         category: colorMeta?.name || ''
       });
+      if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
+        await localDB.removeOutboxOp(`op_update_${annotId}`).catch(() => {});
+      }
     } catch (err) {
-      console.error('[ReaderAnnotationViewModel] Error updating annotation color:', err);
+      console.warn('[ReaderAnnotationViewModel] Error updating annotation color, queued in outbox:', err);
     }
 
     // 4. Refresh annotations data from server and re-render target page highlights
@@ -491,7 +548,30 @@ class ReaderAnnotationViewModel {
       if (delBtn) {
         delBtn.onclick = async (e) => {
           e.stopPropagation();
-          await api.deleteAnnotation(annot.id);
+          // Optimistic remove from model
+          this.model.setAnnotations((this.model.annotations || []).filter(a => String(a.id) !== String(annot.id)));
+          if (typeof localDB !== 'undefined' && typeof localDB.saveCachedAnnotations === 'function') {
+            localDB.saveCachedAnnotations(this.model.bookId, this.model.annotations).catch(() => {});
+          }
+          if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
+            await localDB.enqueueOutboxOp({
+              id: `op_del_${annot.id}`,
+              type: 'annotation',
+              action: 'delete',
+              bookId: this.model.bookId,
+              entityId: annot.id
+            }).catch(() => {});
+          }
+          this.renderDrawerAnnotations();
+          this.refreshPageHighlights(annot.page);
+          try {
+            await api.deleteAnnotation(annot.id);
+            if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
+              await localDB.removeOutboxOp(`op_del_${annot.id}`).catch(() => {});
+            }
+          } catch (delErr) {
+            console.warn('[ReaderAnnotationViewModel] Delete failed, queued in outbox:', delErr);
+          }
           await this.refreshAnnotations();
           this.refreshPageHighlights(annot.page);
         };

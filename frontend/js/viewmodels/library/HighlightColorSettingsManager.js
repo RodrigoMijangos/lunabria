@@ -31,12 +31,24 @@ class HighlightColorSettingsManager {
 
     try {
       this.colors = this.normalizeColors(await api.getColors());
+      if (typeof localStorage !== 'undefined' && localStorage) {
+        try {
+          localStorage.setItem('moon_cached_colors', JSON.stringify(this.colors));
+        } catch (_) {}
+      }
       this.render();
       this.setStatus('');
     } catch (error) {
-      this.colors = this.defaultColors();
+      let cached = null;
+      if (typeof localStorage !== 'undefined' && localStorage) {
+        try {
+          const raw = localStorage.getItem('moon_cached_colors');
+          if (raw) cached = JSON.parse(raw);
+        } catch (_) {}
+      }
+      this.colors = cached ? this.normalizeColors(cached) : this.defaultColors();
       this.render();
-      this.setStatus('Could not load saved palette. Showing default colors.');
+      this.setStatus('Could not load saved palette. Showing cached or default colors.');
       console.error('[HighlightColorSettingsManager] Error loading colors:', error);
     }
   }
@@ -109,6 +121,11 @@ class HighlightColorSettingsManager {
     try {
       await api.saveColors(colors);
       this.colors = colors;
+      if (typeof localStorage !== 'undefined' && localStorage) {
+        try {
+          localStorage.setItem('moon_cached_colors', JSON.stringify(colors));
+        } catch (_) {}
+      }
       if (window.reader?.model) {
         window.reader.model.setColors(colors);
         window.reader.annotations?.renderFloatingColors();

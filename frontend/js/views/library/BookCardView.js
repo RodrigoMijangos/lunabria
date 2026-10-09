@@ -1,3 +1,5 @@
+const OFFLINE_FALLBACK_COVER = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300" width="100%" height="100%"><rect width="100%" height="100%" fill="%23e2e8f0"/><path d="M70 120h60M70 150h60M70 180h40" stroke="%2394a3b8" stroke-width="6" stroke-linecap="round"/><circle cx="100" cy="80" r="20" fill="%23cbd5e1"/></svg>`;
+
 /**
  * BookCardView.js
  * Renders book cards and the main library book grid.
@@ -21,7 +23,8 @@ const BookCardView = {
     img.loading = 'lazy';
     img.src = book.has_cover && book.cover_url ? book.cover_url : '/api/books/placeholder-cover';
     img.onerror = () => {
-      img.src = '/api/books/placeholder-cover';
+      img.onerror = null;
+      img.src = OFFLINE_FALLBACK_COVER;
     };
     coverWrap.appendChild(img);
 

@@ -13,7 +13,7 @@ Counts are physical source lines, including comments and blank lines, not execut
 | 5 | `frontend/js/api.js` | 531 | 34 | Compatibility facade over eight domain services |
 | 6 | `frontend/js/viewmodels/reader/ReaderAnnotationViewModel.js` | 512 | 457 | Extract numerical selection/toolbar geometry |
 | 7 | `frontend/js/viewmodels/reader/ReaderToolbarManager.js` | 465 | 465 | Already a focused control-binding collaborator; unchanged |
-| 8 | `frontend/js/viewmodels/reader/ReaderDrawingViewModel.js` | 457 | 457 | Leave pointer/stylus timing unchanged in this pass |
+| 8 | `frontend/js/viewmodels/reader/ReaderDrawingViewModel.js` | 457 | 133 | Delegate gestures, persistence/rendering and tool operations without changing timing |
 | 9 | `backend/app/services/calibre_service.py` | 455 | 324 | Delegate CLI and conversion/cache work |
 | 10 | `frontend/js/viewmodels/reader/ReaderPageRenderer.js` | 315 | 315 | Preserve focal zoom, double buffering and rendering unchanged |
 | 11 | `backend/app/services/reader_service.py` | 311 | 117 | Compatibility facade over four persistence domains |
@@ -39,6 +39,11 @@ Reducing a file's line count is not itself the objective. Existing, already-cohe
 - `ReaderDocumentLifecycle`: document opening, metadata, stale-open guards, PDF loading/fallback and cleanup through the reader facade.
 - `ReaderOfflineService`: PDF download validation and batched layout caching.
 - `ReaderSelectionGeometry`: pure numeric scoring, coordinate conversion and toolbar/palette positioning. DOM measurement and state remain in `ReaderAnnotationViewModel`.
+- `ReaderTextTargetGeometry`: shared DOM-backed caret, nearest-text-target and character-offset geometry for the native loupe and mobile selection controllers. Selection state and gesture lifecycles remain in their respective controllers.
+- `ReaderDrawingViewModel`: compatibility facade and owner of live drawing state, delegating to:
+  - `ReaderDrawingInteractionController` for pointer, stylus, tap and pan gestures.
+  - `ReaderDrawingPersistenceController` for stroke rendering, page targeting, local storage and server synchronization.
+  - `ReaderDrawingToolController` for drawing mode, tool, color, width and input-device operations.
 
 Existing reader selection, zoom, rendering, annotation persistence and stylus algorithms are not redesigned.
 
@@ -71,6 +76,7 @@ The Python HTTP layer remains router/service based; MVVM applies to the browser 
 - `reader_annotations.py`: text normalization, annotation persistence and Markdown export.
 - `reader_settings.py`: highlight settings and legacy-name compatibility.
 - `reader_drawings.py`: drawing persistence.
+- `notes_export.py`: compatibility facade for the original notes-export API, delegating PDF text/TOC extraction, export-model assembly and JSON/YAML/TOML/Markdown rendering to focused modules.
 
 The facades pass their existing dependencies to the extracted operations. This preserves module-level monkeypatch points, service overrides, SQL, transaction boundaries and filesystem/lock behavior.
 
@@ -103,7 +109,7 @@ Concatenating these ten files without separators reproduces the original 67,143-
 
 The application keeps classic scripts and global compatibility facades. `index.html` loads each extracted collaborator before its consumer, without introducing asynchronous script loading. Menu and status icons use the shared SVG sprite; native `<select>` options remain descriptive text because custom per-option SVG rendering is not portable.
 
-`sw.js` precaches the new scripts, all imported stylesheets and the local sprite. Versioned HTML URLs are listed with their **exact query strings**, since CacheStorage keys include search parameters. The shell cache is `lunabria-v1.0.9`; modules changed for the icon pass use asset revision `1.0.9`, while untouched modules retain their existing revisions.
+`sw.js` precaches the new scripts, all imported stylesheets and the local sprite. Versioned HTML URLs are listed with their **exact query strings**, since CacheStorage keys include search parameters. The shell cache for this release is `lunabria-v1.4.0`; the shared selection helper and drawing collaborators are versioned in both `index.html` and the precache manifest.
 
 PDF.js and Google Fonts remain existing external dependencies and are not newly bundled. The integration tests cover local shell/cache resources, not availability of those external providers.
 

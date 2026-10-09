@@ -1,9 +1,11 @@
+import hashlib
 import json
 import os
 import random
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pymupdf
 import yaml
@@ -155,6 +157,56 @@ class TestNotesExportDeterministic(unittest.TestCase):
             self.assertEqual(notes_export.render_yaml(m), base_yaml)
             self.assertEqual(notes_export.render_toml(m), base_toml)
             self.assertEqual(notes_export.render_md(m, group_by="hierarchy"), base_md)
+
+    def test_export_format_fingerprints_remain_byte_compatible(self):
+        model = notes_export.build_model(
+            self.get_fixture_annotations(),
+            {"id": 42, "title": "Determinism Test Book", "authors": "Ada Lovelace"},
+            None,
+            self.get_sample_palette(),
+            exported_at="2026-10-04T00:00:00Z"
+        )
+        outputs = {
+            "json": notes_export.render_json(model),
+            "jsonl": notes_export.render_jsonl(model),
+            "yaml": notes_export.render_yaml(model),
+            "toml": notes_export.render_toml(model),
+            "md_hierarchy": notes_export.render_md(model, group_by="hierarchy"),
+            "md_color": notes_export.render_md(model, group_by="color"),
+            "md_page": notes_export.render_md(model, group_by="page")
+        }
+        expected_hashes = {
+            "json": "7f1846ec125f13c6444fdcb6be7b9ce561870c03fc048e04c07c60ae7a46a782",
+            "jsonl": "9225a51dbb7e83adf9cb9121919c5becb157b3b030556ec451911feade080cbc",
+            "yaml": "c6f19e52116b762d6325c26c2661c578ad90b412c925f6d94c5ddf6885f7879b",
+            "toml": "bc3e989a655b3915553defa773d75696d3b4efc611628f36d75e214156409240",
+            "md_hierarchy": "f2c80ecd80a08fd7c7c4e652ca80260af8cfe150809613ee41b48ae36618e739",
+            "md_color": "ec98ffc4e007c4f5c6543d7941f3f50f682a8ba318c752075c3885c8d44d9452",
+            "md_page": "db64e874a320b03e0e5dcca4be13f47e990e4b89ec0a765171a578192c1b94e8"
+        }
+
+        actual_hashes = {
+            name: hashlib.sha256(content.encode("utf-8")).hexdigest()
+            for name, content in outputs.items()
+        }
+        self.assertEqual(actual_hashes, expected_hashes)
+
+    def test_compatibility_facade_keeps_builder_monkeypatch_points(self):
+        annotations = [{"id": "patch-test", "page": 1, "color": "", "category": "", "text": "stored"}]
+        extracted = ("patched text", None, "stored", (1, 0, 0, 0, 0), 0.0)
+        with (
+            patch.object(notes_export, "build_palette", return_value=[]) as palette,
+            patch.object(notes_export, "parse_toc_sections", return_value=[]) as toc,
+            patch.object(notes_export, "extract_reconstructed_text", return_value=extracted) as extract,
+            patch.object(notes_export, "finalize_run", wraps=notes_export.finalize_run) as finalize
+        ):
+            model = notes_export.build_model(annotations, {"id": 7, "title": "Patch"}, None, [])
+
+        self.assertEqual(model["runs"][0]["marks"][0]["text"], "patched text")
+        palette.assert_called_once_with([])
+        toc.assert_called_once_with(None, 7)
+        extract.assert_called_once()
+        finalize.assert_called_once()
 
     def test_frontmatter_yaml_safe_load(self):
         palette = self.get_sample_palette()

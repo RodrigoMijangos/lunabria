@@ -9,6 +9,7 @@ const frontend = path.resolve(__dirname, '..');
 const source = file => fs.readFileSync(path.join(frontend, 'js', file), 'utf8');
 const addedScripts = [
   'services/reader/ReaderSelectionGeometry.js',
+  'services/reader/ReaderTextTargetGeometry.js',
   'services/reader/ReaderOfflineService.js',
   'viewmodels/reader/ReaderEventBindings.js',
   'viewmodels/reader/ReaderDocumentLifecycle.js'
@@ -142,6 +143,10 @@ function selection(rects, bounds = rect(100, 100, 80, 20), lines = []) {
 function outcome(fn) {
   try { return { value: clone(fn()) }; }
   catch (error) { return { error: error.name, message: error.message }; }
+};
+function loadNativeSelectionController(context) {
+  vm.runInContext(source('services/reader/ReaderTextTargetGeometry.js'), context);
+  vm.runInContext(source('viewmodels/reader/ReaderNativeSelectionLoupeController.js'), context);
 }
 
 test('public methods and constructor-owned state remain available', () => {
@@ -702,7 +707,7 @@ test('ReaderNativeSelectionLoupeController suppresses loupe on click and activat
   });
 
   vm.runInContext(source('models/ReaderModel.js'), context);
-  vm.runInContext(source('viewmodels/reader/ReaderNativeSelectionLoupeController.js'), context);
+  loadNativeSelectionController(context);
 
   const model = new context.window.ReaderModel();
   const controller = new context.window.ReaderNativeSelectionLoupeController(model, null, null);
@@ -770,7 +775,7 @@ test('ReaderNativeSelectionLoupeController resolves element and stale caret resu
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
   vm.runInContext(source('models/ReaderModel.js'), context);
-  vm.runInContext(source('viewmodels/reader/ReaderNativeSelectionLoupeController.js'), context);
+  loadNativeSelectionController(context);
 
   const words = [];
   const nodes = [];
@@ -823,7 +828,7 @@ test('ReaderNativeSelectionLoupeController uses the caret span in a PDF.js fallb
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
   vm.runInContext(source('models/ReaderModel.js'), context);
-  vm.runInContext(source('viewmodels/reader/ReaderNativeSelectionLoupeController.js'), context);
+  loadNativeSelectionController(context);
 
   const textLayer = { querySelectorAll: selector => selector === 'span' ? spans : [], contains: node => nodes.includes(node) };
   const nodes = [], spans = [];
@@ -867,7 +872,7 @@ test('ReaderNativeSelectionLoupeController uses the caret span in a PDF.js fallb
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
   vm.runInContext(source('models/ReaderModel.js'), context);
-  vm.runInContext(source('viewmodels/reader/ReaderNativeSelectionLoupeController.js'), context);
+  loadNativeSelectionController(context);
 
   const nodes = [], spans = [];
   const textLayer = { querySelectorAll: selector => selector === 'span' ? spans : [], contains: node => nodes.includes(node) };
@@ -914,7 +919,7 @@ test('ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
   vm.runInContext(source('models/ReaderModel.js'), context);
-  vm.runInContext(source('viewmodels/reader/ReaderNativeSelectionLoupeController.js'), context);
+  loadNativeSelectionController(context);
 
   const word1 = { textContent: 'granularity', nodeType: 3 };
   const word2 = { textContent: 'organization', nodeType: 3 };
@@ -1465,4 +1470,3 @@ test('HighlightColorSettingsManager.save synchronizes palette with window.reader
   assert.equal(refreshedPages.includes(3), true);
   assert.equal(drawerRefreshed, true);
 });
-

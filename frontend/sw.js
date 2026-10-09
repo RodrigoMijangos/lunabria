@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.3.1';
+const CACHE_NAME = 'lunabria-v1.4.0';
 // Match the HTML query strings exactly: CacheStorage keys include search parameters.
 const STATIC_ASSETS = [
   './',
@@ -9,7 +9,8 @@ const STATIC_ASSETS = [
   './icons/icon-512.png',
   './css/style.css?v=1.0.10-selection-layout',
   './css/mobile/mobile-reader.css?v=1.1.2',
-  './js/db.js?v=1.0.6',
+  './js/services/http.js?v=1.0.0',
+  './js/db.js?v=1.4.0',
   './js/services/books.js?v=1.0.8',
   './js/services/virtual-libraries.js?v=1.0.8',
   './js/services/metadata.js?v=1.0.8',
@@ -30,7 +31,7 @@ const STATIC_ASSETS = [
   './js/views/reader/NotesView.js?v=1.0.9',
   './js/views/ReaderViews.js?v=0.6.0',
   './js/views/ModalView.js?v=0.6.2',
-  './js/views/library/BookCardView.js?v=1.0.9',
+  './js/views/library/BookCardView.js?v=1.4.0',
   './js/views/library/RecentReadsView.js?v=0.9.2',
   './js/views/library/VirtualLibraryView.js?v=1.0.9',
   './js/views/library/UploadModalView.js?v=1.0.9',
@@ -41,29 +42,33 @@ const STATIC_ASSETS = [
   './js/viewmodels/library/BookUploadManager.js?v=1.0.9',
   './js/viewmodels/library/BookMetadataManager.js?v=1.0.9',
   './js/viewmodels/library/VirtualLibraryManager.js?v=0.8.0',
-  './js/viewmodels/library/HighlightColorSettingsManager.js?v=1.3.0',
-  './js/viewmodels/library/SyncSettingsManager.js?v=1.0.9',
+  './js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0',
+  './js/viewmodels/library/SyncSettingsManager.js?v=1.4.0',
   './js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8',
-  './js/viewmodels/LibraryViewModel.js?v=1.3.0',
+  './js/viewmodels/LibraryViewModel.js?v=1.4.0',
   './js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.6',
   './js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0',
-  './js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.0.10-selection-anchor-v6',
-  './js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.3.0',
+  './js/services/reader/ReaderTextTargetGeometry.js?v=1.0.0',
+  './js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.0',
+  './js/viewmodels/reader/ReaderDrawingInteractionController.js?v=1.0.0',
+  './js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.0',
+  './js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0',
+  './js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0',
   './js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout',
-  './js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.3.0',
-  './js/viewmodels/reader/ReaderPageRenderer.js?v=1.0.7',
+  './js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.0',
+  './js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.0',
   './js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9',
   './js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.0',
   './js/services/reader/ReaderOfflineService.js?v=1.0.8',
-  './js/viewmodels/reader/ReaderEventBindings.js?v=1.0.8',
-  './js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.3.0',
+  './js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0',
+  './js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.0',
   './js/mobile/DeviceEnvironment.js?v=1.1.1',
   './js/mobile/MobileHUDView.js?v=1.1.2',
   './js/mobile/MobileDrawingToolbarView.js?v=1.3.0',
-  './js/mobile/MobileSelectionController.js?v=1.1.1',
+  './js/mobile/MobileSelectionController.js?v=1.4.0',
   './js/mobile/MobilePWAInstaller.js?v=1.1.0',
   './js/mobile/MobileReaderController.js?v=1.3.0',
-  './js/viewmodels/ReaderViewModel.js?v=1.0.8',
+  './js/viewmodels/ReaderViewModel.js?v=1.4.0',
   './js/reader.js?v=0.6.0',
   './js/app.js?v=0.6.0',
   './css/themes.css',
@@ -97,6 +102,12 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.action === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {

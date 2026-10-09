@@ -440,31 +440,13 @@ class MobileSelectionController {
     const candidates = words.length > 0 ? words : lines;
     if (!candidates.length) return null;
 
-    let nearestEl = null;
-    let minDistanceSq = Infinity;
     const maxDistSq = (slackX * slackX) + (slackY * slackY);
+    const nearest = ReaderTextTargetGeometry.nearestElement(candidates, clientX, clientY);
 
-    for (const el of candidates) {
-      if (!el.textContent?.trim()) continue;
-      const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
-      if (!rect || (rect.width <= 0 && rect.height <= 0)) continue;
-
-      const dx = clientX < rect.left ? rect.left - clientX : (clientX > rect.right ? clientX - rect.right : 0);
-      const dy = clientY < rect.top ? rect.top - clientY : (clientY > rect.bottom ? clientY - rect.bottom : 0);
-      const distSq = (dx * dx) + (dy * dy);
-
-      if (distSq < minDistanceSq) {
-        minDistanceSq = distSq;
-        nearestEl = el;
-      }
-    }
-
-    if (nearestEl && minDistanceSq <= maxDistSq) {
-      const textNode = nearestEl.firstChild || nearestEl;
-      const rect = nearestEl.getBoundingClientRect ? nearestEl.getBoundingClientRect() : { left: 0, width: 100 };
-      const ratio = rect.width > 0 ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
-      const offset = Math.round(ratio * (textNode.textContent || '').length);
-      return { node: textNode, offset, span: nearestEl, rect };
+    if (nearest && nearest.distanceSq <= maxDistSq) {
+      const textNode = nearest.element.firstChild || nearest.element;
+      const offset = ReaderTextTargetGeometry.textOffsetAtX(textNode, nearest.rect, clientX);
+      return { node: textNode, offset, span: nearest.element, rect: nearest.rect };
     }
 
     return null;
@@ -497,22 +479,11 @@ class MobileSelectionController {
   getTextPositionAt(clientX, clientY, pageWrapper) {
     if (!pageWrapper) return null;
 
-    if (document.caretPositionFromPoint) {
-      const pos = document.caretPositionFromPoint(clientX, clientY);
-      if (pos && pos.offsetNode) {
-        const node = pos.offsetNode;
-        if (node.nodeType === (typeof Node !== 'undefined' ? Node.TEXT_NODE : 3) && pageWrapper.contains(node)) {
-          return { node, offset: pos.offset };
-        }
-      }
-    } else if (document.caretRangeFromPoint) {
-      const range = document.caretRangeFromPoint(clientX, clientY);
-      if (range && range.startContainer) {
-        const node = range.startContainer;
-        if (node.nodeType === (typeof Node !== 'undefined' ? Node.TEXT_NODE : 3) && pageWrapper.contains(node)) {
-          return { node, offset: range.startOffset };
-        }
-      }
+    const caret = ReaderTextTargetGeometry.caretPosition(clientX, clientY);
+    if (caret &&
+        caret.node.nodeType === (typeof Node !== 'undefined' ? Node.TEXT_NODE : 3) &&
+        pageWrapper.contains(caret.node)) {
+      return caret;
     }
 
     const elements = document.elementsFromPoint
@@ -526,8 +497,10 @@ class MobileSelectionController {
         const textNode = textSpan.firstChild || textSpan;
         if (textNode) {
           const rect = textSpan.getBoundingClientRect ? textSpan.getBoundingClientRect() : { left: 0, width: 100 };
-          const ratio = rect.width > 0 ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
-          return { node: textNode, offset: Math.round(ratio * (textNode.textContent || '').length) };
+          return {
+            node: textNode,
+            offset: ReaderTextTargetGeometry.textOffsetAtX(textNode, rect, clientX)
+          };
         }
       }
     }
