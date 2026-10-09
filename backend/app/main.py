@@ -11,7 +11,7 @@ from app.config import WORKSPACE_DIR
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.0.0"
+    version="1.0.10"
 )
 
 import time

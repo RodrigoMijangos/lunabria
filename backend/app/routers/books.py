@@ -59,11 +59,14 @@ async def upload_books(
             isbn = isbn_list[idx] if idx < len(isbn_list) else None
 
             # Add to calibre
-            book_id = calibre_service.add_book(
-                file_path=str(temp_path),
-                title=clean_title,
-                isbn=isbn
-            )
+            try:
+                book_id = calibre_service.add_book(
+                    file_path=str(temp_path),
+                    title=clean_title,
+                    isbn=isbn
+                )
+            except Exception as add_err:
+                raise HTTPException(status_code=409, detail=str(add_err))
 
             # If user wanted automatic metadata fetch
             if auto_fetch_metadata and isbn:

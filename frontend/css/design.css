@@ -1,0 +1,208 @@
+/* Shared, theme-aware interface icons and small visual refinements. */
+:root {
+  --ui-accent-rgb: 168, 82, 34;
+}
+
+[data-theme="dark"] {
+  --ui-accent-rgb: 226, 135, 67;
+}
+
+[data-theme="amoled"] {
+  --ui-accent-rgb: 245, 158, 11;
+}
+
+.ui-icon {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.hud-icon.ui-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.ui-icon-spin {
+  animation: ui-icon-spin 1.2s linear infinite;
+}
+
+@keyframes ui-icon-spin {
+  to { transform: rotate(360deg); }
+}
+
+.brand-badge .ui-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.upload-option-icon .ui-icon {
+  width: 2.4rem;
+  height: 2.4rem;
+}
+
+.manual-library-search-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.manual-library-search-wrap > .ui-icon {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 11px;
+  color: var(--text-muted);
+  transform: translateY(-50%);
+}
+
+.manual-library-search-wrap > input {
+  padding-left: 36px;
+}
+
+.empty-state-icon {
+  margin-bottom: 12px;
+  color: var(--text-muted);
+}
+
+.empty-state-icon .ui-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.annotations-empty-icon {
+  margin-bottom: 8px;
+  font-size: 1.8rem;
+}
+
+.upload-queue-status {
+  display: inline-flex;
+  color: var(--text-secondary);
+}
+
+.color-pill-filter-btn.active {
+  box-shadow: 0 2px 6px rgba(var(--ui-accent-rgb), 0.25);
+}
+
+.sync-option-card.active {
+  background-color: rgba(var(--ui-accent-rgb), 0.05);
+  box-shadow: 0 2px 8px rgba(var(--ui-accent-rgb), 0.12);
+}
+
+[data-theme="dark"] .sync-option-card.active,
+[data-theme="amoled"] .sync-option-card.active {
+  background-color: rgba(var(--ui-accent-rgb), 0.1);
+}
+
+.upload-option-card.dropzone-card:hover,
+.upload-option-card.dropzone-card.drag-active {
+  background-color: rgba(var(--ui-accent-rgb), 0.08);
+  box-shadow: 0 8px 24px rgba(var(--ui-accent-rgb), 0.18);
+}
+
+[data-theme="dark"] .upload-option-card.dropzone-card:hover,
+[data-theme="dark"] .upload-option-card.dropzone-card.drag-active,
+[data-theme="amoled"] .upload-option-card.dropzone-card:hover,
+[data-theme="amoled"] .upload-option-card.dropzone-card.drag-active {
+  background-color: rgba(var(--ui-accent-rgb), 0.14);
+}
+
+.dropzone-hint {
+  background: rgba(var(--ui-accent-rgb), 0.12);
+}
+
+.browse-trigger-btn {
+  box-shadow: 0 2px 8px rgba(var(--ui-accent-rgb), 0.25);
+}
+
+/* Keep annotation controls legible without tinting them with the page beneath. */
+.floating-toolbar {
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 18px;
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08);
+  transform: translateX(-50%);
+  transition: opacity 0.15s ease;
+}
+
+.highlight-action-toolbar {
+  z-index: 700;
+  transform: translateX(-50%);
+}
+
+#floating-color-dots,
+#highlight-action-colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 100%;
+  gap: 5px;
+  padding: 3px;
+}
+
+.floating-toolbar .color-dot-btn {
+  flex: 0 0 26px;
+  padding: 0;
+}
+
+.floating-toolbar .color-dot-btn:hover {
+  transform: scale(1.12);
+}
+
+.floating-toolbar .toolbar-divider {
+  flex: 0 0 1px;
+  height: 24px;
+  margin: 0 2px;
+}
+
+.floating-toolbar > .btn-icon {
+  display: inline-flex;
+  flex: 0 0 32px;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+
+.floating-toolbar .ui-icon,
+.floating-toolbar .drawing-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.floating-toolbar button:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 360px) {
+  .floating-toolbar {
+    gap: 4px;
+    padding: 6px;
+    border-radius: 16px;
+  }
+
+  .floating-toolbar > .btn-icon {
+    flex-basis: 30px;
+    width: 30px;
+    height: 30px;
+  }
+}

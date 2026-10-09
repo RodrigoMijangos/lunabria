@@ -4,13 +4,15 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=./backend
-Environment="PATH=./.venv/bin:/usr/local/bin:/usr/bin"
-Environment="CALIBRE_LIBRARY_PATH=../data/calibre_library"
-Environment="APP_DATA_DIR=../data"
-Environment="HOST=127.0.0.1"
-Environment="PORT=8000"
-ExecStart=python3 run.py
+# User and Group under which the service runs
+User=www-data
+Group=www-data
+
+# Replace /opt/lunabria with the absolute path to your repository clone,
+# or simply run: bash systemd/install.sh to configure automatically.
+WorkingDirectory=/opt/lunabria/backend
+Environment="PATH=/opt/lunabria/backend/.venv/bin:/usr/local/bin:/usr/bin"
+ExecStart=/opt/lunabria/backend/.venv/bin/hypercorn app.main:app --bind 127.0.0.1:8000 --access-logfile - --error-logfile -
 Restart=always
 RestartSec=5
 

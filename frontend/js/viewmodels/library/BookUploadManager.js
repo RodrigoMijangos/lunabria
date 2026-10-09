@@ -129,7 +129,7 @@ class BookUploadManager {
     const sendBtn = document.getElementById('upload-send-btn');
     if (sendBtn) {
       sendBtn.disabled = true;
-      sendBtn.textContent = '⏳ Uploading...';
+      sendBtn.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Uploading...';
     }
 
     try {

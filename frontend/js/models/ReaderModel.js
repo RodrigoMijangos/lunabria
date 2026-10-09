@@ -11,6 +11,7 @@ class ReaderModel {
     this.totalPages = 0;
     this.currentPage = 1;
     this.scale = 1.3;
+    this.fitMode = localStorage.getItem('moon_reader_fit_mode') || 'width';
     this.viewMode = this.normalizeViewMode(localStorage.getItem('moon_reader_view_mode'));
     this.drawTool = 'pen'; // 'pen' | 'highlighter' | 'eraser' | 'pan'
     this.drawColor = '#1e293b';
@@ -23,6 +24,8 @@ class ReaderModel {
     this.activeHighlight = null;
     this.selectedRange = null;
     this.selectedText = '';
+    this.selectedRects = [];
+    this.selectedPage = null;
     this.colors = [
       { id: 'yellow', name: 'Key Idea', color: '#fef08a' },
       { id: 'green', name: 'Definition', color: '#bbf7d0' },
@@ -64,6 +67,7 @@ class ReaderModel {
     this.totalPages = 0;
     this.currentPage = 1;
     this.scale = 1.3;
+    this.fitMode = localStorage.getItem('moon_reader_fit_mode') || 'width';
     this.annotations = [];
     this.pageStrokes.clear();
     this.activeHighlight = null;
@@ -95,16 +99,27 @@ class ReaderModel {
 
   // --- Zoom Scale State ---
   setScale(scale) {
-    this.scale = Math.max(0.5, Math.min(3.0, Math.round(scale * 100) / 100));
+    this.scale = Math.max(0.25, Math.min(5.0, Math.round(scale * 100) / 100));
     return this.scale;
   }
 
+  setFitMode(mode) {
+    const validModes = ['width', 'page', null];
+    this.fitMode = validModes.includes(mode) ? mode : null;
+    if (this.fitMode) {
+      localStorage.setItem('moon_reader_fit_mode', this.fitMode);
+    } else {
+      localStorage.removeItem('moon_reader_fit_mode');
+    }
+    return this.fitMode;
+  }
+
   calculateZoomInScale() {
-    return Math.min(3.0, this.scale + 0.15);
+    return Math.min(5.0, Math.round((this.scale + 0.15) * 100) / 100);
   }
 
   calculateZoomOutScale() {
-    return Math.max(0.5, this.scale - 0.15);
+    return Math.max(0.25, Math.round((this.scale - 0.15) * 100) / 100);
   }
 
   // --- View Mode State ---

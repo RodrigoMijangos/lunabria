@@ -14,7 +14,7 @@
 
   <!-- PDF.js official textLayer stylesheet -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/web/pdf_viewer.min.css">
-  <link rel="stylesheet" href="./css/style.css?v=0.11.1">
+  <link rel="stylesheet" href="./css/style.css?v=1.0.10-selection-layout">
   
   <!-- PDF.js library -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs" type="module"></script>
@@ -30,41 +30,41 @@
   <header class="navbar">
     <div class="nav-left">
       <a class="brand" id="brand-link">
-        <span class="brand-badge">🌙</span>
+        <span class="brand-badge"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#moon"></use></svg></span>
         <span class="brand-title">Lunabria</span>
       </a>
     </div>
 
     <!-- Center Search Bar -->
     <div class="search-box">
-      <span class="search-icon">🔍</span>
+      <span class="search-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg></span>
       <input type="text" id="search-input" class="search-input" placeholder="Search by title, author, or tags..." autocomplete="off" />
-      <button id="search-clear-btn" class="search-clear-btn" style="display: none;" title="Clear search">✕</button>
+      <button id="search-clear-btn" class="search-clear-btn" style="display: none;" title="Clear search" aria-label="Clear search"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
     </div>
 
     <div class="nav-controls">
       <!-- Hidden/Accessible Virtual Library Selector (kept in sync with chips) -->
       <select id="vl-select" class="select-custom" style="display: none;">
-        <option value="">📚 All Libraries</option>
+        <option value="">All Libraries</option>
       </select>
 
       <button id="new-vl-btn" class="btn btn-secondary" title="New Collection">+ Collection</button>
 
       <!-- Highlight Colors Settings -->
-      <button id="settings-colors-btn" class="btn btn-icon" title="Customize Highlight Colors">🎨</button>
+      <button id="settings-colors-btn" class="btn btn-icon" title="Customize Highlight Colors" aria-label="Customize Highlight Colors"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#palette"></use></svg></button>
 
       <!-- Sync / Autosave Settings -->
-      <button id="settings-sync-btn" class="btn btn-icon" title="Configure Sync and Autosave">⚙️</button>
+      <button id="settings-sync-btn" class="btn btn-icon" title="Configure Sync and Autosave" aria-label="Configure Sync and Autosave"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg></button>
 
       <!-- Theme Switcher -->
       <select id="theme-select" class="select-custom theme-select">
-        <option value="sepia">📖 Sepia</option>
-        <option value="dark">🌙 Dark</option>
-        <option value="amoled">🖤 AMOLED</option>
+        <option value="sepia">Sepia</option>
+        <option value="dark">Dark</option>
+        <option value="amoled">AMOLED</option>
       </select>
 
       <!-- Upload Button (Optimized for PC) -->
-      <button id="upload-btn" class="btn btn-primary btn-desktop">⬆️ Add Books</button>
+      <button id="upload-btn" class="btn btn-primary btn-desktop"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#upload"></use></svg> Add Books</button>
     </div>
   </header>
 
@@ -73,7 +73,7 @@
     <!-- Recents Section: Top 10 Books (Continuar Leyendo) -->
     <section id="recents-section" style="display: none;">
       <div class="section-header">
-        <h2 class="section-title">⏱️ Continue Reading</h2>
+        <h2 class="section-title"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#clock"></use></svg> Continue Reading</h2>
         <span class="section-subtitle">Recently synced reads</span>
       </div>
       <div class="book-grid recents-container" id="recents-list"></div>
@@ -84,7 +84,7 @@
       <div class="catalog-header">
         <div class="section-header-row">
           <div class="section-header">
-            <h2 class="section-title">📖 Book Catalog</h2>
+            <h2 class="section-title"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#book-open"></use></svg> Book Catalog</h2>
             <span id="books-count-badge" class="badge-pill">0 books</span>
           </div>
           <div class="catalog-controls">
@@ -136,14 +136,14 @@
         <nav class="catalog-pagination" id="catalog-pagination" aria-label="Catalog pagination" hidden>
           <div class="catalog-page-controls">
             <button class="btn btn-secondary catalog-page-nav" id="catalog-page-previous" type="button" aria-label="Previous page">
-              <span aria-hidden="true">←</span><span class="catalog-page-nav-label">Previous</span>
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#chevron-left"></use></svg><span class="catalog-page-nav-label">Previous</span>
             </button>
             <div class="catalog-page-jump" title="Enter a page number and press Enter to jump">
               <input type="text" id="catalog-page-input" class="catalog-page-input" value="1" inputmode="numeric" pattern="[0-9]*" autocomplete="off" aria-label="Current catalog page" title="Enter a page number and press Enter">
               <span>of <span id="catalog-page-total">1</span></span>
             </div>
             <button class="btn btn-secondary catalog-page-nav" id="catalog-page-next" type="button" aria-label="Next page">
-              <span class="catalog-page-nav-label">Next</span><span aria-hidden="true">→</span>
+              <span class="catalog-page-nav-label">Next</span><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#chevron-right"></use></svg>
             </button>
           </div>
           <div class="catalog-page-numbers" id="catalog-page-numbers" role="group" aria-label="Select page"></div>
@@ -158,7 +158,7 @@
     <!-- Reader Header -->
     <div id="reader-header" class="reader-header">
       <button id="reader-back-btn" class="hud-btn hud-btn-outline" title="Back to Catalog">
-        <span class="hud-icon">←</span>
+        <svg class="ui-icon hud-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#arrow-left"></use></svg>
         <span>Exit</span>
       </button>
 
@@ -171,8 +171,18 @@
         <!-- Document Zoom Controls -->
         <div class="hud-zoom-group" title="Zoom Level (or use Ctrl + Wheel / Ctrl + / -)">
           <button id="reader-zoom-out-btn" class="hud-zoom-btn" title="Zoom Out (Ctrl + -)">−</button>
-          <button id="reader-zoom-reset-btn" class="hud-zoom-label" title="Reset Zoom (Ctrl + 0)">100%</button>
+          <button id="reader-zoom-reset-btn" class="hud-zoom-label" title="Actual Size / 100% (Ctrl + 0)">100%</button>
           <button id="reader-zoom-in-btn" class="hud-zoom-btn" title="Zoom In (Ctrl + +)">+</button>
+          <button id="reader-fit-width-btn" class="hud-zoom-btn hud-fit-btn" title="Fit to Width (Shortcut: W)">
+            <svg class="hud-fit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M4 12h16M7 8l-3 4 3 4M17 8l3 4-3 4M2 4v16M22 4v16"/>
+            </svg>
+          </button>
+          <button id="reader-fit-page-btn" class="hud-zoom-btn hud-fit-btn" title="Fit to One Page (Shortcut: H)">
+            <svg class="hud-fit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h4"/>
+            </svg>
+          </button>
         </div>
 
         <div class="hud-divider" id="hud-page-divider"></div>
@@ -196,15 +206,15 @@
         <div class="hud-divider" id="hud-mode-divider"></div>
 
         <select id="view-mode-select" class="hud-select" title="Reading Mode">
-          <option value="single">📄 Single Page</option>
-          <option value="dual">📖 Two Pages</option>
-          <option value="flow">📜 Continuous Flow</option>
-          <option value="notes">📝 Annotations Only</option>
+          <option value="single">Single Page</option>
+          <option value="dual">Two Pages</option>
+          <option value="flow">Continuous Flow</option>
+          <option value="notes">Annotations Only</option>
         </select>
-        <button id="reader-sync-btn" class="hud-btn hud-btn-outline" title="Configure Sync and Autosave">⚙️ Autosave</button>
-        <button id="reader-offline-btn" class="hud-btn hud-btn-outline" title="Save book in browser for offline reading">📥 Offline</button>
+        <button id="reader-sync-btn" class="hud-btn hud-btn-outline" title="Configure Sync and Autosave"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg> Autosave</button>
+        <button id="reader-offline-btn" class="hud-btn hud-btn-outline" title="Save book in browser for offline reading"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Offline</button>
         <button id="reader-draw-toggle-btn" class="hud-btn hud-btn-outline" title="Drawing Mode / Smart Pen (Shortcut: P or D)"><svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg><span class="reader-draw-toggle-label">Draw</span></button>
-        <button id="reader-drawer-toggle-btn" class="hud-btn hud-btn-primary" title="Notes, Highlights, and Table of Contents">📝 Annotations</button>
+        <button id="reader-drawer-toggle-btn" class="hud-btn hud-btn-primary" title="Notes, Highlights, and Table of Contents"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg> Annotations</button>
       </div>
     </div>
 
@@ -219,11 +229,11 @@
 
     <!-- Floating Selection Toolbar (Moon-style) -->
     <div id="floating-toolbar" class="floating-toolbar" style="display: none;">
-      <div id="floating-color-dots" style="display: flex; gap: 4px;"></div>
+      <div id="floating-color-dots"></div>
       <div class="toolbar-divider"></div>
-      <button id="floating-note-btn" class="btn btn-icon" title="Add Note" style="font-size: 0.8rem; padding: 4px 6px;">📝</button>
-      <button id="floating-copy-btn" class="btn btn-icon" title="Copy Text" style="font-size: 0.8rem; padding: 4px 6px;">📋</button>
-      <button id="floating-draw-btn" class="btn btn-icon" title="Canvas Mode / Draw with Smart Pen (Shortcut: P or D)" style="font-size: 0.85rem; padding: 4px 6px;"><svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
+      <button id="floating-note-btn" class="btn btn-icon" title="Add Note" aria-label="Add Note"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg></button>
+      <button id="floating-copy-btn" class="btn btn-icon" title="Copy Text" aria-label="Copy Text"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#copy"></use></svg></button>
+      <button id="floating-draw-btn" class="btn btn-icon" title="Canvas Mode / Draw with Smart Pen (Shortcut: P or D)" aria-label="Canvas Mode / Draw"><svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
     </div>
 
     <!-- Floating Drawing / Canvas Palette (Excalidraw-inspired Smart Pencil Bar) -->
@@ -277,7 +287,7 @@
 
       <!-- Actions: Undo, Clear, Quick Toggle, Accessibility Settings, Close -->
       <div class="drawing-actions-group">
-        <button id="draw-action-toggle-tool" type="button" class="drawing-tool-btn" title="Toggle pen ↔ highlighter — Shortcut: T" aria-keyshortcuts="T">
+        <button id="draw-action-toggle-tool" type="button" class="drawing-tool-btn" title="Toggle between pen and highlighter — Shortcut: T" aria-keyshortcuts="T">
           <svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 16-4 4 4 4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>
         </button>
         <button id="draw-action-settings" type="button" class="drawing-tool-btn" title="Stylus, accessibility, and palm rejection settings">
@@ -304,29 +314,29 @@
     <div id="stylus-accessibility-modal" class="modal-backdrop" style="display: none;">
       <div class="modal-dialog" style="max-width: 480px;">
         <div class="modal-header">
-          <h3 class="modal-title">⚙️ Stylus & Accessibility Settings</h3>
-          <button type="button" id="stylus-modal-close-x" class="btn btn-icon">✕</button>
+          <h3 class="modal-title"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg> Stylus & Accessibility Settings</h3>
+          <button type="button" id="stylus-modal-close-x" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
         </div>
         <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
           <!-- 1. Palm Rejection / Modo Palma -->
           <div class="form-group">
             <label class="form-label" style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
-              <span>✋</span> Palm Rejection & Scrolling Mode
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#hand"></use></svg> Palm Rejection & Scrolling Mode
             </label>
             <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 6px;">
               Configure how your hand interacts with the screen when using a stylus or drawing tablet.
             </p>
             <select id="setting-palm-rejection" class="form-select">
-              <option value="strict">🛡️ Strict Rejection: Only stylus draws (Scroll with Hand ✋ or Space)</option>
-              <option value="hybrid">🖐️ Hybrid Mode: Stylus draws with pressure, fingers scroll page</option>
-              <option value="off">✏️ Free Mode: Any touch (finger or stylus) draws</option>
+              <option value="strict">Strict Rejection: Only stylus draws (scroll with touch or Space)</option>
+              <option value="hybrid">Hybrid Mode: Stylus draws with pressure, fingers scroll page</option>
+              <option value="off">Free Mode: Any touch (finger or stylus) draws</option>
             </select>
           </div>
 
           <!-- 2. Double-Click Sensitivity -->
           <div class="form-group">
             <label class="form-label" style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
-              <span>⏱️</span> Double Click / Tap Sensitivity
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#clock"></use></svg> Double Click / Tap Sensitivity
             </label>
             <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 6px;">
               Allowed time between two taps to toggle between Pen and Highlighter.
@@ -335,17 +345,17 @@
               <option value="500">Normal (500 ms) — Recommended for stylus</option>
               <option value="750">Relaxed / Accessible (750 ms) — Larger time window</option>
               <option value="350">Fast (350 ms) — For mouse or quick taps</option>
-              <option value="0">🚫 Disabled — Use toolbar buttons only</option>
+              <option value="0">Disabled — Use toolbar buttons only</option>
             </select>
           </div>
 
           <!-- 3. Double-Click Action -->
           <div class="form-group">
             <label class="form-label" style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
-              <span>🎯</span> Double Click Action
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#target"></use></svg> Double Click Action
             </label>
             <select id="setting-double-click-action" class="form-select">
-              <option value="toggle">Toggle between Pen ✏️ and Highlighter 🖍️ only</option>
+              <option value="toggle">Toggle between Pen and Highlighter only</option>
               <option value="toggle_and_highlight">Toggle and automatically highlight touched word</option>
             </select>
           </div>
@@ -353,7 +363,7 @@
           <!-- 4. Pressure Sensitivity Curve -->
           <div class="form-group">
             <label class="form-label" style="font-weight: 700; display: flex; align-items: center; gap: 6px;">
-              <span>🖊️</span> Pen Pressure Curve
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#pen"></use></svg> Pen Pressure Curve
             </label>
             <select id="setting-pressure-curve" class="form-select">
               <option value="normal">Normal / Balanced</option>
@@ -371,10 +381,10 @@
 
     <!-- Floating Highlight Action Menu (Click on existing highlight) -->
     <div id="highlight-action-menu" class="floating-toolbar highlight-action-toolbar" style="display: none;">
-      <div id="highlight-action-colors" style="display: flex; gap: 4px;"></div>
+      <div id="highlight-action-colors"></div>
       <div class="toolbar-divider"></div>
-      <button id="highlight-action-note-btn" class="btn btn-icon" title="Edit Note" style="font-size: 0.8rem; padding: 4px 6px;">📝</button>
-      <button id="highlight-action-delete-btn" class="btn btn-icon" title="Delete Highlight" style="font-size: 0.8rem; padding: 4px 6px; color: #ef4444;">🗑️</button>
+      <button id="highlight-action-note-btn" class="btn btn-icon" title="Edit Note" aria-label="Edit Note"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg></button>
+      <button id="highlight-action-delete-btn" class="btn btn-icon" title="Delete Highlight" aria-label="Delete Highlight" style="color: #ef4444;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#trash"></use></svg></button>
     </div>
     <div id="reader-quick-highlight-palette" class="quick-highlight-palette" role="group" aria-label="Change highlight color" aria-hidden="true" style="display: none;"></div>
 
@@ -382,7 +392,7 @@
     <div id="reader-footer" class="reader-footer">
       <!-- Standard PDF reading controls -->
       <button id="reader-prev-btn" class="hud-btn hud-btn-nav" title="Previous Page">
-        <span class="hud-icon">◀</span>
+        <svg class="ui-icon hud-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#chevron-left"></use></svg>
         <span>Previous</span>
       </button>
       <div id="reader-page-shortcuts" class="page-shortcuts" role="group" aria-label="Five nearby pages"></div>
@@ -391,17 +401,17 @@
       </div>
       <button id="reader-next-btn" class="hud-btn hud-btn-nav" title="Next Page">
         <span>Next</span>
-        <span class="hud-icon">▶</span>
+        <svg class="ui-icon hud-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#chevron-right"></use></svg>
       </button>
 
       <!-- Alternate Notes-Mode Footer Bar -->
       <div id="reader-notes-footer" class="reader-notes-footer" style="display: none;">
         <div class="notes-footer-status">
-          <span class="notes-footer-icon">📝</span>
+          <span class="notes-footer-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg></span>
           <span id="notes-footer-counter">Book Annotations Notebook</span>
         </div>
         <button id="notes-footer-read-btn" type="button" class="hud-btn hud-btn-primary">
-          <span>📖</span> <span>Back to Reading</span>
+          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#book-open"></use></svg> <span>Back to Reading</span>
         </button>
       </div>
     </div>
@@ -411,16 +421,16 @@
     <aside id="reader-drawer" class="drawer">
       <div class="drawer-header">
         <h3 style="font-size: 1.1rem; font-weight: 700;">Notes & Highlights</h3>
-        <button id="drawer-close-btn" class="btn btn-icon">✕</button>
+        <button id="drawer-close-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
       </div>
       
       <div style="padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;">
         <button id="drawer-view-mode-btn" type="button" class="btn btn-secondary btn-sm" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
-          <span>🖥️</span> <span>Open Full Annotations View</span>
+          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#desktop"></use></svg> <span>Open Full Annotations View</span>
         </button>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span style="font-size: 0.82rem; font-weight: 600;">Filter by Color:</span>
-          <button id="export-notes-btn" class="btn btn-sm btn-primary" style="font-size: 0.78rem;">⬇️ Export (.md)</button>
+          <button id="export-notes-btn" class="btn btn-sm btn-primary" style="font-size: 0.78rem;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Export (.md)</button>
         </div>
       </div>
 
@@ -460,7 +470,10 @@
       <div id="vl-section-manual" style="display: none;">
         <div class="form-group">
           <label class="form-label">Search and select books for this library:</label>
-          <input type="text" id="vl-manual-search" class="input-custom" placeholder="🔍 Filter list by title or author..." style="width: 100%; margin-bottom: 8px;" />
+          <div class="manual-library-search-wrap">
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg>
+            <input type="text" id="vl-manual-search" class="input-custom" placeholder="Filter list by title or author..." style="width: 100%; margin-bottom: 8px;" />
+          </div>
           <div id="vl-manual-list" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;"></div>
         </div>
       </div>
@@ -477,16 +490,16 @@
     <div class="modal-dialog upload-modal-dialog">
       <div class="modal-header">
         <h3 style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-          <span>⬆️</span> Add Books to Calibre
+          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#upload"></use></svg> Add Books to Calibre
         </h3>
-        <button id="upload-close-x-btn" class="btn btn-icon" title="Close">✕</button>
+        <button id="upload-close-x-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
       </div>
 
       <!-- 2 Options: Drag & Drop + Modern Browse -->
       <div class="upload-options-grid">
         <!-- Option 1: Drag & Drop Area -->
         <div id="upload-dropzone" class="upload-option-card dropzone-card" title="Click or drag files here">
-          <div class="upload-option-icon">📥</div>
+          <div class="upload-option-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg></div>
           <div class="upload-option-title">Drag and Drop</div>
           <p class="upload-option-desc">Drag your PDF books directly from your computer's file explorer and drop them here.</p>
           <div class="dropzone-hint">
@@ -496,11 +509,11 @@
 
         <!-- Option 2: Enhanced Browse -->
         <div class="upload-option-card browse-card">
-          <div class="upload-option-icon">📂</div>
+          <div class="upload-option-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#folder"></use></svg></div>
           <div class="upload-option-title">Browse on Computer</div>
           <p class="upload-option-desc">Select one or multiple PDF files from your system folders.</p>
           <button id="upload-browse-btn" type="button" class="btn btn-primary browse-trigger-btn">
-            <span>🔍 Browse Files</span>
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg> Browse Files
           </button>
           <input type="file" id="upload-file-input" class="visually-hidden-file-input" multiple accept=".pdf" />
           <span class="upload-format-hint">Formats: .PDF (Batch upload supported)</span>
@@ -554,7 +567,7 @@
         <label class="form-label">Online Download Assistant (Calibre CLI):</label>
         <div style="display: flex; gap: 8px;">
           <input type="text" id="edit-isbn" class="input-custom" placeholder="ISBN (e.g. 9780132350884)" style="flex: 1;" />
-          <button id="edit-fetch-isbn-btn" class="btn btn-primary" type="button">🔍 Fetch from Calibre</button>
+          <button id="edit-fetch-isbn-btn" class="btn btn-primary" type="button"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg> Fetch from Calibre</button>
         </div>
         <details style="margin-top: 12px;">
           <summary style="cursor: pointer; font-weight: 600;">Configure metadata sources</summary>
@@ -583,7 +596,7 @@
       </div>
 
       <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 20px;">
-        <button id="edit-delete-btn" type="button" class="btn btn-danger pc-only" style="margin-right: auto;" title="Permanently delete this book from Calibre library">🗑️ Delete Book</button>
+        <button id="edit-delete-btn" type="button" class="btn btn-danger pc-only" style="margin-right: auto;" title="Permanently delete this book from Calibre library"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#trash"></use></svg> Delete Book</button>
         <button id="edit-cancel-btn" class="btn">Cancel</button>
         <button id="edit-save-btn" class="btn btn-primary">Save to Calibre</button>
       </div>
@@ -613,9 +626,9 @@
     <div class="modal-dialog">
       <div class="modal-header">
         <h3 style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-          <span>⚙️</span> Sync & Autosave
+          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg> Sync & Autosave
         </h3>
-        <button id="sync-close-x-btn" class="btn btn-icon" title="Close">✕</button>
+        <button id="sync-close-x-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
       </div>
 
       <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.5;">
@@ -628,7 +641,7 @@
           <input type="radio" name="sync-mode" value="interval" class="sync-radio" />
           <div class="sync-card-content">
             <div class="sync-card-title">
-              <strong>⏱️ Periodic Autosave</strong>
+              <strong><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#clock"></use></svg> Periodic Autosave</strong>
               <span class="badge-pill" style="font-size: 0.72rem; padding: 2px 6px; background: rgba(59, 130, 246, 0.15); color: #3b82f6;">Recommended</span>
             </div>
             <p class="sync-card-desc">
@@ -653,7 +666,7 @@
           <input type="radio" name="sync-mode" value="close" class="sync-radio" />
           <div class="sync-card-content">
             <div class="sync-card-title">
-              <strong>📕 On Book Exit Only</strong>
+              <strong><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#book"></use></svg> On Book Exit Only</strong>
             </div>
             <p class="sync-card-desc">
               Zero network requests while reading. Accumulated progress is sent to the server only when clicking "Exit" or closing the tab.
@@ -666,7 +679,7 @@
           <input type="radio" name="sync-mode" value="page" class="sync-radio" />
           <div class="sync-card-content">
             <div class="sync-card-title">
-              <strong>📄 After Each Page (Immediate)</strong>
+              <strong><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#page"></use></svg> After Each Page (Immediate)</strong>
             </div>
             <p class="sync-card-desc">
               Sends a request to the server every time you turn or scroll a page.
@@ -678,14 +691,14 @@
       <!-- Sync Status Box & Manual Trigger -->
       <div class="sync-status-box" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 20px;">
         <div style="display: flex; align-items: center; gap: 10px;">
-          <span id="sync-status-icon" style="font-size: 1.2rem;">☁️</span>
+          <span id="sync-status-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#cloud"></use></svg></span>
           <div>
             <div id="sync-status-title" style="font-size: 0.85rem; font-weight: 600;">Synced</div>
             <div id="sync-status-detail" style="font-size: 0.75rem; color: var(--text-secondary);">All reading progress is up to date with the server</div>
           </div>
         </div>
         <button id="sync-manual-now-btn" type="button" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; font-weight: 600;">
-          🔄 Sync Now
+          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#sync"></use></svg> Sync Now
         </button>
       </div>
 
@@ -697,49 +710,65 @@
   </div>
 
   <!-- Core Storage & API Services -->
-  <script src="./js/db.js?v=0.6.19"></script>
-  <script src="./js/api.js?v=0.8.1"></script>
+  <script src="./js/db.js?v=1.0.6"></script>
+  <script src="./js/services/books.js?v=1.0.8"></script>
+  <script src="./js/services/virtual-libraries.js?v=1.0.8"></script>
+  <script src="./js/services/metadata.js?v=1.0.8"></script>
+  <script src="./js/services/progress.js?v=1.0.8"></script>
+  <script src="./js/services/layouts.js?v=1.0.8"></script>
+  <script src="./js/services/annotations.js?v=1.0.8"></script>
+  <script src="./js/services/colors.js?v=1.0.8"></script>
+  <script src="./js/services/drawings.js?v=1.0.8"></script>
+  <script src="./js/api.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Models -->
-  <script src="./js/models/ReaderModel.js?v=0.6.2"></script>
+  <script src="./js/models/ReaderModel.js?v=1.0.6"></script>
   <script src="./js/models/LibraryModel.js?v=0.8.1"></script>
 
   <!-- MVVM Architecture: Modular Reader Views -->
   <script src="./js/views/reader/PDFPageView.js?v=0.6.2"></script>
-  <script src="./js/views/reader/TextLayerView.js?v=0.6.0"></script>
+  <script src="./js/views/reader/TextLayerView.js?v=1.0.10-selection-hit-test"></script>
   <script src="./js/views/reader/HighlightOverlayView.js?v=0.6.9"></script>
   <script src="./js/views/reader/DrawingCanvasView.js?v=0.6.0"></script>
   <script src="./js/views/reader/ReaderHUDView.js?v=0.6.21"></script>
   <script src="./js/views/reader/ReaderSelectionLoupeView.js?v=0.6.8"></script>
-  <script src="./js/views/reader/NotesView.js?v=0.6.0"></script>
+  <script src="./js/views/reader/NotesView.js?v=1.0.9"></script>
   <script src="./js/views/ReaderViews.js?v=0.6.0"></script>
 
   <!-- MVVM Architecture: Modular Library Views -->
   <script src="./js/views/ModalView.js?v=0.6.2"></script>
-  <script src="./js/views/library/BookCardView.js?v=0.8.0"></script>
+  <script src="./js/views/library/BookCardView.js?v=1.0.9"></script>
   <script src="./js/views/library/RecentReadsView.js?v=0.9.2"></script>
-  <script src="./js/views/library/VirtualLibraryView.js?v=0.9.0"></script>
-  <script src="./js/views/library/UploadModalView.js?v=0.6.0"></script>
+  <script src="./js/views/library/VirtualLibraryView.js?v=1.0.9"></script>
+  <script src="./js/views/library/UploadModalView.js?v=1.0.9"></script>
   <script src="./js/views/LibraryViews.js?v=0.6.0"></script>
+  <script src="./js/views/library/CatalogView.js?v=1.0.8"></script>
+  <script src="./js/views/library/CatalogPaginationView.js?v=1.0.8"></script>
+  <script src="./js/views/library/CatalogSelectionView.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Modular Library ViewModels -->
-  <script src="./js/viewmodels/library/BookUploadManager.js?v=0.6.2"></script>
-  <script src="./js/viewmodels/library/BookMetadataManager.js?v=0.8.1"></script>
+  <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.9"></script>
+  <script src="./js/viewmodels/library/BookMetadataManager.js?v=1.0.9"></script>
   <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.0"></script>
   <script src="./js/viewmodels/library/HighlightColorSettingsManager.js?v=0.6.2"></script>
-  <script src="./js/viewmodels/library/SyncSettingsManager.js?v=0.6.13"></script>
-  <script src="./js/viewmodels/LibraryViewModel.js?v=0.11.2"></script>
+  <script src="./js/viewmodels/library/SyncSettingsManager.js?v=1.0.9"></script>
+  <script src="./js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8"></script>
+  <script src="./js/viewmodels/LibraryViewModel.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Modular Reader ViewModels -->
-  <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=0.6.21"></script>
-  <script src="./js/viewmodels/reader/ReaderTextHighlightController.js?v=0.8.2"></script>
-  <script src="./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=0.8.2"></script>
+  <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.6"></script>
+  <script src="./js/viewmodels/reader/ReaderTextHighlightController.js?v=1.0.10"></script>
+  <script src="./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.0.10-selection-anchor-v6"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingViewModel.js?v=0.6.15"></script>
-  <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=0.6.9"></script>
-  <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=0.6.18"></script>
-  <script src="./js/viewmodels/reader/ReaderNotesViewModel.js?v=0.6.0"></script>
-  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=0.6.19"></script>
-  <script src="./js/viewmodels/ReaderViewModel.js?v=0.8.1"></script>
+  <script src="./js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout"></script>
+  <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.0.10-selection-layout"></script>
+  <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.0.6"></script>
+  <script src="./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9"></script>
+  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.0.10"></script>
+  <script src="./js/services/reader/ReaderOfflineService.js?v=1.0.8"></script>
+  <script src="./js/viewmodels/reader/ReaderEventBindings.js?v=1.0.8"></script>
+  <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.0.8"></script>
+  <script src="./js/viewmodels/ReaderViewModel.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Facades & Singletons -->
   <script src="./js/reader.js?v=0.6.0"></script>

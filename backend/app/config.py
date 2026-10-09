@@ -26,15 +26,21 @@ def _load_env_file(path: Path) -> None:
 _load_env_file(WORKSPACE_DIR / ".env")
 _load_env_file(BASE_DIR / ".env")
 
-DATA_DIR = Path(os.getenv("APP_DATA_DIR", str(WORKSPACE_DIR / "data")))
+def _resolve_path(raw_path: str | None, default: Path) -> Path:
+    if not raw_path:
+        return default
+    p = Path(raw_path)
+    return p if p.is_absolute() else (WORKSPACE_DIR / p).resolve()
+
+DATA_DIR = _resolve_path(os.getenv("APP_DATA_DIR"), WORKSPACE_DIR / "data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Calibre Library Path (can be set via env var)
 # Default for testing: data/test_library or user-specified path
-CALIBRE_LIBRARY_PATH = os.getenv("CALIBRE_LIBRARY_PATH", str(DATA_DIR / "calibre_library"))
+CALIBRE_LIBRARY_PATH = str(_resolve_path(os.getenv("CALIBRE_LIBRARY_PATH"), DATA_DIR / "calibre_library"))
 
 # Application State Database (SQLite)
-APP_STATE_DB_PATH = os.getenv("APP_STATE_DB_PATH", str(DATA_DIR / "app_state.db"))
+APP_STATE_DB_PATH = str(_resolve_path(os.getenv("APP_STATE_DB_PATH"), DATA_DIR / "app_state.db"))
 
 # Upload temp directory
 UPLOAD_DIR = DATA_DIR / "uploads"

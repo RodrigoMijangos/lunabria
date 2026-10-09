@@ -24,6 +24,7 @@ class ReaderToolbarManager {
     this.bindDrawingToolbarEvents();
     this.bindKeyboardShortcuts();
     this.bindDrawerEvents();
+    this.bindWheelZoom();
   }
 
   bindReaderHeaderEvents() {
@@ -65,6 +66,8 @@ class ReaderToolbarManager {
     document.getElementById('reader-zoom-in-btn')?.addEventListener('click', () => this.nav.zoomIn());
     document.getElementById('reader-zoom-out-btn')?.addEventListener('click', () => this.nav.zoomOut());
     document.getElementById('reader-zoom-reset-btn')?.addEventListener('click', () => this.nav.resetZoom());
+    document.getElementById('reader-fit-width-btn')?.addEventListener('click', () => this.nav.fitWidth());
+    document.getElementById('reader-fit-page-btn')?.addEventListener('click', () => this.nav.fitPage());
 
     // Fullscreen toggle
     document.getElementById('reader-fullscreen-btn')?.addEventListener('click', () => {
@@ -94,13 +97,13 @@ class ReaderToolbarManager {
     button.disabled = false;
 
     if (isComplete) {
-      button.textContent = '✓ Offline';
+      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#circle-check"></use></svg> Offline';
       button.title = 'The PDF and all layouts are saved for offline reading';
     } else if (pdfCached) {
-      button.textContent = '📥 Layouts';
+      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Layouts';
       button.title = 'The PDF is saved. Download layouts to complete offline access';
     } else {
-      button.textContent = '📥 Offline';
+      button.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Offline';
       button.title = 'Save the PDF and layouts in browser for offline reading';
     }
   }
@@ -111,17 +114,17 @@ class ReaderToolbarManager {
 
     const requestedBookId = this.model.bookId;
     button.disabled = true;
-    button.textContent = '⏳ Saving';
+    button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Saving';
     try {
       await this.onDownloadOffline((progress) => {
         if (this.model.bookId !== requestedBookId) return;
         if (progress.stage === 'pdf') {
-          button.textContent = '⏳ Downloading PDF';
+          button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Downloading PDF';
         } else if (progress.stage === 'pdf-complete') {
           button.dataset.pdfCached = 'true';
-          button.textContent = '⏳ Preparing layouts';
+          button.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Preparing layouts';
         } else if (progress.stage === 'layouts') {
-          button.textContent = `⏳ Layouts ${progress.completed}/${progress.total}`;
+          button.innerHTML = `<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Layouts ${progress.completed}/${progress.total}`;
         }
       });
       if (this.model.bookId === requestedBookId) {
@@ -130,7 +133,9 @@ class ReaderToolbarManager {
     } catch (error) {
       console.error('[ReaderToolbarManager] Incomplete offline download:', error);
       if (this.model.bookId === requestedBookId) {
-        button.textContent = button.dataset.pdfCached === 'true' ? '⚠️ Retry layouts' : '⚠️ Retry';
+        button.innerHTML = button.dataset.pdfCached === 'true'
+                  ? '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Retry layouts'
+                  : '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#warning"></use></svg> Retry';
         button.title = error.message || 'Could not complete offline download';
       }
     } finally {
@@ -383,6 +388,18 @@ class ReaderToolbarManager {
           return;
         }
 
+        if (e.key === 'w' || e.key === 'W') {
+          e.preventDefault();
+          this.nav.fitWidth();
+          return;
+        }
+
+        if (e.key === 'h' || e.key === 'H') {
+          e.preventDefault();
+          this.nav.fitPage();
+          return;
+        }
+
         if (this.model.viewMode === 'notes') return;
         if (e.key === 'ArrowRight' || e.key === 'PageDown') {
           this.nav.nextPage();
@@ -408,6 +425,45 @@ class ReaderToolbarManager {
     if (!this.model.isSpacePanActive) return;
     this.model.setSpacePanActive(false);
     this.viewportEl.classList.remove('pan-mode-active');
+  }
+
+  bindWheelZoom() {
+    let pendingScale = null;
+    let pendingFocalPoint = null;
+    let wheelRaf = null;
+
+    const handleWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (this.container.style.display !== 'flex') return;
+
+      e.preventDefault();
+
+      const current = pendingScale !== null ? pendingScale : this.model.scale;
+      const deltaMag = Math.abs(e.deltaY);
+      const intensity = deltaMag >= 100 ? Math.min(3, Math.max(1, Math.round(deltaMag / 100))) : 1;
+      const baseStep = 0.25;
+      const step = (e.deltaY < 0 ? baseStep : -baseStep) * intensity;
+      const nextScale = Math.max(0.25, Math.min(5.0, Math.round((current + step) * 100) / 100));
+
+      pendingFocalPoint = { clientX: e.clientX, clientY: e.clientY };
+      if (nextScale === current) return;
+      pendingScale = nextScale;
+
+      if (!wheelRaf) {
+        wheelRaf = requestAnimationFrame(() => {
+          if (pendingScale !== null) {
+            const focal = pendingFocalPoint;
+            const targetScale = pendingScale;
+            pendingScale = null;
+            pendingFocalPoint = null;
+            this.nav.setZoom(targetScale, true, focal);
+          }
+          wheelRaf = null;
+        });
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
   }
 }
 

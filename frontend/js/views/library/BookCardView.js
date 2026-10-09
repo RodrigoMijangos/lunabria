@@ -99,7 +99,7 @@ const BookCardView = {
         return;
       }
       if (onOpenBook) {
-        const page = options.openAtCurrentPage ? (book.current_page || 1) : null;
+        const page = (options.openAtCurrentPage && book.current_page) ? book.current_page : null;
         onOpenBook(book.id, page);
       }
     };
@@ -112,7 +112,7 @@ const BookCardView = {
     if (!books || !books.length) {
       container.innerHTML = `
         <div class="empty-state" style="grid-column: 1 / -1; text-align: center; padding: 48px 16px;">
-          <div style="font-size: 2.5rem; margin-bottom: 12px;">📚</div>
+          <div class="empty-state-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#library"></use></svg></div>
           <h3 style="font-size: 1.1rem; font-weight: 700;">No books found</h3>
           <p style="font-size: 0.88rem; color: var(--text-secondary); margin-top: 6px;">
             Try searching for another term or add books to your library.

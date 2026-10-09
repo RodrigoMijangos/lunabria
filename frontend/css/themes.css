@@ -1,0 +1,74 @@
+/* ========================================================
+   LUNABRIA - MODERN REDESIGN STYLESHEET
+   Themes: Sepia (Editorial Warm), Dark (Modern Slate), AMOLED (Pure Black)
+   ======================================================== */
+
+:root {
+  /* Editorial Warm Sepia (Paperback Daylight) */
+  --bg-primary: #f6f2ea;
+  --bg-secondary: #eee6d8;
+  --bg-surface: #fdfbf7;
+  --bg-elevated: #ffffff;
+  --text-primary: #29211a;
+  --text-secondary: #6e5e50;
+  --text-muted: #998776;
+  --border-color: #e5dac9;
+  --border-subtle: #f0e7d8;
+  --accent-color: #a85222;
+  --accent-hover: #8c4118;
+  --accent-light: #faece3;
+  --accent-contrast: #ffffff;
+  --card-shadow: 0 4px 20px rgba(50, 35, 20, 0.06), 0 1px 3px rgba(50, 35, 20, 0.04);
+  --card-shadow-hover: 0 14px 32px rgba(50, 35, 20, 0.12), 0 2px 6px rgba(50, 35, 20, 0.06);
+  --nav-bg: rgba(253, 251, 247, 0.85);
+  --hud-bg: rgba(253, 251, 247, 0.92);
+  --modal-bg: #fdfbf7;
+  --pdf-filter: none;
+}
+
+[data-theme="dark"] {
+  /* Modern Dark Slate (GitHub/Linear Inspired) */
+  --bg-primary: #0f1219;
+  --bg-secondary: #1a202c;
+  --bg-surface: #151a24;
+  --bg-elevated: #1e2533;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #263042;
+  --border-subtle: #1c2331;
+  --accent-color: #e28743;
+  --accent-hover: #f97316;
+  --accent-light: #2b221e;
+  --accent-contrast: #ffffff;
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --card-shadow-hover: 0 14px 34px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --nav-bg: rgba(21, 26, 36, 0.85);
+  --hud-bg: rgba(21, 26, 36, 0.92);
+  --modal-bg: #151a24;
+  --pdf-filter: invert(0.9) hue-rotate(180deg);
+}
+
+[data-theme="amoled"] {
+  /* True AMOLED Pure Black */
+  --bg-primary: #000000;
+  --bg-secondary: #121212;
+  --bg-surface: #0a0a0a;
+  --bg-elevated: #161616;
+  --text-primary: #ffffff;
+  --text-secondary: #a3a3a3;
+  --text-muted: #666666;
+  --border-color: #242424;
+  --border-subtle: #181818;
+  --accent-color: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-light: #241d0e;
+  --accent-contrast: #000000;
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  --card-shadow-hover: 0 14px 34px rgba(0, 0, 0, 0.95);
+  --nav-bg: rgba(10, 10, 10, 0.9);
+  --hud-bg: rgba(10, 10, 10, 0.95);
+  --modal-bg: #0a0a0a;
+  --pdf-filter: invert(1) hue-rotate(180deg);
+}
+

@@ -106,38 +106,54 @@ Tailored stylus interactions with strict palm rejection, double-tap pen/highligh
 
 ---
 
-## 🚀 Development Setup (WSL2 / Linux VM / Local)
+## ⚠️ Important Considerations & Calibre Prerequisites
 
-The application runs seamlessly on Linux, macOS, or inside a **WSL2** virtual machine equipped with Python 3.11+ and Calibre.
+Lunabria interfaces directly with your Calibre library and CLI utilities. Keep the following external requirements and Calibre behavioral details in mind:
 
-All commands and configurations use paths relative to the repository root:
+> [!WARNING]
+> **Calibre Desktop Concurrency & Database Locks**:
+> Calibre maintains an exclusive lock on `metadata.db` while running. If the Calibre desktop application (`calibre.exe`) or `calibre-server` is open, write operations from Lunabria (such as uploading new books or saving metadata updates via `calibredb`) will return a conflict error.
+> **Recommendation:** Keep desktop Calibre closed when uploading books or modifying metadata in Lunabria. Browsing, streaming, and reading existing books remain fully functional regardless.
 
-1. **Set up the virtual environment:**
-   ```bash
-   cd backend
-   python3 -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   cd ..
+> [!NOTE]
+> **Library Path Length on Windows (< 75 characters)**:
+> Calibre's Windows backend enforces a legacy constraint requiring library paths to be shorter than 75 characters. Avoid placing your library inside deep nested user folders (e.g., `AppData\Local\...` or nested OneDrive folders). Keep library paths compact (e.g., `C:\Calibre Library` or relative project paths like `./data/calibre_library`).
+
+> [!TIP]
+> **Cloud Storage & Network Drives**:
+> Following official Calibre project guidance, avoid hosting your active `CALIBRE_LIBRARY_PATH` directly inside real-time cloud-sync folders (Google Drive, OneDrive, Dropbox) or unbuffered SMB/NFS network shares, as concurrent sync activity can trigger SQLite locking anomalies or database corruption.
+
+> [!IMPORTANT]
+> **Calibre CLI in System PATH**:
+> Lunabria uses Calibre CLI binaries (`calibredb`, `ebook-convert`, `fetch-ebook-metadata`) for library indexing, format conversion, and online metadata retrieval. Make sure Calibre is installed on your host system and accessible in your `PATH`, or specify their custom binary paths in your `.env` configuration file.
+
+---
+
+## 🖥️ Run on a Windows desktop
+
+1. Install Python 3.11 or later and Calibre for Windows. Make sure `calibredb`, `ebook-convert`, and `fetch-ebook-metadata` are available in `PATH`.
+2. Create a `.env` file in the repository root and point it to your Calibre library. For a local-only desktop instance, use:
+
+   ```dotenv
+   CALIBRE_LIBRARY_PATH=C:\Calibre Library
+   APP_DATA_DIR=.\data
+   HOST=127.0.0.1
+   PORT=8000
    ```
 
-2. **Configure environment variables:**
-   ```bash
-   cp .env.example .env
+   Keep the Calibre library path under 75 characters and outside cloud-synced or network folders. If you omit `CALIBRE_LIBRARY_PATH`, Lunabria uses `data/calibre_library`. If Calibre's command-line tools are not in `PATH`, set `CALIBREDB_BIN`, `EBOOK_CONVERT_BIN`, and `FETCH_METADATA_BIN` to their executable paths in `.env`.
+3. In PowerShell, from the repository root, install the runtime packages and start Lunabria:
+
+   ```powershell
+   Set-Location backend
+   py -3 -m venv .venv
+   .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+   .\.venv\Scripts\python.exe run.py
    ```
 
-3. **Run the development server:**
-   ```bash
-   cd backend
-   python run.py
-   ```
+4. Open `http://localhost:8000` in Edge, Chrome, or another modern browser. You can install Lunabria as a desktop app from the browser's install-app menu. Leave the terminal running while using the app; press `Ctrl+C` to stop it.
 
-If launching from a Windows host into your dedicated WSL2 distribution:
-```bash
-wsl -- bash -c "cd backend && python3 run.py"
-```
-
-Open your browser at: `http://localhost:8000` (or `https://localhost:8443` for HTTPS with HTTP/2).
+Close the Calibre desktop application before uploading books or saving metadata, since Calibre locks its library database while open.
 
 ---
 
@@ -170,11 +186,12 @@ Open your browser at: `http://localhost:8000` (or `https://localhost:8443` for H
    ```
 
 4. **Enable the systemd service:**
+   Run the automated installer (detects current directory, user, and virtualenv paths automatically):
    ```bash
-   sudo cp systemd/lunabria.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now lunabria
+   bash systemd/install.sh
    ```
+   *Or configure manually by copying `systemd/lunabria.service` to `/etc/systemd/system/` with your absolute paths.*
+
 
 5. **Start Caddy Reverse Proxy (with HTTP/2 support):**
    ```bash
@@ -186,6 +203,13 @@ Once running, access the application locally at `http://localhost:8000` or throu
 
 ---
 
+## 📜 Changelog
+
+Release history and notable changes are documented in [CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## 📄 License
 
 This project is licensed under the **GNU Affero General Public License v3.0 (GNU AGPL v3)**. See the [LICENSE](LICENSE) file for the full license text.
+
