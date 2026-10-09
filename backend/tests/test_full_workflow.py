@@ -11,11 +11,26 @@ backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 sys.path.insert(0, str(backend_dir / "tests"))
 
-_test_root = tempfile.TemporaryDirectory(prefix="lunabria-tests-")
-_test_data_dir = Path(_test_root.name) / "data"
+_test_root = tempfile.TemporaryDirectory(prefix="lbt_")
+_test_data_dir = Path(_test_root.name)
+_test_db_path = _test_data_dir / "app_state.db"
+_test_calibre_path = _test_data_dir / "cal_lib"
+
 os.environ["APP_DATA_DIR"] = str(_test_data_dir)
-os.environ["APP_STATE_DB_PATH"] = str(_test_data_dir / "app_state.db")
-os.environ["CALIBRE_LIBRARY_PATH"] = str(_test_data_dir / "calibre_library")
+os.environ["APP_STATE_DB_PATH"] = str(_test_db_path)
+os.environ["CALIBRE_LIBRARY_PATH"] = str(_test_calibre_path)
+
+import app.config as config
+config.DATA_DIR = _test_data_dir
+config.APP_STATE_DB_PATH = str(_test_db_path)
+config.CALIBRE_LIBRARY_PATH = str(_test_calibre_path)
+
+import app.database as database
+database.APP_STATE_DB_PATH = str(_test_db_path)
+
+import app.services.calibre_service as cs_module
+cs_module.calibre_service.library_path = _test_calibre_path
+cs_module.calibre_service.db_path = _test_calibre_path / "metadata.db"
 
 from app.database import get_db, init_db
 from app.main import app
@@ -309,6 +324,3 @@ class TestLunabriaWorkflow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-

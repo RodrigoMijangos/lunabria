@@ -22,6 +22,9 @@ class MobileSelectionController {
     this.anchorTarget = null;
     this.pageWrapper = null;
     this.loupe = this.reader?.selectionLoupe?.loupe || (typeof ReaderSelectionLoupeView !== 'undefined' ? new ReaderSelectionLoupeView() : null);
+    this.activePointerId = null;
+    this.lockedScrollLeft = null;
+    this.lockedScrollTop = null;
   }
 
   init() {
@@ -35,7 +38,7 @@ class MobileSelectionController {
     const viewport = this.reader?.viewportEl || document.getElementById('pdf-viewport');
     if (!viewport) return;
 
-    const handleStart = (clientX, clientY, target) => {
+    const handleStart = (clientX, clientY, target, pointerId = null) => {
       // If user is actively drawing with pen or eraser, do not trigger text selection
       if (this.model.drawTool === 'pen' || this.model.drawTool === 'eraser') {
         return;
@@ -52,6 +55,7 @@ class MobileSelectionController {
         }
       }
 
+      this.activePointerId = pointerId;
       this.touchStartX = clientX;
       this.touchStartY = clientY;
       this.targetPoint = { x: clientX, y: clientY };
@@ -75,6 +79,20 @@ class MobileSelectionController {
         if (e && e.cancelable && typeof e.preventDefault === 'function') {
           e.preventDefault();
         }
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
+
+        // Prevent horizontal and vertical scroll drift on reader-body
+        const readerBody = document.getElementById('reader-body');
+        if (readerBody && this.lockedScrollLeft != null) {
+          if (readerBody.scrollLeft !== this.lockedScrollLeft) {
+            readerBody.scrollLeft = this.lockedScrollLeft;
+          }
+          if (readerBody.scrollTop !== this.lockedScrollTop) {
+            readerBody.scrollTop = this.lockedScrollTop;
+          }
+        }
 
         const activeWrapper = this.getPageWrapperAt(clientX, clientY) || this.pageWrapper;
         if (this.loupe && activeWrapper) {
@@ -92,6 +110,20 @@ class MobileSelectionController {
       if (this.isSelecting) {
         this.isSelecting = false;
         this.loupe?.hide();
+
+        if (typeof document !== 'undefined' && document.body?.classList) {
+          document.body.classList.remove('mobile-text-selecting');
+        }
+
+        const vp = this.reader?.viewportEl || document.getElementById('pdf-viewport');
+        if (this.activePointerId != null && vp && typeof vp.releasePointerCapture === 'function') {
+          try {
+            vp.releasePointerCapture(this.activePointerId);
+          } catch (err) {}
+        }
+        this.activePointerId = null;
+        this.lockedScrollLeft = null;
+        this.lockedScrollTop = null;
 
         // Always keep or return to 'pan' mode
         if (this.model.drawTool !== 'pan') {
@@ -125,7 +157,7 @@ class MobileSelectionController {
         (typeof window !== 'undefined' && window.innerWidth <= 850);
       const isTouch = e.pointerType === 'touch';
       if (!isTouch && !isMobile) return;
-      handleStart(e.clientX, e.clientY, e.target);
+      handleStart(e.clientX, e.clientY, e.target, e.pointerId);
     }, { passive: true });
 
     viewport.addEventListener('pointermove', (e) => {
@@ -138,13 +170,18 @@ class MobileSelectionController {
     }, { passive: false });
 
     viewport.addEventListener('pointerup', handleEnd, { passive: true });
-    viewport.addEventListener('pointercancel', handleEnd, { passive: true });
+    viewport.addEventListener('pointercancel', (e) => {
+      // Do not abort active selection if pointer was merely canceled by browser scroll heuristic
+      if (!this.isSelecting) {
+        handleEnd();
+      }
+    }, { passive: true });
 
     // 2. Native touch events (for touch devices and Firefox touch simulation)
     viewport.addEventListener('touchstart', (e) => {
       if (e.touches && e.touches.length === 1) {
         const touch = e.touches[0];
-        handleStart(touch.clientX, touch.clientY, e.target);
+        handleStart(touch.clientX, touch.clientY, e.target, null);
       } else {
         handleEnd();
       }
@@ -160,7 +197,59 @@ class MobileSelectionController {
     }, { passive: false });
 
     viewport.addEventListener('touchend', handleEnd, { passive: true });
-    viewport.addEventListener('touchcancel', handleEnd, { passive: true });
+    viewport.addEventListener('touchcancel', (e) => {
+      if (!this.isSelecting || !e.touches || e.touches.length === 0) {
+        handleEnd();
+      }
+    }, { passive: true });
+
+    // 3. Window-level capture interceptors for touchmove/pointermove to guarantee zero page displacement during drag
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('touchmove', (e) => {
+        if (this.isSelecting) {
+          if (e && e.cancelable && typeof e.preventDefault === 'function') {
+            e.preventDefault();
+          }
+          if (e && typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+          }
+          if (e.touches && e.touches.length === 1) {
+            const touch = e.touches[0];
+            handleMove(touch.clientX, touch.clientY, e);
+          }
+        }
+      }, { passive: false, capture: true });
+
+      window.addEventListener('pointermove', (e) => {
+        if (this.isSelecting && e.pointerType === 'touch') {
+          if (e && e.cancelable && typeof e.preventDefault === 'function') {
+            e.preventDefault();
+          }
+          if (e && typeof e.stopPropagation === 'function') {
+            e.stopPropagation();
+          }
+          handleMove(e.clientX, e.clientY, e);
+        }
+      }, { passive: false, capture: true });
+
+      window.addEventListener('touchend', () => {
+        if (this.isSelecting) handleEnd();
+      }, { passive: true });
+
+      window.addEventListener('pointerup', () => {
+        if (this.isSelecting) handleEnd();
+      }, { passive: true });
+    }
+
+    const readerBody = document.getElementById('reader-body');
+    if (readerBody && typeof readerBody.addEventListener === 'function') {
+      readerBody.addEventListener('scroll', () => {
+        if (this.isSelecting && this.lockedScrollLeft != null) {
+          readerBody.scrollLeft = this.lockedScrollLeft;
+          readerBody.scrollTop = this.lockedScrollTop;
+        }
+      }, { passive: true });
+    }
 
     // Suppress system context menu on mobile reader viewport
     viewport.addEventListener('contextmenu', (e) => {
@@ -226,6 +315,14 @@ class MobileSelectionController {
 
     if (!range || !text) return;
 
+    // Lock page scroll and prevent mobile browser from hijacking drag to scroll.
+    // Record current scroll position BEFORE modifying DOM selection or classes.
+    const readerBody = document.getElementById('reader-body');
+    if (readerBody) {
+      this.lockedScrollLeft = readerBody.scrollLeft;
+      this.lockedScrollTop = readerBody.scrollTop;
+    }
+
     const sel = window.getSelection();
     if (sel) {
       sel.removeAllRanges();
@@ -240,6 +337,27 @@ class MobileSelectionController {
     };
     this.pageWrapper = pageWrapper;
     this.isSelecting = true;
+
+    if (typeof document !== 'undefined' && document.body?.classList) {
+      document.body.classList.add('mobile-text-selecting');
+    }
+
+    // Re-verify that scroll position was not displaced by selection creation
+    if (readerBody && this.lockedScrollTop != null) {
+      if (readerBody.scrollLeft !== this.lockedScrollLeft) {
+        readerBody.scrollLeft = this.lockedScrollLeft;
+      }
+      if (readerBody.scrollTop !== this.lockedScrollTop) {
+        readerBody.scrollTop = this.lockedScrollTop;
+      }
+    }
+
+    const vp = this.reader?.viewportEl || document.getElementById('pdf-viewport');
+    if (this.activePointerId != null && vp && typeof vp.setPointerCapture === 'function') {
+      try {
+        vp.setPointerCapture(this.activePointerId);
+      } catch (err) {}
+    }
 
     // Always keep or return to 'pan' mode
     if (this.model.drawTool !== 'pan') {
@@ -430,26 +548,40 @@ class MobileSelectionController {
       if (el.classList?.contains('pdf-page-wrapper')) return el;
     }
 
-    if (viewport.children) {
-      for (const child of viewport.children) {
-        if (child.classList?.contains('pdf-page-wrapper')) return child;
-      }
-    }
-
-    const allWrappers = Array.from(viewport.querySelectorAll ? viewport.querySelectorAll('.pdf-page-wrapper, [id^="pdf-page-"]') : []);
+    const queryWrappers = Array.from(viewport.querySelectorAll ? viewport.querySelectorAll('.pdf-page-wrapper, [id^="pdf-page-"]') : []);
+    const childWrappers = Array.from(viewport.children || []).filter(c => c.classList?.contains('pdf-page-wrapper') || (c.id && c.id.startsWith('pdf-page-')));
+    const allWrappers = queryWrappers.length > 0 ? queryWrappers : childWrappers;
     if (!allWrappers.length) {
       const fallback = viewport.querySelector ? viewport.querySelector('.textLayer')?.parentElement : null;
       return fallback || null;
     }
+
     for (const w of allWrappers) {
       const rect = w.getBoundingClientRect ? w.getBoundingClientRect() : null;
       if (rect && clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
         return w;
       }
     }
+
+    let nearestWrapper = null;
+    let minVerticalDist = Infinity;
+    for (const w of allWrappers) {
+      const rect = w.getBoundingClientRect ? w.getBoundingClientRect() : null;
+      if (!rect) continue;
+      const dist = clientY < rect.top ? rect.top - clientY : (clientY > rect.bottom ? clientY - rect.bottom : 0);
+      if (dist < minVerticalDist) {
+        minVerticalDist = dist;
+        nearestWrapper = w;
+      }
+    }
+    if (nearestWrapper) return nearestWrapper;
+
+    const currentWrapper = document.getElementById(`pdf-page-${this.model.currentPage}`) ||
+      (viewport.querySelector ? viewport.querySelector(`.pdf-page-wrapper[data-page="${this.model.currentPage}"]`) : null);
+    if (currentWrapper) return currentWrapper;
+
     return allWrappers[0] || null;
   }
 }
 
 window.MobileSelectionController = MobileSelectionController;
-

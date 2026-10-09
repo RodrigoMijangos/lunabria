@@ -90,7 +90,7 @@ class ReaderAnnotationViewModel {
       await this.refreshAnnotations();
       const refreshed = this.refreshPageHighlights(pageNumber);
       if (!refreshed && this.model.viewMode !== 'flow' && this.onPageNeedsRefresh) {
-        this.onPageNeedsRefresh(this.model.currentPage);
+        this.onPageNeedsRefresh(pageNumber);
       }
       if (options.showQuickPalette) {
         this.openQuickHighlightPalette(savedAnnotation, pageNumber);
@@ -159,7 +159,6 @@ class ReaderAnnotationViewModel {
   openQuickHighlightPalette(annot, pageNumber, fallbackBounds = null) {
     const palette = document.getElementById('reader-quick-highlight-palette');
     if (!palette || !annot?.id) return;
-
     if (this.highlightActionMenu) this.highlightActionMenu.style.display = 'none';
     this.model.activeHighlight = null;
 

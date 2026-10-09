@@ -7,11 +7,11 @@ import pymupdf as fitz  # PyMuPDF
 backend_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from app.config import CALIBRE_LIBRARY_PATH, DATA_DIR
+import app.config as config
 from app.services.calibre_service import calibre_service
 
 def create_sample_pdf(filename: str, title: str, author: str, content: list) -> Path:
-    pdf_path = DATA_DIR / filename
+    pdf_path = config.DATA_DIR / filename
     doc = fitz.open()
     
     for page_num, text_paragraphs in enumerate(content, start=1):
@@ -31,7 +31,7 @@ def create_sample_pdf(filename: str, title: str, author: str, content: list) -> 
     return pdf_path
 
 def main():
-    print(f"Initializing test library at: {CALIBRE_LIBRARY_PATH}")
+    print(f"Initializing test library at: {config.CALIBRE_LIBRARY_PATH}")
     calibre_service.ensure_library()
 
     # Create Book 1: Distributed Systems
@@ -76,7 +76,7 @@ def main():
     for page_num in range(1, 20):
         page = layout_doc.new_page()
         page.insert_text((50, 50), "INTRODUCTION" if page_num == 19 else f"Test page {page_num}")
-    layout_pdf = DATA_DIR / "layout_test_book.pdf"
+    layout_pdf = config.DATA_DIR / "layout_test_book.pdf"
     layout_doc.save(str(layout_pdf))
     layout_doc.close()
 
@@ -90,7 +90,9 @@ def main():
     books = calibre_service.list_books()
     print(f"Total books listed in library: {len(books)}")
     for b in books:
-        print(f" - [{b['id']}] {b['title']} by {b['authors']} | Tags: {b['tags']}")
+        safe_title = str(b.get('title', '')).encode('ascii', 'replace').decode('ascii')
+        safe_authors = str(b.get('authors', '')).encode('ascii', 'replace').decode('ascii')
+        print(f" - [{b['id']}] {safe_title} by {safe_authors} | Tags: {b['tags']}")
 
 if __name__ == "__main__":
     main()

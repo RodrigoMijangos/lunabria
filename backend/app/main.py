@@ -11,7 +11,7 @@ from app.config import WORKSPACE_DIR
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.1.0"
+    version="1.1.1"
 )
 
 import time
@@ -67,12 +67,3 @@ app.include_router(media.router)
 @app.on_event("startup")
 def startup_event():
     init_db()
-
-@app.get("/api/health")
-def health_check():
-    return {"status": "ok", "app": "Lunabria"}
-
-# Mount frontend static directory if exists
-frontend_dir = WORKSPACE_DIR / "frontend"
-if frontend_dir.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")

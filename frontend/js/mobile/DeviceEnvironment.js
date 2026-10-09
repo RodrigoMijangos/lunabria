@@ -13,23 +13,27 @@ class DeviceEnvironment {
 
   checkIsMobile() {
     if (typeof window === 'undefined') return false;
-    const width = window.innerWidth || document.documentElement.clientWidth || 0;
-    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    const width = window.innerWidth || document.documentElement?.clientWidth || 0;
+    const nav = typeof navigator !== 'undefined' ? navigator : (typeof window !== 'undefined' ? window.navigator : null);
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(nav?.userAgent || '');
     const matchesCoarse = window.matchMedia ? (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(any-pointer: coarse)').matches) : false;
     return width <= 850 || isMobileUA || (matchesCoarse && width <= 1024);
   }
 
   checkIsTouch() {
     if (typeof window === 'undefined') return false;
+    const nav = typeof navigator !== 'undefined' ? navigator : (typeof window !== 'undefined' ? window.navigator : null);
     return ('ontouchstart' in window) ||
-      (navigator.maxTouchPoints > 0) ||
+      ((nav?.maxTouchPoints || 0) > 0) ||
       (window.matchMedia ? (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(any-pointer: coarse)').matches) : false);
   }
 
   checkIsPWA() {
     if (typeof window === 'undefined') return false;
+    const nav = typeof navigator !== 'undefined' ? navigator : (typeof window !== 'undefined' ? window.navigator : null);
     return (window.matchMedia ? window.matchMedia('(display-mode: standalone)').matches : false) ||
-      window.navigator.standalone === true;
+      nav?.standalone === true ||
+      window.navigator?.standalone === true;
   }
 
   isMobileReaderActive() {

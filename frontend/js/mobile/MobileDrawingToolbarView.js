@@ -147,9 +147,11 @@ class MobileDrawingToolbarView {
     if (isDrawing && !this.model.isDrawMode) {
       this.reader?.drawing?.toggleDrawMode(true);
     }
-    document.body.classList.toggle('mobile-drawing-active', isDrawing);
+    const isReaderOpen = !this.reader?.container || this.reader.container.style.display !== 'none';
+    const active = isDrawing && isReaderOpen;
+    document.body.classList.toggle('mobile-drawing-active', active);
     const viewport = this.reader.viewportEl || document.getElementById('pdf-viewport');
-    viewport?.classList.toggle('mobile-drawing-active', isDrawing);
+    viewport?.classList.toggle('mobile-drawing-active', active);
   }
 
   populateColorSwatches() {

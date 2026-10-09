@@ -175,13 +175,21 @@ function createDOMContext() {
       savePageDrawings: async () => {},
       getPageDrawings: async () => []
     },
+    navigator: {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+      maxTouchPoints: 5
+    },
     window: {
       addEventListener: () => {},
       removeEventListener: () => {},
       innerWidth: 375,
       innerHeight: 667,
       devicePixelRatio: 2,
-      getSelection: () => currentSelection
+      getSelection: () => currentSelection,
+      navigator: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
+        maxTouchPoints: 5
+      }
     },
     localStorage: {
       getItem: () => null,
@@ -686,6 +694,197 @@ test('MobileSelectionController allows spatial tolerance slack (holgura) around 
   assert.equal(currentSelection.rangeCount > 0, true, 'Text range must be selected despite offset');
 });
 
+test('MobileSelectionController locks reader scroll and prevents horizontal page displacement or pointer cancellation during drag', async () => {
+  const { context, elementsById, documentStub, currentSelection } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/mobile/MobileSelectionController.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const MobileSelectionController = context.window.MobileSelectionController || context.MobileSelectionController;
+
+  const model = new ReaderModel();
+  model.setDrawTool('pan');
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const readerBody = elementsById.get('reader-body');
+  readerBody.scrollLeft = 40;
+  readerBody.scrollTop = 20;
+
+  let pointerCaptured = null;
+  let pointerReleased = null;
+  viewportEl.setPointerCapture = (id) => { pointerCaptured = id; };
+  viewportEl.releasePointerCapture = (id) => { pointerReleased = id; };
+
+  const pageWrapper = new context.Element('div', { class: 'pdf-page-wrapper', 'data-page': '1' });
+  const textLayer = new context.Element('div', { class: 'textLayer' });
+  const wordSpan = new context.Element('span', { class: 'precise-word' });
+  wordSpan.firstChild = { nodeType: 3, textContent: 'Lunabria' };
+  wordSpan.textContent = 'Lunabria';
+  wordSpan.closest = (sel) => sel && sel.includes('precise-word') ? wordSpan : null;
+  textLayer.appendChild(wordSpan);
+  pageWrapper.appendChild(textLayer);
+  viewportEl.appendChild(pageWrapper);
+
+  documentStub.elementsFromPoint = (x, y) => [wordSpan, textLayer, pageWrapper];
+
+  const fakeReader = {
+    viewportEl,
+    floatingToolbar: elementsById.get('floating-toolbar'),
+    mobile: { device: { isMobileReaderActive: () => true } },
+    drawing: { setDrawTool: (tool) => { model.setDrawTool(tool); } },
+    annotations: { updateFloatingToolbar: () => {} }
+  };
+
+  const selectionController = new MobileSelectionController(fakeReader, model);
+  let loupeHidden = false;
+  selectionController.loupe = { update: () => {}, hide: () => { loupeHidden = true; } };
+  selectionController.init();
+
+  // 1. Start selection with pointer ID 10
+  selectionController.activePointerId = 10;
+  selectionController.startLongPressSelection({ x: 50, y: 100 });
+
+  assert.equal(selectionController.isSelecting, true, 'Selection must be active');
+  assert.equal(documentStub.body.classList.contains('mobile-text-selecting'), true, 'Body must have mobile-text-selecting class');
+  assert.equal(pointerCaptured, 10, 'Pointer 10 must be captured on viewport');
+  assert.equal(selectionController.lockedScrollLeft, 40, 'readerBody scrollLeft must be locked');
+
+  // 2. Browser fires pointercancel (e.g. scroll heuristic test): must NOT abort selection or hide loupe
+  await viewportEl.emit('pointercancel');
+  assert.equal(selectionController.isSelecting, true, 'Active selection must ignore pointercancel');
+  assert.equal(loupeHidden, false, 'Loupe must not hide on pointercancel during active selection');
+
+  // 3. Movement prevents horizontal displacement
+  readerBody.scrollLeft = 85; // Attempted drift
+  const moveEvt = await viewportEl.emit('touchmove', {
+    cancelable: true,
+    touches: [{ clientX: 60, clientY: 100 }]
+  });
+  assert.equal(moveEvt.defaultPrevented, true, 'Touchmove during selection must be defaultPrevented');
+  assert.equal(readerBody.scrollLeft, 40, 'readerBody scrollLeft must be restored to locked coordinate');
+
+  // 4. Release ends selection and releases lock
+  await viewportEl.emit('touchend');
+  assert.equal(selectionController.isSelecting, false, 'Selection ends on touchend');
+  assert.equal(documentStub.body.classList.contains('mobile-text-selecting'), false, 'mobile-text-selecting class removed');
+  assert.equal(pointerReleased, 10, 'Pointer capture must be released');
+  assert.equal(selectionController.lockedScrollLeft, null, 'Scroll lock cleared');
+});
 
 
 
+
+
+test('MobileReaderController does not apply mobile-reader-active or mobile-drawing-active when reader is closed (home page)', () => {
+  const { context, elementsById, documentStub } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/mobile/DeviceEnvironment.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+  loadScript(context, 'js/mobile/MobileDrawingToolbarView.js');
+  loadScript(context, 'js/mobile/MobileSelectionController.js');
+  loadScript(context, 'js/mobile/MobileReaderController.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const MobileReaderController = context.window.MobileReaderController || context.MobileReaderController;
+
+  const model = new ReaderModel();
+  const readerContainer = new context.Element('div', { id: 'reader-container' });
+  readerContainer.style.display = 'none';
+
+  const fakeReader = {
+    container: readerContainer,
+    viewportEl: elementsById.get('pdf-viewport'),
+    floatingToolbar: elementsById.get('floating-toolbar'),
+    drawing: {
+      setDrawTool: (tool) => { model.setDrawTool(tool); },
+      toggleDrawMode: () => true
+    }
+  };
+
+  const controller = new MobileReaderController(fakeReader, model);
+  controller.init();
+
+  assert.equal(documentStub.body.classList.contains('mobile-reader-active'), false, 'Body must not have mobile-reader-active when reader is closed');
+  assert.equal(documentStub.body.classList.contains('mobile-drawing-active'), false, 'Body must not have mobile-drawing-active when reader is closed');
+
+  readerContainer.style.display = 'flex';
+  controller.onBookOpened();
+  assert.equal(documentStub.body.classList.contains('mobile-reader-active'), true, 'Body must have mobile-reader-active when reader is open');
+
+  readerContainer.style.display = 'none';
+  controller.onBookClosed();
+  assert.equal(documentStub.body.classList.contains('mobile-reader-active'), false, 'Body must remove mobile-reader-active when reader is closed');
+  assert.equal(documentStub.body.classList.contains('mobile-drawing-active'), false, 'Body must remove mobile-drawing-active when reader is closed');
+});
+
+test('MobileSelectionController preserves scroll position and targets correct page during long-press selection', async () => {
+  const { context, elementsById, documentStub } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/mobile/MobileSelectionController.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const MobileSelectionController = context.window.MobileSelectionController || context.MobileSelectionController;
+
+  const model = new ReaderModel();
+  model.currentPage = 2;
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const readerBody = elementsById.get('reader-body');
+  readerBody.scrollTop = 1250;
+  readerBody.scrollLeft = 0;
+
+  const page1 = new context.Element('div', { class: 'pdf-page-wrapper', 'data-page': '1' });
+  page1.dataset = { page: '1' };
+  page1.getBoundingClientRect = () => ({ left: 0, top: -1250, right: 375, bottom: -450, width: 375, height: 800 });
+
+  const page2 = new context.Element('div', { class: 'pdf-page-wrapper', 'data-page': '2' });
+  page2.dataset = { page: '2' };
+  page2.getBoundingClientRect = () => ({ left: 0, top: 100, right: 375, bottom: 900, width: 375, height: 800 });
+
+  const textLayer2 = new context.Element('div', { class: 'textLayer' });
+  const wordSpan2 = new context.Element('span', { class: 'precise-word' });
+  wordSpan2.firstChild = { nodeType: 3, textContent: 'MobileChapter' };
+  wordSpan2.textContent = 'MobileChapter';
+  wordSpan2.closest = (sel) => sel && sel.includes('precise-word') ? wordSpan2 : null;
+  textLayer2.appendChild(wordSpan2);
+  page2.appendChild(textLayer2);
+
+  viewportEl.appendChild(page1);
+  viewportEl.appendChild(page2);
+
+  viewportEl.querySelectorAll = (sel) => {
+    if (sel.includes('.pdf-page-wrapper')) return [page1, page2];
+    return [];
+  };
+
+  documentStub.elementsFromPoint = (x, y) => [wordSpan2, textLayer2, page2];
+
+  const fakeReader = {
+    viewportEl,
+    floatingToolbar: elementsById.get('floating-toolbar'),
+    mobile: { device: { isMobileReaderActive: () => true } },
+    drawing: { setDrawTool: (tool) => { model.setDrawTool(tool); } },
+    annotations: { updateFloatingToolbar: () => {} }
+  };
+
+  const selectionController = new MobileSelectionController(fakeReader, model);
+  selectionController.loupe = { update: () => {}, hide: () => {} };
+  selectionController.init();
+
+  selectionController.startLongPressSelection({ x: 150, y: 200 });
+
+  assert.equal(selectionController.isSelecting, true, 'Selection must be active');
+  assert.equal(readerBody.scrollTop, 1250, 'readerBody scrollTop must be preserved, not reset to 0');
+  assert.equal(model.currentPage, 2, 'ReaderModel currentPage must remain page 2');
+  assert.equal(selectionController.lockedScrollTop, 1250, 'lockedScrollTop must capture readerBody.scrollTop');
+  assert.equal(selectionController.pageWrapper, page2, 'pageWrapper must be page 2, not page 1');
+});

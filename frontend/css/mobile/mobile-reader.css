@@ -440,7 +440,6 @@ body.mobile-reader-active.mobile-drawing-active .pdf-drawing-canvas {
 }
 
 /* Default mobile touch navigation (pan/zoom) when drawing is not active */
-body.mobile-reader-active,
 body.mobile-reader-active #reader-body,
 body.mobile-reader-active #pdf-viewport,
 body.mobile-reader-active .pdf-viewport-container,
@@ -449,7 +448,6 @@ body.mobile-reader-active .pdf-page-wrapper {
 }
 
 /* When mobile drawing is active, lock touch-action to none to prevent browser gesture interception/cancellation */
-body.mobile-reader-active.mobile-drawing-active,
 body.mobile-reader-active.mobile-drawing-active #reader-body,
 body.mobile-reader-active.mobile-drawing-active #pdf-viewport,
 body.mobile-reader-active.mobile-drawing-active .pdf-viewport-container,
@@ -485,3 +483,9 @@ body.mobile-reader-active .reader-selection-loupe {
   z-index: 999;
 }
 
+/* When mobile text selection is active, lock touch-action on reader viewport to prevent browser gesture cancellation and drift */
+body.mobile-reader-active.mobile-text-selecting #pdf-viewport,
+body.mobile-reader-active.mobile-text-selecting .pdf-viewport-container,
+body.mobile-reader-active.mobile-text-selecting .pdf-page-wrapper {
+  touch-action: none !important;
+}

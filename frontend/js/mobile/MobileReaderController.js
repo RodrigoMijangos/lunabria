@@ -47,11 +47,18 @@ class MobileReaderController {
 
   syncMobileState() {
     const isMobile = this.device.isMobileReaderActive();
-    document.body.classList.toggle('mobile-reader-active', isMobile);
+    const isReaderOpen = !this.reader?.container || this.reader.container.style.display !== 'none';
+    const shouldBeActive = isMobile && isReaderOpen;
 
-    if (isMobile) {
+    document.body.classList.toggle('mobile-reader-active', shouldBeActive);
+
+    if (shouldBeActive) {
       this.drawingFAB?.render();
       this.mobileHUD?.render();
+    } else {
+      this.drawingFAB?.closeColorMenu();
+      this.drawingFAB?.setExpanded(false);
+      document.body.classList.remove('mobile-drawing-active', 'mobile-text-selecting');
     }
   }
 
@@ -64,6 +71,10 @@ class MobileReaderController {
     }
     this.reader.drawing.setDrawTool('pan');
 
+    this.syncMobileState();
+  }
+
+  onBookClosed() {
     this.syncMobileState();
   }
 

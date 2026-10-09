@@ -153,6 +153,7 @@ class ReaderDocumentLifecycle {
     reader.mobile?.exitFullscreen();
     reader.container.style.display = 'none';
     document.body.style.overflow = '';
+    reader.mobile?.onBookClosed();
 
     // 1. Immediately persist locally
     await reader.persistProgressNow();
@@ -175,3 +176,5 @@ class ReaderDocumentLifecycle {
   }
 
 }
+
+window.ReaderDocumentLifecycle = ReaderDocumentLifecycle;
