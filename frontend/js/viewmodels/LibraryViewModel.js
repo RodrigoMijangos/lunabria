@@ -80,8 +80,18 @@ class LibraryViewModel {
       const [books, recents] = await Promise.all([api.getBooks(), api.getRecents()]);
       this.model.setBooks(books);
       this.model.setRecentBooks(recents);
-      if (typeof localDB !== 'undefined' && localDB && Array.isArray(books) && books.length > 0) {
-        localDB.saveCachedBooks(books).catch(() => {});
+      if (
+        typeof localDB !== 'undefined' &&
+        localDB &&
+        typeof localDB.saveCachedBooks === 'function' &&
+        Array.isArray(books) &&
+        books.length > 0
+      ) {
+        localDB.saveCachedBooks(books)
+          .then(() => this.cacheMissingOfflineCovers(books))
+          .catch(err => {
+            console.warn('[LibraryViewModel] Could not refresh the local book cache:', err);
+          });
       }
       this.hideOfflineBanner();
       this.renderRecents();
@@ -109,6 +119,51 @@ class LibraryViewModel {
       this.renderRecents();
       this.renderBooks();
       this.updateActiveCollectionChip();
+    }
+  }
+
+  async cacheMissingOfflineCovers(books) {
+    if (
+      !Array.isArray(books) ||
+      books.length === 0 ||
+      typeof localDB === 'undefined' ||
+      !localDB ||
+      typeof localDB.getOfflineCompleteBooks !== 'function' ||
+      typeof localDB.saveCachedBook !== 'function' ||
+      typeof fetch !== 'function'
+    ) {
+      return;
+    }
+
+    const offlineBooks = await localDB.getOfflineCompleteBooks();
+    if (!Array.isArray(offlineBooks)) return;
+    const offlineById = new Map(offlineBooks.map(book => [Number(book.id), book]));
+
+    for (const book of books) {
+      const id = Number(book.id);
+      const cachedBook = offlineById.get(id);
+      if (
+        !Number.isSafeInteger(id) ||
+        !cachedBook ||
+        cachedBook.coverBlob ||
+        (!book.cover_url && !book.has_cover)
+      ) {
+        continue;
+      }
+
+      try {
+        const coverUrl = book.cover_url || `/api/books/${id}/cover`;
+        const response = await fetch(coverUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const coverBlob = await response.blob();
+        if (!coverBlob.size || (coverBlob.type && !coverBlob.type.startsWith('image/'))) {
+          throw new Error('The cover response is not a valid image');
+        }
+        await localDB.saveCachedBook({ ...book, coverBlob });
+        cachedBook.coverBlob = coverBlob;
+      } catch (err) {
+        console.warn(`[LibraryViewModel] Could not cache the offline cover for book ${id}:`, err);
+      }
     }
   }
 

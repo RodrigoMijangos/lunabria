@@ -91,6 +91,40 @@ test('BookCardView uses SVG fallback cover and resets onerror to prevent infinit
   assert.ok(img.src.startsWith('data:image/svg+xml'), 'img.src must fall back to SVG data URI');
 });
 
+test('BookCardView displays the cached cover Blob for an offline book', () => {
+  const { Element, document } = createDOM();
+  const urls = [];
+  const urlApi = {
+    createObjectURL: blob => {
+      urls.push(['create', blob]);
+      return 'blob:cached-cover';
+    },
+    revokeObjectURL: url => urls.push(['revoke', url])
+  };
+  const context = vm.createContext({
+    document,
+    window: {},
+    URL: urlApi,
+    Blob,
+    LibraryModel: { formatReadingProgress: () => '10%' }
+  });
+  vm.runInContext(source('views/library/BookCardView.js'), context);
+  const BookCardView = vm.runInContext('BookCardView', context);
+  const coverBlob = new Blob(['cover bytes'], { type: 'image/jpeg' });
+
+  const card = BookCardView.createBookCard(
+    { id: 42, title: 'Offline book', coverBlob, has_cover: true, cover_url: '/api/books/42/cover' },
+    null,
+    null,
+    { allowEdit: false }
+  );
+  const img = card.children[0].children[0];
+
+  assert.equal(img.src, 'blob:cached-cover');
+  img.onload();
+  assert.deepEqual(urls, [['create', coverBlob], ['revoke', 'blob:cached-cover']]);
+});
+
 test('HighlightColorSettingsManager caches palette to localStorage and recovers offline', async () => {
   const { elements, document } = createDOM();
   const storage = new Map();
@@ -233,6 +267,7 @@ test('LocalDB merges offline complete books non-destructively and handles cached
       return req;
     }
   };
+  const localStorageValues = new Map();
 
   // Pre-seed db with base stores
   for (const s of ['reading_progress', 'pdf_cache', 'pdf_layouts', 'page_drawings', 'pending_annotations', 'cached_books']) {
@@ -241,7 +276,10 @@ test('LocalDB merges offline complete books non-destructively and handles cached
 
   const context = vm.createContext({
     indexedDB: fakeIndexedDB,
-    localStorage: { getItem: () => null, setItem: () => {} },
+    localStorage: {
+      getItem: key => localStorageValues.get(key) || null,
+      setItem: (key, value) => localStorageValues.set(key, String(value))
+    },
     window: {},
     console,
     setTimeout,
@@ -254,7 +292,8 @@ test('LocalDB merges offline complete books non-destructively and handles cached
   assert.equal(localDB.version, 7, 'LocalDB version must be bumped to 7');
 
   // 1. Initial save of an offline complete book
-  await localDB.saveCachedBook({ id: 42, title: 'Downloaded Offline', isOfflineComplete: true });
+  const coverBlob = new Blob(['cover bytes'], { type: 'image/jpeg' });
+  await localDB.saveCachedBook({ id: 42, title: 'Downloaded Offline', isOfflineComplete: true, coverBlob });
 
   // 2. Server re-sync with partial online metadata (isOfflineComplete undefined)
   await localDB.saveCachedBook({ id: 42, title: 'Downloaded Offline (Updated Title)' });
@@ -264,6 +303,9 @@ test('LocalDB merges offline complete books non-destructively and handles cached
   const savedBook = cachedBooksStore.get(42);
   assert.equal(savedBook.title, 'Downloaded Offline (Updated Title)');
   assert.equal(savedBook.isOfflineComplete, true, 'isOfflineComplete must be preserved across server syncs');
+  assert.equal(savedBook.coverBlob, coverBlob, 'cover Blob must be preserved across server syncs');
+  const localBooks = JSON.parse(localStorageValues.get('moon_offline_books'));
+  assert.equal(Object.hasOwn(localBooks[0], 'coverBlob'), false, 'Binary covers must stay in IndexedDB');
 
   // 4. Test cached annotations save and retrieve
   const sampleAnnots = [{ id: 'a1', page: 2, color: 'yellow', text: 'Important' }];

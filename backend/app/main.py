@@ -23,7 +23,7 @@ logging.getLogger("asyncio").addFilter(_SuppressSocketSendErrorFilter())
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.4.0"
+    version="1.4.1"
 )
 
 import time

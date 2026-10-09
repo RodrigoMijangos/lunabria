@@ -83,7 +83,7 @@ Tailored stylus interactions with strict palm rejection, double-tap pen/highligh
    - **Freehand Stylus & Digital Inking:** Draw notes, margin diagrams, underlines, and freehand highlights directly on book pages with pressure sensitivity, palm rejection, and dedicated stylus hardware settings.
    - **Slide-out Lateral Drawer:** Chronologically lists all highlights, annotations, and notes with interactive color filtering.
    - **Markdown Export:** Export annotations and excerpts directly to **Markdown (`.md`)** ready for Obsidian, Logseq, or notes apps.
-   - **Offline Reading (PWA):** Cached books appear in the library immediately on startup. Download books and pre-buffer page layouts into IndexedDB; an offline banner shows connection status and the number of books available offline.
+   - **Offline Reading (PWA):** Cached books appear in the library immediately on startup. Download books, their cover art, and pre-buffered page layouts into IndexedDB; an offline banner shows connection status and the number of books available offline.
    - **Offline Annotation Sync:** Saved annotations and highlight colors remain available offline. Highlights, notes, drawings, and reading progress created without a connection are queued locally and synchronize when connectivity returns.
    - **On-Demand EPUB Conversion:** If a book is only available in EPUB format, it is automatically converted to PDF when opened and cached without altering the original Calibre library.
 

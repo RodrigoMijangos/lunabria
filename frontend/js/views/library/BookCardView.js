@@ -21,11 +21,31 @@ const BookCardView = {
     img.className = 'book-cover';
     img.alt = book.title || 'Untitled';
     img.loading = 'lazy';
-    img.src = book.has_cover && book.cover_url ? book.cover_url : '/api/books/placeholder-cover';
+    let objectUrl = null;
+    const releaseObjectUrl = () => {
+      if (!objectUrl) return;
+      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(objectUrl);
+      }
+      objectUrl = null;
+    };
     img.onerror = () => {
+      releaseObjectUrl();
       img.onerror = null;
+      img.onload = null;
       img.src = OFFLINE_FALLBACK_COVER;
     };
+    if (typeof Blob !== 'undefined' && book.coverBlob instanceof Blob &&
+        typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      objectUrl = URL.createObjectURL(book.coverBlob);
+      img.onload = () => {
+        releaseObjectUrl();
+        img.onload = null;
+      };
+      img.src = objectUrl;
+    } else {
+      img.src = book.has_cover && book.cover_url ? book.cover_url : '/api/books/placeholder-cover';
+    }
     coverWrap.appendChild(img);
 
     if (options.selectionMode) {

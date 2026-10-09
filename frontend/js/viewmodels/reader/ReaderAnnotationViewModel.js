@@ -139,8 +139,17 @@ class ReaderAnnotationViewModel {
 
   async refreshAnnotations() {
     const annots = await api.getAnnotations(this.model.bookId);
+    if (!Array.isArray(annots)) throw new Error('Invalid annotations response');
     this.model.setAnnotations(annots);
+    if (typeof localDB !== 'undefined' && typeof localDB.saveCachedAnnotations === 'function') {
+      try {
+        await localDB.saveCachedAnnotations(this.model.bookId, annots);
+      } catch (error) {
+        console.warn('[ReaderAnnotationViewModel] Could not cache annotations:', error);
+      }
+    }
     this.renderDrawerAnnotations();
+    return annots;
   }
 
   renderPageHighlights(layer, pageNumber) {

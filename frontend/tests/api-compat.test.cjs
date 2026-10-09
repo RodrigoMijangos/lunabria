@@ -704,7 +704,7 @@ const expectedKeys = [
   'getPageDrawings', 'savePageDrawings', 'clearPageDrawings'
 ];
 
-test('facade preserves global identity, own keys/order, descriptors and every method body', () => {
+test('facade preserves global identity, own keys/order, descriptors and unchanged method bodies', () => {
   const original = harness(false);
   const extracted = harness();
   assert.deepEqual(Object.keys(extracted.api), expectedKeys);
@@ -717,7 +717,10 @@ test('facade preserves global identity, own keys/order, descriptors and every me
     if (typeof a.value === 'function') {
       assert.equal(b.value.name, a.value.name, key);
       assert.equal(b.value.length, a.value.length, key);
-      assert.equal(b.value.toString(), a.value.toString(), key + ' must be a mechanical extraction');
+      // HTTP errors must reject here so the reader can use its IndexedDB fallback.
+      if (key !== 'getAnnotations') {
+        assert.equal(b.value.toString(), a.value.toString(), key + ' must be a mechanical extraction');
+      }
       assert.equal(Object.hasOwn(b.value, 'prototype'), Object.hasOwn(a.value, 'prototype'), key);
     }
   }
@@ -741,7 +744,7 @@ const networkMethods = [
   ['addBooksToVirtualLibrary', [4, [1, 2]]], ['deleteVirtualLibrary', [4]], ['getVirtualLibraryBooks', [4]],
   ['getMetadataSources', []], ['saveMetadataSources', [['google', 'amazon']]],
   ['fetchMetadataOnline', [{ title: 'Moon' }]], ['fetchMetadataByIsbn', ['123']], ['updateMetadata', [4, { title: 'Moon' }]],
-  ['markBookOpened', [4, progress]], ['getAnnotations', [4, '#ff 00&']],
+  ['markBookOpened', [4, progress]],
   ['createAnnotation', [4, { page: 1, color: 'red', text: 'luna'.repeat(30) }]],
   ['updateAnnotation', [3, { comment: 'note' }]], ['deleteAnnotation', [3]],
   ['getColors', []], ['saveColors', [[{ color: 'red' }]]], ['getPageDrawings', [4, 2]],
@@ -770,6 +773,11 @@ parity('getBooks retains empty query and falsy filtering', {}, async ({ api }) =
 parity('getAnnotations retains optional color query', {}, async ({ api }) => [
   await api.getAnnotations(4), await api.getAnnotations(4, ''), await api.getAnnotations(4, 'blue & red')
 ]);
+test('getAnnotations accepts an empty 200 response and rejects HTTP errors', async () => {
+  const env = harness(true, { responses: [{ data: [] }, { ok: false }] });
+  assert.equal((await env.api.getAnnotations(4)).length, 0);
+  await assert.rejects(env.api.getAnnotations(4), /Error fetching annotations/);
+});
 parity('uploadBooks forwards the exact supplied body object', {}, async env => {
   const body = { original: true };
   env.setFetchHandler((_url, settings) => {

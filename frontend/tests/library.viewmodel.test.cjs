@@ -43,7 +43,7 @@ class Element {
   blur() { this.owner.activeElement = null; this.fire('blur'); }
 }
 
-function setup({ missing = [] } = {}) {
+function setup({ missing = [], localDB: localDb, fetch: fetchImpl } = {}) {
   const elements = new Map();
   const document = {
     activeElement: null,
@@ -85,7 +85,7 @@ function setup({ missing = [] } = {}) {
     async deleteVirtualLibrary(id) { calls.push(['delete', id]); }
   };
   const context = vm.createContext({
-    window, document, navigator: {}, api,
+    window, document, navigator: {}, api, localDB: localDb, fetch: fetchImpl,
     console: { warn: (...args) => calls.push(['warn', ...args]), error: (...args) => calls.push(['error', ...args]) },
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
     BookUploadManager: Manager, BookMetadataManager: Manager, VirtualLibraryManager: Manager,
@@ -451,6 +451,42 @@ test('data loading preserves API arguments and presentation order including fail
   await l.loadVirtualLibraries();
   assert.equal(l.model.virtualLibraries.length, 0);
   assert.equal(l.catalogSelectionLibrary.disabled, true);
+});
+
+test('catalog refresh backfills covers for previously downloaded offline books', async () => {
+  const coverBlob = new Blob(['cover bytes'], { type: 'image/jpeg' });
+  const cachedOfflineBook = { id: 42, isOfflineComplete: true };
+  const savedBooks = [];
+  const fetchedUrls = [];
+  const localDB = {
+    async getAllCachedBooks() { return []; },
+    async saveCachedBooks() {},
+    async getOfflineCompleteBooks() { return [cachedOfflineBook]; },
+    async saveCachedBook(book) { savedBooks.push(book); }
+  };
+  const { library: l, api } = setup({
+    localDB,
+    fetch: async url => {
+      fetchedUrls.push(url);
+      return { ok: true, status: 200, blob: async () => coverBlob };
+    }
+  });
+  api.getBooks = async () => [{
+    id: 42,
+    title: 'Book 42',
+    authors: 'Author',
+    has_cover: true,
+    cover_url: '/api/books/42/cover'
+  }];
+  api.getRecents = async () => [];
+
+  await l.loadHome();
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.deepEqual(fetchedUrls, ['/api/books/42/cover']);
+  assert.equal(savedBooks.length, 1);
+  assert.equal(savedBooks[0].id, 42);
+  assert.equal(savedBooks[0].coverBlob, coverBlob);
 });
 
 test('event bindings preserve page submission, search, selection and debounced resize', () => {

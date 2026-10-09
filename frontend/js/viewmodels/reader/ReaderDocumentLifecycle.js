@@ -84,8 +84,13 @@ class ReaderDocumentLifecycle {
       let annots = [];
       try {
         annots = await api.getAnnotations(bookId);
-        if (typeof localDB !== 'undefined' && localDB && typeof localDB.saveCachedAnnotations === 'function' && Array.isArray(annots)) {
-          localDB.saveCachedAnnotations(bookId, annots).catch(() => {});
+        if (!Array.isArray(annots)) throw new Error('Invalid annotations response');
+        if (typeof localDB !== 'undefined' && localDB && typeof localDB.saveCachedAnnotations === 'function') {
+          try {
+            await localDB.saveCachedAnnotations(bookId, annots);
+          } catch (cacheError) {
+            console.warn('[ReaderViewModel] Could not cache annotations:', cacheError);
+          }
         }
       } catch (err) {
         console.warn('[ReaderViewModel] Failed to fetch annotations from server, trying cached annotations:', err);

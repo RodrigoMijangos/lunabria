@@ -134,7 +134,7 @@ test('SW fetch handles /api/ by returning 503 JSON response when offline', async
 
 test('SW fetch falls back to cache on network failure for app assets', async () => {
   const { listeners, caches } = createWorkerWorld();
-  const cache = await caches.open('lunabria-v1.4.0');
+  const cache = await caches.open('lunabria-v1.4.1');
   await cache.put('https://lunabria.local/js/db.js?v=1.0.7', { status: 200, body: 'cached-content' });
 
   const fetchListener = listeners.get('fetch');

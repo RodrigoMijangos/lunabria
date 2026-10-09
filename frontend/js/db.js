@@ -293,6 +293,7 @@ class LocalDB {
       title: book.title || existing?.title || 'Untitled',
       authors: book.authors || existing?.authors || '',
       cover_path: book.cover_path || existing?.cover_path || '',
+      coverBlob: book.coverBlob || existing?.coverBlob || null,
       total_pages: Number(book.total_pages || book.totalPages || existing?.total_pages || 0),
       cachedAt: Date.now(),
       isOfflineComplete: (book.isOfflineComplete !== undefined)
@@ -314,9 +315,11 @@ class LocalDB {
     try {
       const raw = localStorage.getItem('moon_offline_books');
       const list = raw ? JSON.parse(raw) : [];
+      const localStorageItem = { ...item };
+      delete localStorageItem.coverBlob;
       const idx = list.findIndex(b => Number(b.id) === item.id);
-      if (idx >= 0) list[idx] = { ...list[idx], ...item };
-      else list.push(item);
+      if (idx >= 0) list[idx] = { ...list[idx], ...localStorageItem };
+      else list.push(localStorageItem);
       localStorage.setItem('moon_offline_books', JSON.stringify(list));
     } catch (e) {}
   }
@@ -422,17 +425,15 @@ class LocalDB {
 
   // --- Cached Annotations (last known server copy for offline reading) ---
   async saveCachedAnnotations(bookId, annotations) {
-    if (!bookId || !Array.isArray(annotations)) return;
-    try {
-      const db = await this.open();
-      await new Promise((resolve, reject) => {
-        const tx = db.transaction('cached_annotations', 'readwrite');
-        const store = tx.objectStore('cached_annotations');
-        store.put({ bookId: Number(bookId), annotations, updatedAt: Date.now() });
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = (e) => reject(e);
-      });
-    } catch (e) {}
+    if (!bookId || !Array.isArray(annotations)) return false;
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('cached_annotations', 'readwrite');
+      const store = tx.objectStore('cached_annotations');
+      store.put({ bookId: Number(bookId), annotations, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = (e) => reject(e);
+    });
   }
 
   async getCachedAnnotations(bookId) {

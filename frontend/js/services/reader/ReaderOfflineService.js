@@ -63,9 +63,26 @@ class ReaderOfflineService {
       throw new Error('Download completed, but some layouts could not be saved. Please try again.');
     }
 
+    const appBook = window.app?.model?.getBookById?.(Number(bookId));
+    let coverBlob = null;
+    const coverUrl = appBook?.cover_url || (appBook?.has_cover ? `/api/books/${bookId}/cover` : null);
+    if (coverUrl) {
+      try {
+        const response = await fetch(coverUrl);
+        if (!response.ok) throw new Error(`Could not download cover (HTTP ${response.status}).`);
+
+        const blob = await response.blob();
+        if (!blob.size || (blob.type && !blob.type.startsWith('image/'))) {
+          throw new Error('Server did not return a valid cover image.');
+        }
+        coverBlob = blob;
+      } catch (err) {
+        console.warn('[ReaderOfflineService] Could not cache book cover for offline use:', err);
+      }
+    }
+
     try {
       if (typeof localDB?.saveCachedBook === 'function') {
-        const appBook = window.app?.model?.getBookById?.(Number(bookId));
         const titleEl = document.getElementById('reader-book-title');
         const authorEl = document.getElementById('reader-book-author');
         await localDB.saveCachedBook({
@@ -73,6 +90,7 @@ class ReaderOfflineService {
           title: appBook?.title || titleEl?.textContent || `Book ${bookId}`,
           authors: appBook?.authors || authorEl?.textContent || '',
           cover_path: appBook?.cover_path || '',
+          coverBlob,
           total_pages: totalPages,
           isOfflineComplete: true
         });

@@ -3,7 +3,7 @@ const createAnnotationsApiService = () => ({
   async getAnnotations(bookId, color = null) {
     const url = color ? `/api/books/${bookId}/annotations?color=${encodeURIComponent(color)}` : `/api/books/${bookId}/annotations`;
     const res = await fetch(url);
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error('Error fetching annotations');
     return res.json();
   },
 
