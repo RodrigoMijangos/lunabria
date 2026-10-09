@@ -79,17 +79,7 @@ class MobileReaderController {
   }
 
   requestFullscreenIfMobile() {
-    if (!this.device.isMobileReaderActive()) return;
-    if (document.fullscreenElement) return;
-
-    try {
-      const el = document.documentElement;
-      if (el.requestFullscreen) {
-        el.requestFullscreen().catch(() => {});
-      } else if (el.webkitRequestFullscreen) {
-        el.webkitRequestFullscreen();
-      }
-    } catch (err) {}
+    // Intentionally no-op: automatic fullscreen on mobile book selection was removed per UX requirement.
   }
 
   exitFullscreen() {

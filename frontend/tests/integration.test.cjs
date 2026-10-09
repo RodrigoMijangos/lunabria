@@ -291,7 +291,7 @@ test('STATIC_ASSETS covers exact HTML URLs, transitive CSS imports and icons', (
   }
 });
 
-test('STATIC_ASSETS are unique local existing resources and cache release matches backend 1.0.10', () => {
+test('STATIC_ASSETS are unique local existing resources and cache release matches backend version', () => {
   const { assets, cacheName } = workerWorld();
   assert.equal(new Set(assets).size, assets.length, 'Duplicate STATIC_ASSETS');
   assert.equal(new Set(assets.map(asset => new URL(asset, origin).href)).size, assets.length,
@@ -306,7 +306,7 @@ test('STATIC_ASSETS are unique local existing resources and cache release matche
   const backend = fs.readFileSync(path.join(frontend, '..', 'backend', 'app', 'main.py'), 'utf8');
   const version = backend.match(/\bversion\s*=\s*['"]([^'"]+)['"]/);
   assert.ok(version, 'Backend FastAPI version not found');
-  assert.equal(version[1], '1.2.0');
+  assert.equal(version[1], '1.3.0');
   // Frontend-only revisions refresh the shell without publishing a new API release.
   const cacheVersion = cacheName.match(/^lunabria-v(\d+\.\d+\.\d+)(?:-[a-z0-9-]+)?$/);
   assert.ok(cacheVersion, 'Invalid shell cache name');

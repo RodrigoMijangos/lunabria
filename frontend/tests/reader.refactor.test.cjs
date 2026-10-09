@@ -1297,3 +1297,172 @@ test('TextLayerView renders 3-phase subpixel layout with precise words, spaces, 
   assert.equal(lastChild.textContent, '\n');
 });
 
+test('ReaderModel.getPageAnnotations matches string and numeric page numbers and getColorMetadata matches case-insensitively', () => {
+  const context = vm.createContext({
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    window: {}
+  });
+  vm.runInContext(source('models/ReaderModel.js'), context);
+  const model = new context.window.ReaderModel();
+  model.setAnnotations([
+    { id: 'a1', page: 2, color: 'Green', text: 'Sample definition' },
+    { id: 'a2', page: 3, color: 'blue', text: 'Sample reference' }
+  ]);
+
+  // Matches numeric 2
+  assert.equal(model.getPageAnnotations(2).length, 1);
+  // Matches string "2" (e.g. from dataset.page)
+  assert.equal(model.getPageAnnotations('2').length, 1);
+  assert.equal(model.getPageAnnotations('2')[0].id, 'a1');
+
+  // Case-insensitive color lookup
+  const greenMeta = model.getColorMetadata('GREEN');
+  assert.equal(greenMeta.id, 'green');
+  assert.equal(greenMeta.name, 'Definition');
+
+  const blueMeta = model.getColorMetadata('Blue');
+  assert.equal(blueMeta.id, 'blue');
+  assert.equal(blueMeta.name, 'Reference');
+});
+
+test('ReaderAnnotationViewModel.changeHighlightColor updates model and DOM immediately and targets annot.page', async () => {
+  const dummyEl = {
+    style: { backgroundColor: '#fef08a' },
+    dataset: { annotationId: 'test-annot-1' }
+  };
+
+  let updatedPage = null;
+  let updatedPayload = null;
+
+  const context = vm.createContext({
+    document: {
+      querySelectorAll: (sel) => {
+        if (sel.includes('data-annotation-id="test-annot-1"')) return [dummyEl];
+        return [];
+      },
+      getElementById: () => null
+    },
+    window: {},
+    api: {
+      updateAnnotation: async (id, data) => { updatedPayload = { id, data }; },
+      getAnnotations: async () => [{ id: 'test-annot-1', page: 5, color: 'blue', category: 'Reference' }]
+    },
+    ReaderSelectionGeometry: {
+      quickPalettePosition: () => ({ left: 0, top: 0, opensBelow: false })
+    },
+    ReaderModel: class {
+      constructor() {
+        this.currentPage = 1; // Reader currently at page 1
+        this.annotations = [{ id: 'test-annot-1', page: 5, color: 'yellow', category: 'Key Idea' }];
+        this.colors = [
+          { id: 'yellow', name: 'Key Idea', color: '#fef08a' },
+          { id: 'blue', name: 'Reference', color: '#bfdbfe' }
+        ];
+      }
+      getColorMetadata(id) {
+        return this.colors.find(c => c.id.toLowerCase() === String(id).toLowerCase()) || this.colors[0];
+      }
+      setAnnotations(annots) { this.annotations = annots; }
+    }
+  });
+
+  vm.runInContext(source('viewmodels/reader/ReaderAnnotationViewModel.js'), context);
+
+  const model = new context.ReaderModel();
+  const vmInstance = new context.window.ReaderAnnotationViewModel(
+    model,
+    { querySelector: () => null },
+    {},
+    {}
+  );
+  vmInstance.refreshPageHighlights = (page) => { updatedPage = page; };
+  vmInstance.renderDrawerAnnotations = () => {};
+
+  // Calling changeHighlightColor without passing pageNumber (simulating openHighlightMenu dot click)
+  await vmInstance.changeHighlightColor('test-annot-1', 'blue');
+
+  // 1. Direct DOM update was applied immediately
+  assert.equal(dummyEl.style.backgroundColor, '#bfdbfe');
+  // 2. Target page was annot.page (5), NOT currentPage (1)
+  assert.equal(updatedPage, 5);
+  // 3. Backend was called with blue and Reference
+  assert.equal(updatedPayload.id, 'test-annot-1');
+  assert.equal(updatedPayload.data.color, 'blue');
+  assert.equal(updatedPayload.data.category, 'Reference');
+  // 4. Model annotations updated
+  assert.equal(model.annotations[0].color, 'blue');
+  assert.equal(model.annotations[0].category, 'Reference');
+});
+
+test('HighlightColorSettingsManager.save synchronizes palette with window.reader and refreshes highlights', async () => {
+  let savedColors = null;
+  let refreshedPages = [];
+  let drawerRefreshed = false;
+
+  const mockReader = {
+    model: {
+      bookId: 42,
+      colors: [],
+      viewMode: 'paginated',
+      setColors(c) { this.colors = c; }
+    },
+    annotations: {
+      renderFloatingColors: () => {},
+      refreshPageHighlights: (page) => { refreshedPages.push(page); },
+      renderDrawerAnnotations: () => { drawerRefreshed = true; }
+    }
+  };
+
+  const pageWrapper = {
+    dataset: { page: '3' },
+    id: 'pdf-page-3'
+  };
+
+  const context = vm.createContext({
+    document: {
+      getElementById: (id) => {
+        if (id === 'colors-modal') return {};
+        if (id === 'colors-status') return { textContent: '' };
+        if (id === 'colors-save-btn') return { disabled: false };
+        return null;
+      },
+      querySelectorAll: (sel) => {
+        if (sel === '#colors-list .highlight-color-row') {
+          return [{
+            dataset: { colorId: 'yellow' },
+            querySelector: (q) => {
+              if (q === '.highlight-color-name') return { value: 'Idea Principal' };
+              if (q === '.highlight-color-value') return { value: '#ffee00' };
+              return null;
+            }
+          }];
+        }
+        if (sel === '.pdf-page-wrapper') return [pageWrapper];
+        return [];
+      }
+    },
+    window: {
+      reader: mockReader
+    },
+    api: {
+      saveColors: async (c) => { savedColors = c; }
+    },
+    ModalView: { close: () => {} }
+  });
+
+  vm.runInContext(source('viewmodels/library/HighlightColorSettingsManager.js'), context);
+
+  const manager = new context.window.HighlightColorSettingsManager();
+  manager.colors = [{ id: 'yellow', name: 'Key Idea', color: '#fef08a' }];
+
+  await manager.save();
+
+  assert.equal(savedColors.length, 1);
+  assert.equal(savedColors[0].name, 'Idea Principal');
+  assert.equal(savedColors[0].color, '#ffee00');
+  // Check synchronization with window.reader
+  assert.equal(mockReader.model.colors[0].name, 'Idea Principal');
+  assert.equal(refreshedPages.includes(3), true);
+  assert.equal(drawerRefreshed, true);
+});
+

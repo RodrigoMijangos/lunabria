@@ -15,6 +15,7 @@ class ReaderModel {
     this.isDrawMode = false;
     this.viewMode = this.normalizeViewMode(localStorage.getItem('moon_reader_view_mode'));
     this.drawTool = 'pen'; // 'pen' | 'highlighter' | 'eraser' | 'pan'
+    this.previousDrawTool = 'pen';
     this.drawColor = '#1e293b';
     this.drawWidth = 4;
     this.isDrawMode = false;
@@ -70,11 +71,18 @@ class ReaderModel {
     this.scale = 1.3;
     this.fitMode = localStorage.getItem('moon_reader_fit_mode') || 'width';
     this.isDrawMode = false;
+    this.drawTool = 'pen';
+    this.previousDrawTool = 'pen';
+    this.drawColor = '#1e293b';
+    this.drawWidth = 4;
+    this.isSpacePanActive = false;
     this.annotations = [];
     this.pageStrokes.clear();
     this.activeHighlight = null;
     this.selectedRange = null;
     this.selectedText = '';
+    this.selectedRects = [];
+    this.selectedPage = null;
   }
 
   // --- Page Navigation State ---
@@ -140,7 +148,13 @@ class ReaderModel {
   // --- Drawing Tool State ---
   setDrawTool(tool) {
     const validTools = ['pen', 'highlighter', 'eraser', 'pan'];
-    this.drawTool = validTools.includes(tool) ? tool : 'pen';
+    const chosen = validTools.includes(tool) ? tool : 'pen';
+    if (this.drawTool !== 'eraser' && chosen === 'eraser') {
+      this.previousDrawTool = this.drawTool;
+    } else if (chosen !== 'eraser') {
+      this.previousDrawTool = chosen;
+    }
+    this.drawTool = chosen;
     return this.drawTool;
   }
 
@@ -244,11 +258,14 @@ class ReaderModel {
   }
 
   getPageAnnotations(pageNumber) {
-    return this.annotations.filter(a => a.page === pageNumber);
+    const pageNum = Number(pageNumber);
+    return this.annotations.filter(a => Number(a.page) === pageNum);
   }
 
   getColorMetadata(colorId) {
-    return this.colors.find(c => c.id === colorId) || this.colors[0];
+    if (!colorId) return this.colors[0];
+    const targetId = String(colorId).toLowerCase();
+    return this.colors.find(c => String(c.id).toLowerCase() === targetId) || this.colors[0];
   }
 
   getHighlightColorIdFromHex(hex) {

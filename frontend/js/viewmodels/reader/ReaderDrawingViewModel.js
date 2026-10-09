@@ -71,6 +71,7 @@ class ReaderDrawingViewModel {
     pageWrapper.addEventListener('pointermove', onPointerMove, { passive: false });
     pageWrapper.addEventListener('pointerup', onPointerUp, { passive: false });
     pageWrapper.addEventListener('pointercancel', onPointerUp, { passive: false });
+    pageWrapper.addEventListener('dblclick', (e) => { if (this.model.isDrawMode) e.preventDefault(); }, { passive: false });
   }
 
   renderStrokes(canvas, pageNumber, customScale = null, customOutputScale = null) {
@@ -171,14 +172,15 @@ class ReaderDrawingViewModel {
       if (this.isDoubleTap(e, now)) {
         e.preventDefault();
         e.stopPropagation();
+        this.textHighlight.cancel();
         this.clearTextSelection();
         this.setDrawTool('pen');
+        this.lastTapTime = 0;
         return;
       }
 
-      const startedSelection = this.textHighlight.handlePointerDown(e, pageNumber, pageWrapper);
-      if (startedSelection) this.recordTap(e, now);
-      else this.lastTapTime = 0;
+      this.recordTap(e, now);
+      this.textHighlight.handlePointerDown(e, pageNumber, pageWrapper);
       return;
     }
 
@@ -303,7 +305,40 @@ class ReaderDrawingViewModel {
       return;
     }
 
-    if (this.model.drawTool === 'highlighter') return;
+    if (this.model.drawTool === 'highlighter') {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim();
+      if (text && selection?.rangeCount > 0) {
+        const range = selection.getRangeAt(0).cloneRange();
+        const targetPage = Number(pageNumber || this.model.currentPage || 1);
+        const wrapper = pageWrapper ||
+          document.getElementById(`pdf-page-${targetPage}`) ||
+          (this.viewportEl?.querySelector ? this.viewportEl.querySelector(`.pdf-page-wrapper[data-page="${targetPage}"]`) : null);
+        const annotations = this.getAnnotationCoordinator();
+        if (annotations) {
+          const colorId = this.model.getHighlightColorIdFromHex(this.model.drawColor);
+          let rects = [];
+          if (wrapper) {
+            rects = annotations.computeSelectionRects(range, wrapper, this.model.scale);
+          }
+          this.model.selectedRange = range;
+          this.model.selectedText = text;
+          this.model.selectedPage = targetPage;
+          this.model.selectedRects = rects;
+          await annotations.applyHighlight(colorId, '', {
+            showQuickPalette: true,
+            pageNumber: targetPage,
+            pageWrapper: wrapper,
+            rects: rects
+          });
+          this.model.selectedRange = null;
+          this.model.selectedText = '';
+          this.model.selectedRects = [];
+          this.model.selectedPage = null;
+        }
+      }
+      return;
+    }
 
     if (!this.isDrawing) return;
     this.isDrawing = false;
@@ -330,6 +365,7 @@ class ReaderDrawingViewModel {
   }
 
   isDoubleTap(event, now) {
+    if (event?.detail === 2) return true;
     const delay = Number(this.model.getAccessibilitySetting('doubleClickDelay'));
     return delay > 0 && this.lastTapTime > 0 && now - this.lastTapTime < delay &&
       Math.hypot(event.clientX - this.lastTapX, event.clientY - this.lastTapY) < 50;
@@ -365,7 +401,7 @@ class ReaderDrawingViewModel {
     if (toggleBtn) {
       toggleBtn.classList.toggle('active', isActive);
       const toggleLabel = toggleBtn.querySelector('.reader-draw-toggle-label');
-      if (toggleLabel) toggleLabel.textContent = isActive ? 'Dibujando' : 'Dibujo';
+      if (toggleLabel) toggleLabel.textContent = isActive ? 'Drawing' : 'Draw';
     }
 
     const drawingToolbar = document.getElementById('drawing-toolbar');
@@ -386,6 +422,7 @@ class ReaderDrawingViewModel {
       this.bodyEl.classList.toggle('text-highlight-mode', this.model.drawTool === 'highlighter');
     } else {
       this.textHighlight.cancel();
+      this.setDrawTool('pen', false);
       this.viewportEl.classList.remove('draw-mode-active', 'text-highlight-mode', 'pan-mode-active', 'pan-tool-active', 'panning');
       this.bodyEl.classList.remove('draw-mode-active', 'text-highlight-mode');
       this.model.setSpacePanActive(false);
@@ -400,12 +437,12 @@ class ReaderDrawingViewModel {
     this.model.selectedText = '';
   }
 
-  setDrawTool(tool) {
+  setDrawTool(tool, autoActivateMobile = true) {
     if (tool !== 'highlighter' && this.textHighlight.isSelecting) this.textHighlight.cancel();
     this.lastTapTime = 0;
     this.model.setDrawTool(tool);
 
-    if (this.isMobileReader() && (tool === 'pen' || tool === 'eraser') && !this.model.isDrawMode) {
+    if (autoActivateMobile && this.isMobileReader() && (tool === 'pen' || tool === 'eraser') && !this.model.isDrawMode) {
       this.toggleDrawMode(true);
     }
 
@@ -458,26 +495,97 @@ class ReaderDrawingViewModel {
     this.setDrawTool(nextTool);
   }
 
+  toggleEraser() {
+    if (this.model.drawTool === 'eraser') {
+      const revertTool = (this.model.previousDrawTool && this.model.previousDrawTool !== 'eraser')
+        ? this.model.previousDrawTool
+        : 'pen';
+      this.setDrawTool(revertTool);
+    } else {
+      this.setDrawTool('eraser');
+    }
+  }
+
+  getVisiblePageNumber() {
+    if (this.model.viewMode !== 'flow') {
+      return this.model.currentPage || 1;
+    }
+    const wrappers = Array.from(this.viewportEl?.querySelectorAll ? this.viewportEl.querySelectorAll('.pdf-page-wrapper') : []);
+    if (!wrappers.length) return this.model.currentPage || 1;
+    const bodyRect = this.bodyEl?.getBoundingClientRect ? this.bodyEl.getBoundingClientRect() : { top: 0, height: (typeof window !== 'undefined' ? window.innerHeight : 800) };
+    const center = bodyRect.top + bodyRect.height / 2;
+    let closestPage = this.model.currentPage || 1;
+    let minDistance = Infinity;
+    for (const wrapper of wrappers) {
+      if (typeof wrapper.getBoundingClientRect !== 'function') continue;
+      const rect = wrapper.getBoundingClientRect();
+      const pageNum = Number(wrapper.dataset?.page || (wrapper.id && wrapper.id.replace('pdf-page-', '')));
+      if (!pageNum) continue;
+      const dist = Math.abs((rect.top + rect.height / 2) - center);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestPage = pageNum;
+      }
+    }
+    return closestPage;
+  }
+
+  isPageVisible(pageNum) {
+    const wrapper = this.viewportEl?.querySelector ? this.viewportEl.querySelector(`.pdf-page-wrapper[data-page="${pageNum}"], #pdf-page-${pageNum}`) : null;
+    if (!wrapper || typeof wrapper.getBoundingClientRect !== 'function') return false;
+    const rect = wrapper.getBoundingClientRect();
+    const vHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
+    return rect.bottom > 60 && rect.top < vHeight - 60;
+  }
+
+  resolveTargetDrawPage(pageNumber = null) {
+    if (pageNumber) return Number(pageNumber);
+    const visiblePage = this.getVisiblePageNumber();
+    if (this.model.getPageStrokes(visiblePage)?.length > 0) {
+      return Number(visiblePage);
+    }
+    if (this.activeDrawPage && this.model.getPageStrokes(this.activeDrawPage)?.length > 0) {
+      return Number(this.activeDrawPage);
+    }
+    return Number(visiblePage || this.activeDrawPage || this.model.currentPage || 1);
+  }
+
   undoLastStroke(pageNumber = null) {
-    const targetPage = pageNumber || this.model.currentPage;
+    const targetPage = this.resolveTargetDrawPage(pageNumber);
     const removed = this.model.removeLastStrokeFromPage(targetPage);
     if (removed) {
-      const canvas = document.querySelector(`.pdf-drawing-canvas[data-page="${targetPage}"]`);
-      if (canvas) this.renderStrokes(canvas, targetPage);
+      const canvases = this.viewportEl?.querySelectorAll
+        ? this.viewportEl.querySelectorAll(`.pdf-drawing-canvas[data-page="${targetPage}"]`)
+        : (typeof document !== 'undefined' && document.querySelectorAll ? document.querySelectorAll(`.pdf-drawing-canvas[data-page="${targetPage}"]`) : []);
+      canvases.forEach(canvas => this.renderStrokes(canvas, targetPage));
       this.persistPageDrawings(targetPage);
     }
   }
 
-  clearCurrentPageDrawings(pageNumber = null) {
-    const targetPage = Number(pageNumber || this.model.currentPage || 1);
+  async clearCurrentPageDrawings(pageNumber = null) {
+    const targetPage = this.resolveTargetDrawPage(pageNumber);
     this.isDrawing = false;
     this.currentStroke = null;
     this.strokePoints = [];
+    if (this.activeDrawPage === targetPage) {
+      this.activeDrawPage = null;
+    }
 
     this.model.clearPageStrokes(targetPage);
-    const canvas = document.querySelector(`.pdf-drawing-canvas[data-page="${targetPage}"]`);
-    if (canvas) this.renderStrokes(canvas, targetPage);
-    this.persistPageDrawings(targetPage);
+    const canvases = this.viewportEl?.querySelectorAll
+      ? this.viewportEl.querySelectorAll(`.pdf-drawing-canvas[data-page="${targetPage}"]`)
+      : (typeof document !== 'undefined' && document.querySelectorAll ? document.querySelectorAll(`.pdf-drawing-canvas[data-page="${targetPage}"]`) : []);
+    canvases.forEach(canvas => this.renderStrokes(canvas, targetPage));
+
+    clearTimeout(this.drawingSyncTimers.get(targetPage));
+    if (typeof localDB !== 'undefined' && typeof localDB.clearPageDrawings === 'function') {
+      await localDB.clearPageDrawings(this.model.bookId, targetPage).catch(() => {});
+    }
+    if (typeof api !== 'undefined' && typeof api.clearPageDrawings === 'function') {
+      api.clearPageDrawings(this.model.bookId, targetPage).catch(e => {
+        console.warn('[ReaderDrawingViewModel] Clearing page drawings:', e);
+      });
+    }
   }
 
   async persistPageDrawings(pageNumber) {

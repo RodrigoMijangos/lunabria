@@ -1097,3 +1097,460 @@ test('MobileHUDView performs real-time live GPU scaling on viewportEl during pin
   assert.equal(committedFocal?.clientX, 250);
   assert.equal(committedFocal?.clientY, 300);
 });
+
+test('clearCurrentPageDrawings with no arguments clears the active or visible page with strokes and syncs with localDB and api', async () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderDrawingViewModel = context.window.ReaderDrawingViewModel || context.ReaderDrawingViewModel;
+
+  const model = new ReaderModel();
+  model.bookId = 99;
+  model.currentPage = 1;
+  model.addStrokeToPage(3, {
+    tool: 'pen',
+    color: '#000000',
+    width: 2,
+    points: [{ x: 0.1, y: 0.1, p: 0.5 }]
+  });
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+
+  let localDBCleared = null;
+  let apiCleared = null;
+
+  context.localDB.clearPageDrawings = async (bookId, page) => {
+    localDBCleared = { bookId, page };
+  };
+  context.api.clearPageDrawings = async (bookId, page) => {
+    apiCleared = { bookId, page };
+  };
+
+  const drawingVM = new ReaderDrawingViewModel(model, viewportEl, bodyEl, () => null);
+  drawingVM.activeDrawPage = 3;
+
+  await drawingVM.clearCurrentPageDrawings();
+
+  assert.equal(model.getPageStrokes(3).length, 0, 'Page 3 strokes must be cleared');
+  assert.deepEqual(localDBCleared, { bookId: 99, page: 3 }, 'localDB.clearPageDrawings must be called for page 3');
+  assert.deepEqual(apiCleared, { bookId: 99, page: 3 }, 'api.clearPageDrawings must be called for page 3');
+});
+
+test('Highlighter in draw mode forwards targetPage and computes rects, rendering highlight on correct page', async () => {
+  const { context, elementsById, currentSelection } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/HighlightOverlayView.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderAnnotationViewModel.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderTextHighlightController = context.window.ReaderTextHighlightController || context.ReaderTextHighlightController;
+  const ReaderAnnotationViewModel = context.window.ReaderAnnotationViewModel || context.ReaderAnnotationViewModel;
+
+  const model = new ReaderModel();
+  model.bookId = 77;
+  model.currentPage = 1;
+  model.drawTool = 'highlighter';
+  model.drawColor = '#fef08a';
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+
+  const pageWrapper2 = new context.Element('div', { id: 'pdf-page-2', class: 'pdf-page-wrapper' });
+  pageWrapper2.dataset = { page: '2' };
+  pageWrapper2.getBoundingClientRect = () => ({ left: 0, top: 500, width: 600, height: 800, right: 600, bottom: 1300 });
+
+  const textLayer2 = new context.Element('div', { class: 'textLayer' });
+  pageWrapper2.appendChild(textLayer2);
+  viewportEl.appendChild(pageWrapper2);
+
+  viewportEl.querySelector = (sel) => {
+    if (sel && (sel.includes('pdf-page-2') || sel.includes('page="2"'))) return pageWrapper2;
+    return null;
+  };
+
+  let savedAnnotation = null;
+  let refreshedPage = null;
+
+  context.api.createAnnotation = async (bookId, annot) => {
+    savedAnnotation = annot;
+    return { id: 101, ...annot };
+  };
+  context.api.getAnnotations = async () => [];
+
+  const annotVM = new ReaderAnnotationViewModel(model, viewportEl, bodyEl, () => null);
+  annotVM.renderDrawerAnnotations = () => {};
+  annotVM.openQuickHighlightPalette = () => {};
+  annotVM.refreshPageHighlights = (page) => { refreshedPage = page; return true; };
+  annotVM.computeSelectionRects = () => [{ left: 50, top: 100, width: 200, height: 20 }];
+
+  const textController = new ReaderTextHighlightController(model, () => annotVM);
+
+  currentSelection.setBaseAndExtent({ textContent: 'Selected in draw mode' }, 0, { textContent: 'Selected in draw mode' }, 21);
+
+  textController.gesture = {
+    pointerId: 1,
+    pageNumber: 2,
+    pageWrapper: pageWrapper2,
+    isDragging: true
+  };
+
+  const handled = await textController.handlePointerUp({
+    pointerId: 1,
+    clientX: 100,
+    clientY: 550,
+    preventDefault: () => {},
+    stopPropagation: () => {}
+  });
+
+  assert.equal(handled, true);
+  assert.ok(savedAnnotation, 'Annotation should have been saved');
+  assert.equal(savedAnnotation.page, 2, 'Saved annotation must target page 2 from gesture, not currentPage 1');
+  assert.equal(refreshedPage, 2, 'Page 2 highlights must have been refreshed');
+});
+
+test('HighlightOverlayView clamps width and height to at least 1px', () => {
+  const { context } = createDOMContext();
+  loadScript(context, 'js/views/reader/HighlightOverlayView.js');
+  const HighlightOverlayView = context.window.HighlightOverlayView || context.HighlightOverlayView;
+
+  const container = new context.Element('div');
+  const annotations = [
+    {
+      id: 'h1',
+      color: 'yellow',
+      rects: [
+        { x0: 10, y0: 20, x1: 10.001, y1: 20.001 }
+      ]
+    }
+  ];
+
+  HighlightOverlayView.renderPageHighlights(container, annotations, 1.0, [{ id: 'yellow', color: '#fef08a' }]);
+  assert.equal(container.children.length, 1);
+  const mark = container.children[0];
+  assert.equal(mark.style.width, '1px', 'Width should be clamped to at least 1px');
+  assert.equal(mark.style.height, '1px', 'Height should be clamped to at least 1px');
+});
+
+test('MobileReaderController and LibraryViewModel do not request fullscreen when opening a book on mobile', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/mobile/DeviceEnvironment.js');
+  loadScript(context, 'js/mobile/MobileReaderController.js');
+  loadScript(context, 'js/viewmodels/LibraryViewModel.js');
+
+  const MobileReaderController = context.window.MobileReaderController || context.MobileReaderController;
+  const LibraryViewModel = context.window.LibraryViewModel || context.LibraryViewModel;
+
+  let fullscreenRequested = false;
+  context.document.documentElement = {
+    requestFullscreen: async () => { fullscreenRequested = true; },
+    webkitRequestFullscreen: () => { fullscreenRequested = true; }
+  };
+
+  const fakeReader = {
+    container: elementsById.get('reader-container') || new context.Element('div'),
+    drawing: {
+      toggleDrawMode: () => {},
+      setDrawTool: () => {}
+    },
+    open: (bookId, page) => {}
+  };
+
+  const controller = new MobileReaderController(fakeReader, { isDrawMode: false });
+  controller.requestFullscreenIfMobile();
+  assert.equal(fullscreenRequested, false, 'requestFullscreenIfMobile must not request fullscreen');
+
+  context.window.reader = {
+    ...fakeReader,
+    mobile: controller
+  };
+
+  LibraryViewModel.prototype.openBook.call({}, 1);
+  assert.equal(fullscreenRequested, false, 'LibraryViewModel.openBook must not request fullscreen');
+});
+
+test('Double click with mouse in highlighter mode switches to pen tool and vice-versa', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderDrawingViewModel = context.window.ReaderDrawingViewModel || context.ReaderDrawingViewModel;
+
+  const model = new ReaderModel();
+  model.isDrawMode = true;
+  model.drawTool = 'highlighter';
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  const drawingVM = new ReaderDrawingViewModel(model, viewportEl, bodyEl, () => null);
+
+  const pageWrapper = new context.Element('div', { id: 'pdf-page-1' });
+  const drawCanvas = new context.Element('canvas');
+  drawCanvas.getContext = () => ({
+    clearRect() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
+    save() {}, restore() {}, scale() {}, fill() {}, arc() {}
+  });
+
+  // Click 1 in highlighter mode (mouse)
+  drawingVM.handleDrawingPointerDown(
+    { pointerType: 'mouse', button: 0, detail: 1, clientX: 100, clientY: 100, isPrimary: true, preventDefault() {}, stopPropagation() {} },
+    1, pageWrapper, drawCanvas, 1.0, 1.0
+  );
+  assert.equal(model.drawTool, 'highlighter');
+
+  // Click 2 in highlighter mode (mouse, detail: 2) -> must switch to pen
+  drawingVM.handleDrawingPointerDown(
+    { pointerType: 'mouse', button: 0, detail: 2, clientX: 102, clientY: 101, isPrimary: true, preventDefault() {}, stopPropagation() {} },
+    1, pageWrapper, drawCanvas, 1.0, 1.0
+  );
+  assert.equal(model.drawTool, 'pen', 'Double click with mouse in highlighter mode must switch to pen');
+
+  // Now in pen mode: click 1
+  drawingVM.handleDrawingPointerDown(
+    { pointerType: 'mouse', button: 0, detail: 1, clientX: 200, clientY: 200, isPrimary: true, preventDefault() {}, stopPropagation() {} },
+    1, pageWrapper, drawCanvas, 1.0, 1.0
+  );
+  assert.equal(model.drawTool, 'pen');
+
+  // Click 2 in pen mode (mouse, detail: 2) -> must switch to highlighter
+  drawingVM.handleDrawingPointerDown(
+    { pointerType: 'mouse', button: 0, detail: 2, clientX: 202, clientY: 201, isPrimary: true, preventDefault() {}, stopPropagation() {} },
+    1, pageWrapper, drawCanvas, 1.0, 1.0
+  );
+  assert.equal(model.drawTool, 'highlighter', 'Double click with mouse in pen mode must switch to highlighter');
+});
+
+test('Space key in draw mode prevents default on initial press and on key repeats', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderToolbarManager.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderToolbarManager = context.window.ReaderToolbarManager || context.ReaderToolbarManager;
+
+  const model = new ReaderModel();
+  model.isDrawMode = true;
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  const container = elementsById.get('reader-container') || new context.Element('div');
+  container.style.display = 'flex';
+
+  const toolbarManager = new ReaderToolbarManager(
+    model,
+    { viewportEl, bodyEl, container, scrubber: null, pageText: null },
+    { nav: null, drawing: null, annotations: null }
+  );
+
+  let keydownListener = null;
+  let keyupListener = null;
+  context.window.addEventListener = (event, fn) => {
+    if (event === 'keydown') keydownListener = fn;
+    if (event === 'keyup') keyupListener = fn;
+  };
+
+  toolbarManager.bindKeyboardShortcuts();
+  assert.ok(keydownListener, 'keydown listener must be registered');
+
+  let preventedInitial = false;
+  keydownListener({
+    code: 'Space',
+    repeat: false,
+    target: bodyEl,
+    preventDefault() { preventedInitial = true; }
+  });
+  assert.equal(preventedInitial, true, 'Initial Space keydown must call preventDefault');
+  assert.equal(model.isSpacePanActive, true, 'Space pan must be active');
+
+  // Key repeat event (after ~400ms holding Space)
+  let preventedRepeat = false;
+  keydownListener({
+    code: 'Space',
+    repeat: true,
+    target: bodyEl,
+    preventDefault() { preventedRepeat = true; }
+  });
+  assert.equal(preventedRepeat, true, 'Repeated Space keydown must also call preventDefault to prevent browser scrolling');
+  assert.equal(model.isSpacePanActive, true, 'Space pan must remain active during key repeats');
+
+  // Keyup releases space pan
+  keyupListener({ code: 'Space' });
+  assert.equal(model.isSpacePanActive, false, 'Space pan must be deactivated on keyup');
+});
+
+test('ReaderDrawingViewModel.toggleDrawMode(false) and ReaderModel.reset() reset drawTool to pen', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderDrawingViewModel = context.window.ReaderDrawingViewModel || context.ReaderDrawingViewModel;
+
+  const model = new ReaderModel();
+  model.isDrawMode = true;
+  model.setDrawTool('highlighter');
+  assert.equal(model.drawTool, 'highlighter');
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  const drawingVM = new ReaderDrawingViewModel(model, viewportEl, bodyEl, () => null);
+
+  // Exiting draw mode resets draw tool to 'pen'
+  drawingVM.toggleDrawMode(false);
+  assert.equal(model.isDrawMode, false);
+  assert.equal(model.drawTool, 'pen', 'Closing draw mode must reset drawTool to pen');
+
+  // Resetting the model also resets draw tool to 'pen'
+  model.setDrawTool('highlighter');
+  model.reset();
+  assert.equal(model.drawTool, 'pen', 'ReaderModel.reset() must reset drawTool to pen');
+});
+
+test('Space key pan activates and blurs buttons when a toolbar button has focus', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderToolbarManager.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderToolbarManager = context.window.ReaderToolbarManager || context.ReaderToolbarManager;
+
+  const model = new ReaderModel();
+  model.isDrawMode = true;
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  const container = elementsById.get('reader-container') || new context.Element('div');
+  container.style.display = 'flex';
+
+  const toolbarManager = new ReaderToolbarManager(
+    model,
+    { viewportEl, bodyEl, container, scrubber: null, pageText: null },
+    { nav: null, drawing: null, annotations: null }
+  );
+
+  let keydownListener = null;
+  context.window.addEventListener = (event, fn) => {
+    if (event === 'keydown') keydownListener = fn;
+  };
+
+  toolbarManager.bindKeyboardShortcuts();
+
+  // Create a button element that simulates having focus (e.g. reader-draw-toggle-btn)
+  const drawToggleBtn = new context.Element('button', { id: 'reader-draw-toggle-btn' });
+  let blurred = false;
+  drawToggleBtn.blur = () => { blurred = true; };
+
+  let prevented = false;
+  keydownListener({
+    code: 'Space',
+    repeat: false,
+    target: drawToggleBtn,
+    preventDefault() { prevented = true; }
+  });
+
+  assert.equal(prevented, true, 'Space keydown on button must preventDefault');
+  assert.equal(blurred, true, 'Space keydown on button must blur the button');
+  assert.equal(model.isSpacePanActive, true, 'Space pan must become active even when a button had focus');
+});
+
+test('Pressing E in eraser mode returns to previous drawing tool (pen, highlighter, pan)', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderToolbarManager.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const ReaderDrawingViewModel = context.window.ReaderDrawingViewModel || context.ReaderDrawingViewModel;
+  const ReaderToolbarManager = context.window.ReaderToolbarManager || context.ReaderToolbarManager;
+
+  const model = new ReaderModel();
+  model.isDrawMode = true;
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  const container = elementsById.get('reader-container') || new context.Element('div');
+  container.style.display = 'flex';
+
+  const drawingVM = new ReaderDrawingViewModel(model, viewportEl, bodyEl, () => null);
+
+  const toolbarManager = new ReaderToolbarManager(
+    model,
+    { viewportEl, bodyEl, container, scrubber: null, pageText: null },
+    { nav: null, drawing: drawingVM, annotations: null }
+  );
+
+  let keydownListener = null;
+  context.window.addEventListener = (event, fn) => {
+    if (event === 'keydown') keydownListener = fn;
+  };
+  toolbarManager.bindKeyboardShortcuts();
+
+  // 1. Pen -> Eraser -> Pen
+  drawingVM.setDrawTool('pen');
+  assert.equal(model.drawTool, 'pen');
+
+  // Press E
+  keydownListener({ key: 'e', code: 'KeyE', target: bodyEl, preventDefault() {} });
+  assert.equal(model.drawTool, 'eraser', 'First E press must switch pen to eraser');
+
+  // Press E again
+  keydownListener({ key: 'e', code: 'KeyE', target: bodyEl, preventDefault() {} });
+  assert.equal(model.drawTool, 'pen', 'Second E press must revert back to pen');
+
+  // 2. Highlighter -> Eraser -> Highlighter
+  drawingVM.setDrawTool('highlighter');
+  assert.equal(model.drawTool, 'highlighter');
+
+  // Press E
+  keydownListener({ key: 'E', code: 'KeyE', target: bodyEl, preventDefault() {} });
+  assert.equal(model.drawTool, 'eraser', 'Pressing E while in highlighter must switch to eraser');
+
+  // Press E again
+  keydownListener({ key: 'E', code: 'KeyE', target: bodyEl, preventDefault() {} });
+  assert.equal(model.drawTool, 'highlighter', 'Pressing E again while in eraser must revert back to highlighter');
+  assert.equal(bodyEl.classList.contains('text-highlight-mode'), true, 'Body must have text-highlight-mode active');
+
+  // 3. Pan -> Eraser -> Pan
+  drawingVM.setDrawTool('pan');
+  assert.equal(model.drawTool, 'pan');
+
+  // Press E
+  keydownListener({ key: 'e', code: 'KeyE', target: bodyEl, preventDefault() {} });
+  assert.equal(model.drawTool, 'eraser');
+
+  // Press E again
+  keydownListener({ key: 'e', code: 'KeyE', target: bodyEl, preventDefault() {} });
+  assert.equal(model.drawTool, 'pan', 'Pressing E again must revert back to pan tool');
+});

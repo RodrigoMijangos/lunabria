@@ -15,6 +15,8 @@ class ReaderDocumentLifecycle {
     reader.toolbar.setOfflineStatus({ pdfCached: false, layoutsCached: false });
     reader.container.style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    if (typeof reader.drawing?.toggleDrawMode === 'function') reader.drawing.toggleDrawMode(false);
+    if (typeof reader.drawing?.setDrawTool === 'function') reader.drawing.setDrawTool('pen', false);
     reader.updateBookInfo(bookId, sequence);
 
     reader.destroyPdfResource(previousLoadingTask);
@@ -151,6 +153,8 @@ class ReaderDocumentLifecycle {
     reader.loadingTask = null;
 
     reader.mobile?.exitFullscreen();
+    if (typeof reader.drawing?.toggleDrawMode === 'function') reader.drawing.toggleDrawMode(false);
+    if (typeof reader.drawing?.setDrawTool === 'function') reader.drawing.setDrawTool('pen', false);
     reader.container.style.display = 'none';
     document.body.style.overflow = '';
     reader.mobile?.onBookClosed();

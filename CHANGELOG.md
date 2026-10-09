@@ -11,6 +11,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-05
+
+### Added
+- Pressing E while using the eraser returns to the previously selected drawing tool.
+
+### Changed
+- Drawing tool labels and tooltips are now displayed in English.
+
+### Removed
+- Opening books on mobile no longer automatically switches to fullscreen.
+
+### Fixed
+- Highlight category and color changes now refresh annotations without reloading the page.
+- Text highlights render correctly while drawing.
+- Clearing the canvas removes drawings from the currently visible page.
+- Double-clicking with the highlighter selected switches back to the pen on desktop.
+- Spacebar panning in drawing mode works with toolbar focus and no longer triggers browser auto-scroll when held.
+- Drawing mode returns to the pen after leaving the reader or opening another book.
+
 ---
 
 ## [1.2.0] - 2026-10-04
@@ -410,7 +429,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.0.11...v1.1.0

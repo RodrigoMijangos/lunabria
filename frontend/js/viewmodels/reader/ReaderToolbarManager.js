@@ -33,6 +33,11 @@ class ReaderToolbarManager {
       if (this.onClose) this.onClose();
     });
 
+    document.getElementById('reader-top-bar')?.addEventListener('click', (e) => {
+      const btn = e.target && typeof e.target.closest === 'function' ? e.target.closest('button') : null;
+      if (btn && typeof btn.blur === 'function') btn.blur();
+    });
+
     // View Mode Dropdown
     document.getElementById('view-mode-select')?.addEventListener('change', (e) => {
       this.nav.setViewMode(e.target.value);
@@ -196,6 +201,10 @@ class ReaderToolbarManager {
   }
 
   bindDrawingToolbarEvents() {
+    document.getElementById('drawing-toolbar')?.addEventListener('click', (e) => {
+      const btn = e.target && typeof e.target.closest === 'function' ? e.target.closest('button') : null;
+      if (btn && typeof btn.blur === 'function') btn.blur();
+    });
     document.getElementById('reader-draw-toggle-btn')?.addEventListener('click', () => this.drawing.toggleDrawMode());
     document.getElementById('floating-draw-btn')?.addEventListener('click', () => this.drawing.toggleDrawMode(true));
 
@@ -309,14 +318,20 @@ class ReaderToolbarManager {
     window.addEventListener('keydown', (e) => {
       if (this.container.style.display !== 'flex') return;
       const isInteractiveTarget = this.isInteractiveTarget(e.target);
-      const isDrawingToolbarTarget = e.target instanceof Element && Boolean(e.target.closest('#drawing-toolbar'));
 
-      if (e.code === 'Space' && !e.repeat && this.model.isDrawMode &&
-          (!isInteractiveTarget || isDrawingToolbarTarget)) {
-        e.preventDefault();
-        this.model.setSpacePanActive(true);
-        this.viewportEl.classList.add('pan-mode-active');
-        return;
+      if (e.code === 'Space' && !isInteractiveTarget) {
+        if (this.model.isDrawMode || this.model.isSpacePanActive) {
+          e.preventDefault();
+          if (e.target && typeof e.target.blur === 'function') {
+            e.target.blur();
+          }
+          if (!e.repeat) {
+            this.model.setSpacePanActive(true);
+            this.viewportEl.classList.add('pan-mode-active');
+            this.bodyEl.classList.add('pan-mode-active');
+          }
+          return;
+        }
       }
 
       if (isInteractiveTarget) return;
@@ -357,7 +372,11 @@ class ReaderToolbarManager {
             return;
           } else if (e.key === 'e' || e.key === 'E') {
             e.preventDefault();
-            this.drawing.setDrawTool('eraser');
+            if (typeof this.drawing?.toggleEraser === 'function') {
+              this.drawing.toggleEraser();
+            } else if (typeof this.drawing?.setDrawTool === 'function') {
+              this.drawing.setDrawTool('eraser');
+            }
             return;
           } else if (e.key === 'v' || e.key === 'V' || e.key === 'm' || e.key === 'M') {
             e.preventDefault();
@@ -449,15 +468,20 @@ class ReaderToolbarManager {
   }
 
   isInteractiveTarget(target) {
-    return target instanceof Element && Boolean(target.closest(
-      'input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="button"]'
-    ));
+    if (!target || typeof target.closest !== 'function') return false;
+    const isTextInput = target.closest(
+      'textarea, input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]), [contenteditable]:not([contenteditable="false"])'
+    );
+    if (isTextInput) return true;
+    if (target.closest('select')) return true;
+    return false;
   }
 
   releaseSpacePan() {
     if (!this.model.isSpacePanActive) return;
     this.model.setSpacePanActive(false);
     this.viewportEl.classList.remove('pan-mode-active');
+    this.bodyEl.classList.remove('pan-mode-active');
   }
 
   bindWheelZoom() {

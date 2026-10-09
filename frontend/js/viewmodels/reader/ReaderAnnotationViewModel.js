@@ -53,11 +53,14 @@ class ReaderAnnotationViewModel {
 
   async applyHighlight(colorId, comment = "", options = {}) {
     const text = this.model.selectedText;
-    let rects = this.model.selectedRects;
-    let pageNumber = this.model.selectedPage || this.model.currentPage;
+    const pageNumber = Number(options.pageNumber || this.model.selectedPage || this.model.currentPage || 1);
+    const pageWrapper = options.pageWrapper ||
+      document.getElementById(`pdf-page-${pageNumber}`) ||
+      this.viewportEl.querySelector(`.pdf-page-wrapper[data-page="${pageNumber}"]`) ||
+      this.viewportEl.querySelector('.pdf-page-wrapper');
+    let rects = (options.rects && options.rects.length) ? options.rects : this.model.selectedRects;
 
-    if ((!rects || !rects.length) && this.model.selectedRange) {
-      let pageWrapper = document.getElementById(`pdf-page-${pageNumber}`) || this.viewportEl.querySelector('.pdf-page-wrapper');
+    if ((!rects || !rects.length) && this.model.selectedRange && pageWrapper) {
       rects = this.computeSelectionRects(this.model.selectedRange, pageWrapper, this.model.scale);
     }
 
@@ -117,14 +120,21 @@ class ReaderAnnotationViewModel {
   }
 
   refreshPageHighlights(pageNumber) {
-    const targetPage = pageNumber || this.model.currentPage;
+    const targetPage = Number(pageNumber || this.model.currentPage);
     const wrapper = document.getElementById(`pdf-page-${targetPage}`) || this.viewportEl.querySelector(`.pdf-page-wrapper[data-page="${targetPage}"]`);
     if (wrapper) {
-      const hlLayer = wrapper.querySelector('.pdf-highlight-layer');
-      if (hlLayer) {
-        this.renderPageHighlights(hlLayer, targetPage);
-        return true;
+      let hlLayer = wrapper.querySelector('.pdf-highlight-layer');
+      if (!hlLayer) {
+        hlLayer = HighlightOverlayView.createHighlightLayerContainer();
+        const drawCanvas = wrapper.querySelector('.pdf-drawing-canvas');
+        if (drawCanvas) {
+          wrapper.insertBefore(hlLayer, drawCanvas);
+        } else {
+          wrapper.appendChild(hlLayer);
+        }
       }
+      this.renderPageHighlights(hlLayer, targetPage);
+      return true;
     }
     return false;
   }
@@ -147,7 +157,7 @@ class ReaderAnnotationViewModel {
         btn.title = `Cambiar a: ${c.name}`;
         btn.onclick = async (ev) => {
           ev.stopPropagation();
-          await this.changeHighlightColor(annot.id, c.id);
+          await this.changeHighlightColor(annot.id, c.id, annot.page);
         };
         colorsContainer.appendChild(btn);
       });
@@ -162,8 +172,9 @@ class ReaderAnnotationViewModel {
     if (this.highlightActionMenu) this.highlightActionMenu.style.display = 'none';
     this.model.activeHighlight = null;
 
-    const pageWrapper = document.getElementById(`pdf-page-${pageNumber}`) ||
-      this.viewportEl.querySelector(`.pdf-page-wrapper[data-page="${pageNumber}"]`);
+    const targetPage = Number(annot.page || pageNumber || this.model.currentPage);
+    const pageWrapper = document.getElementById(`pdf-page-${targetPage}`) ||
+      this.viewportEl.querySelector(`.pdf-page-wrapper[data-page="${targetPage}"]`);
     const highlight = Array.from(pageWrapper?.querySelectorAll('.pdf-highlight-rect') || [])
       .find(element => element.dataset.annotationId === String(annot.id));
     const bounds = highlight?.getBoundingClientRect() || fallbackBounds;
@@ -186,7 +197,7 @@ class ReaderAnnotationViewModel {
           this.hideQuickHighlightPalette();
           return;
         }
-        await this.changeHighlightColor(annot.id, color.id, pageNumber);
+        await this.changeHighlightColor(annot.id, color.id, targetPage);
       });
       colorContainer.appendChild(button);
     });
@@ -217,17 +228,44 @@ class ReaderAnnotationViewModel {
     palette.setAttribute('aria-hidden', 'true');
   }
 
-  async changeHighlightColor(annotId, newColorId, pageNumber = this.model.currentPage) {
+  async changeHighlightColor(annotId, newColorId, pageNumber = null) {
+    const annot = this.model.annotations.find(a => String(a.id) === String(annotId)) || this.model.activeHighlight;
+    const targetPage = Number(annot?.page || pageNumber || this.model.currentPage);
     const colorMeta = this.model.getColorMetadata(newColorId);
-    await api.updateAnnotation(annotId, {
-      color: newColorId,
-      category: colorMeta?.name || ''
+
+    // 1. Optimistic update in model
+    if (annot) {
+      annot.color = newColorId;
+      annot.category = colorMeta?.name || '';
+    }
+    if (this.model.activeHighlight && String(this.model.activeHighlight.id) === String(annotId)) {
+      this.model.activeHighlight.color = newColorId;
+      this.model.activeHighlight.category = colorMeta?.name || '';
+    }
+
+    // 2. Direct DOM update for all matching highlight rects on screen
+    const highlightRects = document.querySelectorAll(`.pdf-highlight-rect[data-annotation-id="${annotId}"]`);
+    highlightRects.forEach(el => {
+      el.style.backgroundColor = colorMeta ? colorMeta.color : '#ffeb3b';
     });
+
     if (this.highlightActionMenu) this.highlightActionMenu.style.display = 'none';
     this.hideQuickHighlightPalette();
     this.model.activeHighlight = null;
+
+    // 3. Persist change to backend
+    try {
+      await api.updateAnnotation(annotId, {
+        color: newColorId,
+        category: colorMeta?.name || ''
+      });
+    } catch (err) {
+      console.error('[ReaderAnnotationViewModel] Error updating annotation color:', err);
+    }
+
+    // 4. Refresh annotations data from server and re-render target page highlights
     await this.refreshAnnotations();
-    this.refreshPageHighlights(pageNumber);
+    this.refreshPageHighlights(targetPage);
   }
 
   detectAndHighlightWordAtPoint(clientX, clientY, drawCanvas) {
@@ -273,8 +311,13 @@ class ReaderAnnotationViewModel {
             sel.addRange(wordRange);
             this.model.selectedRange = wordRange;
             this.model.selectedText = wordRange.toString().trim();
+            const pageWrapper = drawCanvas.parentElement?.closest?.('.pdf-page-wrapper') || drawCanvas.parentElement;
+            const pageNumber = pageWrapper?.dataset?.page ? Number(pageWrapper.dataset.page) : this.model.currentPage;
+            this.model.selectedPage = pageNumber;
+            const rects = pageWrapper ? this.computeSelectionRects(wordRange, pageWrapper, this.model.scale) : [];
+            this.model.selectedRects = rects;
             const colorId = this.model.getHighlightColorIdFromHex(this.model.drawColor);
-            this.applyHighlight(colorId, '', { showQuickPalette: true });
+            this.applyHighlight(colorId, '', { showQuickPalette: true, pageNumber, pageWrapper, rects });
           }
         }
       }

@@ -109,6 +109,20 @@ class HighlightColorSettingsManager {
     try {
       await api.saveColors(colors);
       this.colors = colors;
+      if (window.reader?.model) {
+        window.reader.model.setColors(colors);
+        window.reader.annotations?.renderFloatingColors();
+        if (window.reader.model.bookId) {
+          document.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
+            const p = Number(wrapper.dataset.page || wrapper.id.replace('pdf-page-', ''));
+            if (p) window.reader.annotations?.refreshPageHighlights(p);
+          });
+          window.reader.annotations?.renderDrawerAnnotations();
+          if (window.reader.model.viewMode === 'notes') {
+            window.reader.notes?.renderNotesMode();
+          }
+        }
+      }
       ModalView.close(this.modal);
     } catch (error) {
       this.setStatus('Could not save palette. Please try again.');

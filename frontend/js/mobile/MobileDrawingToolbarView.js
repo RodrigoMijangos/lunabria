@@ -239,13 +239,13 @@ class MobileDrawingToolbarView {
       this.mainBtn.style.backgroundColor = color;
       this.mainBtn.style.borderWidth = `${width}px`;
       this.mainBtn.style.borderColor = 'rgba(255, 255, 255, 0.9)';
-      this.mainBtn.title = `Lápiz activo (${color}, ${width}px) — Toca para desplegar`;
+      this.mainBtn.title = `Active pen (${color}, ${width}px) — Tap to expand`;
     } else {
       this.mainBtn.classList.remove('is-pen-tool');
       this.mainBtn.style.backgroundColor = '';
       this.mainBtn.style.borderWidth = '2px';
       this.mainBtn.style.borderColor = '';
-      this.mainBtn.title = `${tool === 'eraser' ? 'Borrador' : 'Mover'} activo — Toca para desplegar`;
+      this.mainBtn.title = `${tool === 'eraser' ? 'Eraser' : 'Pan'} active — Tap to expand`;
     }
 
     // Update active classes on drawer items and exclude currently active tool

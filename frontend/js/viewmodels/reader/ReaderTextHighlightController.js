@@ -44,6 +44,7 @@ class ReaderTextHighlightController {
   }
 
   textPositionAtPoint(clientX, clientY, pageWrapper, textRecords, allowNearby = false) {
+    const safeRecords = Array.isArray(textRecords) ? textRecords : [];
     let position = null;
     if (document.caretRangeFromPoint) {
       const range = document.caretRangeFromPoint(clientX, clientY);
@@ -63,7 +64,7 @@ class ReaderTextHighlightController {
         pageWrapper.contains(position.node) &&
         position.node.parentElement?.closest('.textLayer')) {
       position.offset = Math.max(0, Math.min(position.node.textContent.length, position.offset));
-      const wordRecord = textRecords.find(record =>
+      const wordRecord = safeRecords.find(record =>
         record.node === position.node &&
         position.offset >= record.start && position.offset <= record.end
       );
@@ -75,7 +76,7 @@ class ReaderTextHighlightController {
 
     let nearest = null;
     let nearestDistance = Infinity;
-    for (const record of textRecords) {
+    for (const record of safeRecords) {
       const distance = distanceToRect(record.rect);
       if (distance < nearestDistance) {
         nearestDistance = distance;
@@ -179,12 +180,12 @@ class ReaderTextHighlightController {
     }
 
     const gesture = this.gesture;
-    if (gesture.isDragging) {
+    if (gesture?.isDragging) {
       this.updateGesture(event);
     }
     this.gesture = null;
     this.loupe.hide();
-    try { gesture.pageWrapper.releasePointerCapture(event.pointerId); } catch (error) {}
+    try { gesture?.pageWrapper?.releasePointerCapture(event.pointerId); } catch (error) {}
 
     const selection = window.getSelection();
     const text = selection?.toString().trim() || '';
@@ -193,18 +194,39 @@ class ReaderTextHighlightController {
       return true;
     }
 
-    this.model.selectedRange = selection.getRangeAt(0).cloneRange();
+    const range = selection.getRangeAt(0).cloneRange();
+    this.model.selectedRange = range;
     this.model.selectedText = text;
+    const targetPage = Number(gesture?.pageNumber || this.model.currentPage || 1);
+    const pageWrapper = gesture?.pageWrapper ||
+      document.getElementById(`pdf-page-${targetPage}`) ||
+      (typeof document !== 'undefined' && document.querySelector ? document.querySelector(`.pdf-page-wrapper[data-page="${targetPage}"]`) : null);
+    this.model.selectedPage = targetPage;
+
     try {
-      const colorId = this.model.getHighlightColorIdFromHex(this.model.drawColor);
       const annotations = this.getAnnotationCoordinator();
-      if (annotations) await annotations.applyHighlight(colorId, '', { showQuickPalette: true });
+      let rects = [];
+      if (annotations && pageWrapper) {
+        rects = annotations.computeSelectionRects(range, pageWrapper, this.model.scale);
+        this.model.selectedRects = rects;
+      }
+      const colorId = this.model.getHighlightColorIdFromHex(this.model.drawColor);
+      if (annotations) {
+        await annotations.applyHighlight(colorId, '', {
+          showQuickPalette: true,
+          pageNumber: targetPage,
+          pageWrapper: pageWrapper,
+          rects: rects
+        });
+      }
     } catch (error) {
       console.error('[ReaderTextHighlightController] Could not save highlight:', error);
-      selection.removeAllRanges();
+      selection?.removeAllRanges();
     } finally {
       this.model.selectedRange = null;
       this.model.selectedText = '';
+      this.model.selectedRects = [];
+      this.model.selectedPage = null;
     }
     return true;
   }
@@ -214,10 +236,12 @@ class ReaderTextHighlightController {
     this.gesture = null;
     this.loupe.hide();
     if (!gesture) return;
-    try { gesture.pageWrapper.releasePointerCapture(gesture.pointerId); } catch (error) {}
+    try { gesture.pageWrapper?.releasePointerCapture(gesture.pointerId); } catch (error) {}
     window.getSelection()?.removeAllRanges();
     this.model.selectedRange = null;
     this.model.selectedText = '';
+    this.model.selectedRects = [];
+    this.model.selectedPage = null;
   }
 }
 

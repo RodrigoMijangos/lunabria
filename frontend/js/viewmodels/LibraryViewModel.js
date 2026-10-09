@@ -290,9 +290,6 @@ class LibraryViewModel {
   }
 
   openBook(bookId, startPage = null) {
-    if (window.reader?.mobile?.requestFullscreenIfMobile) {
-      window.reader.mobile.requestFullscreenIfMobile();
-    }
     if (window.reader && typeof window.reader.open === 'function') window.reader.open(bookId, startPage);
   }
 
