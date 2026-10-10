@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { readFileSync, readdirSync } = require('node:fs');
+const { existsSync, readFileSync, readdirSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -55,3 +55,46 @@ test('icon-only static buttons retain accessible names and hide decorative SVGs'
   }
 });
 
+test('brand identity declares valid SVG favicon, fallback PNG and maskable touch icon', () => {
+  const html = read('index.html');
+  assert.match(html, /<link\s+rel=["']icon["']\s+type=["']image\/svg\+xml["']\s+href=["']\.\/icons\/favicon\.svg["']/i);
+  assert.match(html, /<link\s+rel=["']icon["']\s+type=["']image\/png["']\s+sizes=["']192x192["']\s+href=["']\.\/icons\/icon-192\.png["']/i);
+  assert.match(html, /<link\s+rel=["']apple-touch-icon["']\s+href=["']\.\/icons\/maskable-192\.png["']/i);
+
+  assert.ok(existsSync(path.join(frontend, 'icons', 'favicon.svg')), 'favicon.svg must exist');
+  const faviconSvg = read('icons/favicon.svg');
+  assert.match(faviconSvg, /viewBox=["']0 0 24 24["']/);
+  assert.match(faviconSvg, /prefers-color-scheme:\s*dark/);
+});
+
+test('manifest declares dedicated any and maskable icons', () => {
+  const manifest = JSON.parse(read('manifest.json'));
+  assert.ok(Array.isArray(manifest.icons), 'manifest.json must have icons array');
+
+  const purposes = new Set(manifest.icons.map(icon => icon.purpose));
+  assert.ok(purposes.has('any'), 'manifest must declare any icons');
+  assert.ok(purposes.has('maskable'), 'manifest must declare maskable icons');
+
+  for (const icon of manifest.icons) {
+    const iconPath = path.join(frontend, icon.src.replace(/^\.\//, ''));
+    assert.ok(existsSync(iconPath), `Icon file must exist: ${icon.src}`);
+  }
+});
+
+test('brand design tokens and reduced motion transitions are defined for all themes', () => {
+  const designCss = read('css/design.css');
+  for (const themeSelector of [':root', '\\[data-theme="dark"\\]', '\\[data-theme="amoled"\\]']) {
+    const rx = new RegExp(`${themeSelector}[^{]*\\{[^}]*--brand-bg:[^}]*--brand-fg:[^}]*--brand-accent:[^}]*--brand-accent-rgb:`, 's');
+    assert.match(designCss, rx, `Missing brand tokens in ${themeSelector}`);
+  }
+  assert.match(designCss, /prefers-reduced-motion:\s*reduce/);
+});
+
+test('brand logo uses monoline open-book crescent symbol with accessible name', () => {
+  const iconsSvg = read('icons.svg');
+  assert.match(iconsSvg, /<symbol\s+id=["']moon["']\s+viewBox=["']0 0 24 24["']>/);
+
+  const html = read('index.html');
+  assert.match(html, /<span class=["']brand-badge["']><svg class=["']ui-icon["']\s+aria-hidden=["']true["']\s+focusable=["']false["']><use href=["']\.\/icons\.svg#moon["']><\/use><\/svg><\/span>/);
+  assert.match(html, /<span class=["']brand-title["']>Lunabria<\/span>/);
+});

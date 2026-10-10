@@ -98,7 +98,7 @@ class BookMetadataManager {
     const container = document.getElementById('metadata-sources-list');
     const status = document.getElementById('metadata-sources-status');
     const saveBtn = document.getElementById('metadata-sources-save-btn');
-    const selectedSources = Array.from(container?.querySelectorAll('input[type="checkbox"]:checked') || [])
+    const selectedSources = Array.from(container?.querySelectorAll('input[type=\"checkbox\"]:checked') || [])
       .map(input => input.value);
 
     if (!selectedSources.length) {
@@ -128,7 +128,7 @@ class BookMetadataManager {
 
     const fetchBtn = document.getElementById('edit-fetch-isbn-btn');
     fetchBtn.disabled = true;
-    fetchBtn.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Searching...';
+    fetchBtn.innerHTML = '<svg class=\"ui-icon ui-icon-spin\" aria-hidden=\"true\" focusable=\"false\"><use href=\"./icons.svg#loader\"></use></svg> Searching...';
 
     try {
       const data = await api.fetchMetadataByIsbn(isbn);
@@ -143,7 +143,7 @@ class BookMetadataManager {
       alert('No metadata found for that ISBN: ' + e.message);
     } finally {
       fetchBtn.disabled = false;
-      fetchBtn.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg> Fetch from Calibre';
+      fetchBtn.innerHTML = '<svg class=\"ui-icon\" aria-hidden=\"true\" focusable=\"false\"><use href=\"./icons.svg#search\"></use></svg> Fetch from Calibre';
     }
   }
 
@@ -170,11 +170,16 @@ class BookMetadataManager {
   }
 
   async deleteCurrentBook(bookId, title) {
-    if (confirm(`Are you sure you want to permanently delete "${title}" from your library?`)) {
+    if (confirm(`Are you sure you want to permanently delete \"${title}\" from your library?`)) {
       try {
         await api.deleteBook(bookId);
         ModalView.close(this.modal);
-        if (this.onDataChanged) await this.onDataChanged();
+        if (typeof localDB !== 'undefined' && localDB && typeof localDB.deleteBook === 'function') {
+          try {
+            await localDB.deleteBook(bookId);
+          } catch (_) {}
+        }
+        if (this.onDataChanged) await this.onDataChanged(bookId);
       } catch (e) {
         alert('Error deleting book: ' + e.message);
       }

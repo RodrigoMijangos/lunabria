@@ -11,6 +11,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-09
+
+### Added
+- Dynamic browser favicon and maskable app icons tailored for home screen installation.
+
+### Changed
+- Reimagined Lunabria brand identity with an open-book lunar emblem across the navigation bar and application surfaces.
+- Browser header and status bar colors follow the active theme (Sepia, Dark, AMOLED).
+- The Linux/WSL service installer loads the project `.env` and honors `LUNABRIA_VENV`, `LUNABRIA_PYTHON`, or `LUNABRIA_ENV_FILE` with relative-path resolution.
+
+### Fixed
+- Deleting a book now immediately clears its local cache, offline storage and cover image so the library reflects the removal without requiring a hard refresh or server revalidation.
+- Fixed layout overflow and text clipping in the sync and autosave settings modal on mobile screens.
+
 ## [1.5.0] - 2026-10-09
 
 ### Added
@@ -472,7 +486,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.3.1...v1.4.0

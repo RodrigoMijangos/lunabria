@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.5.0-catalog-page-navigation';
+const CACHE_NAME = 'lunabria-v1.6.0';
 const COVER_CACHE_NAME = 'lunabria-covers-v1';
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   'https://cdn.jsdelivr.net',
@@ -11,14 +11,17 @@ const STATIC_ASSETS = [
   './index.html',
   './manifest.json',
   './icons.svg',
+  './icons/favicon.svg',
   './icons/icon-192.png',
+  './icons/maskable-192.png',
   './icons/icon-512.png',
-  './css/style.css?v=1.0.10-selection-layout',
+  './icons/maskable-512.png',
+  './css/style.css?v=1.0.11-branding-tokens',
   './css/mobile/mobile-reader.css?v=1.1.2',
   './js/services/http.js?v=1.0.0',
   './js/services/connectivity.js?v=1.0.4',
-  './js/db.js?v=1.4.4',
-  './js/services/books.js?v=1.0.9',
+  './js/db.js?v=1.4.5',
+  './js/services/books.js?v=1.0.10',
   './js/services/virtual-libraries.js?v=1.0.8',
   './js/services/metadata.js?v=1.0.8',
   './js/services/progress.js?v=1.0.8',
@@ -28,7 +31,7 @@ const STATIC_ASSETS = [
   './js/services/drawings.js?v=1.0.8',
   './js/api.js?v=1.0.8',
   './js/models/ReaderModel.js?v=1.3.0',
-  './js/models/LibraryModel.js?v=0.8.1',
+  './js/models/LibraryModel.js?v=0.8.2',
   './js/views/reader/PDFPageView.js?v=0.6.2',
   './js/views/reader/TextLayerView.js?v=1.0.10-selection-hit-test',
   './js/views/reader/HighlightOverlayView.js?v=1.3.0',
@@ -47,12 +50,12 @@ const STATIC_ASSETS = [
   './js/views/library/CatalogPaginationView.js?v=1.0.8',
   './js/views/library/CatalogSelectionView.js?v=1.0.8',
   './js/viewmodels/library/BookUploadManager.js?v=1.0.9',
-  './js/viewmodels/library/BookMetadataManager.js?v=1.0.9',
+  './js/viewmodels/library/BookMetadataManager.js?v=1.0.10',
   './js/viewmodels/library/VirtualLibraryManager.js?v=0.8.1',
   './js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0',
   './js/viewmodels/library/SyncSettingsManager.js?v=1.4.0',
   './js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8',
-  './js/viewmodels/LibraryViewModel.js?v=1.4.11',
+  './js/viewmodels/LibraryViewModel.js?v=1.4.12',
   './js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.6',
   './js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0',
   './js/services/reader/ReaderTextTargetGeometry.js?v=1.0.0',
@@ -160,6 +163,17 @@ self.addEventListener('fetch', (event) => {
 
   // For other API endpoints, verify connectivity with the actual request and fall back to offline 503.
   if (url.pathname.startsWith('/api/')) {
+    // Prune deleted book cover from COVER_CACHE_NAME upon successful DELETE
+    if (event.request.method === 'DELETE' && /^\/api\/books\/\d+$/.test(url.pathname)) {
+      const match = url.pathname.match(/^\/api\/books\/(\d+)$/);
+      if (match) {
+        const bookId = match[1];
+        caches.open(COVER_CACHE_NAME).then(coverCache => {
+          coverCache.delete(`/api/books/${bookId}/cover`);
+        }).catch(() => {});
+      }
+    }
+
     const isLargeTransfer = url.pathname.endsWith('/pdf') || url.pathname.includes('/upload');
     const apiTimeoutMs = isLargeTransfer ? 60000 : 10000;
 

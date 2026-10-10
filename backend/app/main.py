@@ -23,7 +23,7 @@ logging.getLogger("asyncio").addFilter(_SuppressSocketSendErrorFilter())
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.5.0"
+    version="1.6.0"
 )
 
 import time
@@ -35,6 +35,11 @@ async def log_requests(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
     duration_ms = round((time.time() - start_time) * 1000, 1)
+
+    # Ensure dynamic API endpoints are never cached by the browser HTTP cache
+    if request.url.path.startswith("/api/") and "cache-control" not in [k.lower() for k in response.headers.keys()]:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
 
     client_ip = request.client.host if request.client else "127.0.0.1"
     http_version = request.scope.get("http_version", "1.1")

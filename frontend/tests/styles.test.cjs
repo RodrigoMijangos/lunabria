@@ -136,3 +136,13 @@ test('visual refinements are isolated from document and annotation rendering', (
     assert.ok(text.includes(`--ui-accent-rgb: ${rgb}`));
   }
 });
+
+test('sync modal declares responsive layout safeguards for mobile viewports', () => {
+  const text = readFileSync(path.join(cssDirectory, 'design.css'), 'utf8');
+  assertSafeBoundary(text, 'design.css');
+  assert.match(text, /\.sync-option-card\s*\{[^}]*box-sizing:\s*border-box/);
+  assert.match(text, /\.sync-card-content\s*\{[^}]*min-width:\s*0/);
+  assert.match(text, /\.sync-interval-picker\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(text, /\.sync-quick-btns\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(text, /@media\s*\(max-width:\s*580px\)/);
+});

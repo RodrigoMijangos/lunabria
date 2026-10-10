@@ -308,7 +308,7 @@ test('STATIC_ASSETS are unique local existing resources and cache release matche
   const backend = fs.readFileSync(path.join(frontend, '..', 'backend', 'app', 'main.py'), 'utf8');
   const version = backend.match(/\bversion\s*=\s*['"]([^'"]+)['"]/);
   assert.ok(version, 'Backend FastAPI version not found');
-  assert.equal(version[1], '1.5.0');
+  assert.equal(version[1], '1.6.0');
   // Frontend-only revisions refresh the shell without publishing a new API release.
   const cacheVersion = cacheName.match(/^lunabria-v(\d+\.\d+\.\d+)(?:-[a-z0-9-]+)?$/);
   assert.ok(cacheVersion, 'Invalid shell cache name');

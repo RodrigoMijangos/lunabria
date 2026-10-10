@@ -10,7 +10,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Lunabria">
-  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="./icons/favicon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/maskable-192.png">
   <!-- Modern Typography (Plus Jakarta Sans & Newsreader) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,7 +20,7 @@
 
   <!-- PDF.js official textLayer stylesheet -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/web/pdf_viewer.min.css">
-  <link rel="stylesheet" href="./css/style.css?v=1.0.10-selection-layout">
+  <link rel="stylesheet" href="./css/style.css?v=1.0.11-branding-tokens">
   <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.2">
   
   <!-- PDF.js library -->
@@ -681,37 +683,39 @@
   <div id="sync-modal" class="modal-overlay">
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3 style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+        <h3 class="sync-modal-heading">
           <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg> Sync & Autosave
         </h3>
         <button id="sync-close-x-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
       </div>
 
-      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.5;">
+      <p class="sync-modal-desc">
         Choose how and when to sync your reading progress with the Calibre server. Your reading progress is <strong>always saved instantly in your browser (IndexedDB)</strong> so you never lose progress, even offline.
       </p>
 
-      <div class="sync-options-group" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+      <div class="sync-options-group">
         <!-- Option 1: Periodic Autosave (Default) -->
         <label class="sync-option-card" id="sync-card-interval">
           <input type="radio" name="sync-mode" value="interval" class="sync-radio" />
           <div class="sync-card-content">
             <div class="sync-card-title">
               <strong><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#clock"></use></svg> Periodic Autosave</strong>
-              <span class="badge-pill" style="font-size: 0.72rem; padding: 2px 6px; background: rgba(59, 130, 246, 0.15); color: #3b82f6;">Recommended</span>
+              <span class="badge-pill sync-badge-recommended">Recommended</span>
             </div>
             <p class="sync-card-desc">
               Automatically sends changes to the server at regular intervals and whenever you exit the book or close the window.
             </p>
-            <div class="sync-interval-picker" id="sync-interval-picker" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
-              <span style="font-size: 0.85rem; font-weight: 500;">Save every:</span>
-              <input type="number" id="sync-minutes-input" min="1" max="120" value="5" class="input-text" style="width: 68px; padding: 4px 8px; text-align: center; font-weight: 700;" />
-              <span style="font-size: 0.85rem;">minutes</span>
-              <div style="display: flex; gap: 4px; margin-left: 6px;">
-                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="1" style="padding: 2px 8px; font-size: 0.75rem;">1m</button>
-                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="5" style="padding: 2px 8px; font-size: 0.75rem;">5m</button>
-                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="10" style="padding: 2px 8px; font-size: 0.75rem;">10m</button>
-                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="15" style="padding: 2px 8px; font-size: 0.75rem;">15m</button>
+            <div class="sync-interval-picker" id="sync-interval-picker">
+              <div class="sync-interval-inputs">
+                <span class="sync-interval-label">Save every:</span>
+                <input type="number" id="sync-minutes-input" min="1" max="120" value="5" class="input-text sync-minutes-input" />
+                <span class="sync-interval-unit">minutes</span>
+              </div>
+              <div class="sync-quick-btns">
+                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="1">1m</button>
+                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="5">5m</button>
+                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="10">10m</button>
+                <button type="button" class="btn btn-secondary sync-quick-btn" data-min="15">15m</button>
               </div>
             </div>
           </div>
@@ -745,20 +749,20 @@
       </div>
 
       <!-- Sync Status Box & Manual Trigger -->
-      <div class="sync-status-box" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 20px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
+      <div class="sync-status-box">
+        <div class="sync-status-info">
           <span id="sync-status-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#cloud"></use></svg></span>
           <div>
-            <div id="sync-status-title" style="font-size: 0.85rem; font-weight: 600;">Synced</div>
-            <div id="sync-status-detail" style="font-size: 0.75rem; color: var(--text-secondary);">All reading progress is up to date with the server</div>
+            <div id="sync-status-title">Synced</div>
+            <div id="sync-status-detail">All reading progress is up to date with the server</div>
           </div>
         </div>
-        <button id="sync-manual-now-btn" type="button" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; font-weight: 600;">
+        <button id="sync-manual-now-btn" type="button" class="btn btn-secondary">
           <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#sync"></use></svg> Sync Now
         </button>
       </div>
 
-      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+      <div class="sync-modal-actions">
         <button id="sync-cancel-btn" type="button" class="btn">Cancel</button>
         <button id="sync-save-btn" type="button" class="btn btn-primary">Save Settings</button>
       </div>
@@ -768,8 +772,8 @@
   <!-- Core Storage & API Services -->
   <script src="./js/services/http.js?v=1.0.0"></script>
   <script src="./js/services/connectivity.js?v=1.0.4"></script>
-  <script src="./js/db.js?v=1.4.4"></script>
-  <script src="./js/services/books.js?v=1.0.9"></script>
+  <script src="./js/db.js?v=1.4.5"></script>
+  <script src="./js/services/books.js?v=1.0.10"></script>
   <script src="./js/services/virtual-libraries.js?v=1.0.8"></script>
   <script src="./js/services/metadata.js?v=1.0.8"></script>
   <script src="./js/services/progress.js?v=1.0.8"></script>
@@ -781,7 +785,7 @@
 
   <!-- MVVM Architecture: Models -->
   <script src="./js/models/ReaderModel.js?v=1.3.0"></script>
-  <script src="./js/models/LibraryModel.js?v=0.8.1"></script>
+  <script src="./js/models/LibraryModel.js?v=0.8.2"></script>
 
   <!-- MVVM Architecture: Modular Reader Views -->
   <script src="./js/views/reader/PDFPageView.js?v=0.6.2"></script>
@@ -807,12 +811,12 @@
   <!-- MVVM Architecture: Modular Library ViewModels -->
   <script src="./js/mobile/MobilePWAInstaller.js?v=1.1.0"></script>
   <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.9"></script>
-  <script src="./js/viewmodels/library/BookMetadataManager.js?v=1.0.9"></script>
+  <script src="./js/viewmodels/library/BookMetadataManager.js?v=1.0.10"></script>
   <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.1"></script>
   <script src="./js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/SyncSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8"></script>
-  <script src="./js/viewmodels/LibraryViewModel.js?v=1.4.11"></script>
+  <script src="./js/viewmodels/LibraryViewModel.js?v=1.4.12"></script>
 
   <!-- MVVM Architecture: Modular Reader ViewModels -->
   <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.6"></script>

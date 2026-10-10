@@ -74,13 +74,30 @@ class LocalDB {
 
   async getPdfBlob(bookId) {
     const db = await this.open();
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const tx = db.transaction('pdf_cache', 'readonly');
       const store = tx.objectStore('pdf_cache');
       const req = store.get(Number(bookId));
       req.onsuccess = () => resolve(req.result ? req.result.blob : null);
       req.onerror = () => resolve(null);
     });
+  }
+
+  async deletePdfBlob(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction('pdf_cache', 'readwrite');
+        const store = tx.objectStore('pdf_cache');
+        store.delete(bId);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      return false;
+    }
   }
 
   async isPdfCached(bookId) {
@@ -126,7 +143,27 @@ class LocalDB {
     return null;
   }
 
-  // --- Offline Page Layouts (10-Page Buffering) ---
+  async deleteLocalProgress(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    try {
+      localStorage.removeItem(`moon_progress_${bId}`);
+    } catch (_) {}
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction('local_progress', 'readwrite');
+        const store = tx.objectStore('local_progress');
+        store.delete(bId);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // --- Offline Page Layouts (10-Page Buffering) ---\
   async saveLayout(bookId, pageNumber, layoutData) {
     if (!layoutData) return;
     const db = await this.open();
@@ -273,6 +310,32 @@ class LocalDB {
     });
   }
 
+  async clearBookDrawings(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    try {
+      const db = await this.open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('page_drawings', 'readwrite');
+        const store = tx.objectStore('page_drawings');
+        const index = store.index('by_book');
+        const req = index.openCursor(IDBKeyRange.only(bId));
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) {
+            cursor.delete();
+            cursor.continue();
+          } else {
+            resolve(true);
+          }
+        };
+        req.onerror = (e) => reject(e);
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+
   // --- Cached Books Metadata (for Offline Catalog) ---
   async saveCachedBook(book) {
     if (!book || !book.id) return;
@@ -330,6 +393,49 @@ class LocalDB {
     for (const b of books) {
       await this.saveCachedBook(b);
     }
+  }
+
+  async deleteCachedBook(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    try {
+      const db = await this.open();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('cached_books', 'readwrite');
+        const store = tx.objectStore('cached_books');
+        store.delete(bId);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e);
+      });
+    } catch (_) {}
+
+    try {
+      const raw = localStorage.getItem('moon_offline_books');
+      if (raw) {
+        const list = JSON.parse(raw);
+        const filtered = list.filter(b => Number(b.id) !== bId);
+        localStorage.setItem('moon_offline_books', JSON.stringify(filtered));
+      }
+    } catch (_) {}
+    return true;
+  }
+
+  async clearCachedBooks() {
+    try {
+      const db = await this.open();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('cached_books', 'readwrite');
+        const store = tx.objectStore('cached_books');
+        store.clear();
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e);
+      });
+    } catch (_) {}
+
+    try {
+      localStorage.removeItem('moon_offline_books');
+    } catch (_) {}
+    return true;
   }
 
   async getAllCachedBooks() {
@@ -453,6 +559,23 @@ class LocalDB {
     }
   }
 
+  async deleteCachedAnnotations(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    try {
+      const db = await this.open();
+      return new Promise((resolve) => {
+        const tx = db.transaction('cached_annotations', 'readwrite');
+        const store = tx.objectStore('cached_annotations');
+        store.delete(bId);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      });
+    } catch (_) {
+      return false;
+    }
+  }
+
   // --- Persistent Outbox Queue (pending_annotations) ---
   async enqueueOutboxOp(op) {
     if (!op || !op.id) return false;
@@ -507,6 +630,51 @@ class LocalDB {
     } catch (e) {
       return false;
     }
+  }
+
+  async clearBookOutboxOps(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    try {
+      const ops = await this.getPendingOutboxOps();
+      for (const op of ops) {
+        if (Number(op.bookId) === bId) {
+          await this.removeOutboxOp(op.id);
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async deleteCoverCache(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    if (typeof caches === 'undefined' || !caches.open) return false;
+    try {
+      const cache = await caches.open('lunabria-covers-v1');
+      const coverUrl = `/api/books/${bId}/cover`;
+      return await cache.delete(coverUrl);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async deleteBook(bookId) {
+    if (!bookId) return false;
+    const bId = Number(bookId);
+    await Promise.allSettled([
+      this.deleteCachedBook(bId),
+      this.deletePdfBlob(bId),
+      this.deleteLocalProgress(bId),
+      this.clearBookLayouts(bId),
+      this.clearBookDrawings(bId),
+      this.deleteCachedAnnotations(bId),
+      this.clearBookOutboxOps(bId),
+      this.deleteCoverCache(bId)
+    ]);
+    return true;
   }
 
   async updateOutboxOp(op) {

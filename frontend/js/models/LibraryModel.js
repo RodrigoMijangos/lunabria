@@ -62,6 +62,13 @@ class LibraryModel {
     return this.allBooks.find(b => b.id === Number(bookId)) || null;
   }
 
+  removeBook(bookId) {
+    const id = Number(bookId);
+    this.allBooks = this.allBooks.filter(b => Number(b.id) !== id);
+    this.recentBooks = this.recentBooks.filter(b => Number(b.id) !== id);
+    return this.allBooks;
+  }
+
   setRecentBooks(recentList) {
     this.recentBooks = Array.isArray(recentList) ? recentList : [];
     return this.recentBooks;

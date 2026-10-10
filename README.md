@@ -37,8 +37,8 @@ In-app metadata editor connected to Calibre CLI with ISBN auto-fetch, tag editor
 
 ---
 
-### Slide-Out Annotations Drawer & Markdown Export
-Interactive lateral notes drawer with real-time color filtering and one-click `.md` export for Obsidian / Logseq.
+### Slide-Out Annotations Drawer & Multi-Format Export
+Interactive lateral notes drawer with real-time color filtering and deterministic export to Markdown, JSON, JSONL, YAML, and TOML.
 
 ![Lateral Annotations Drawer](docs/screenshots/05_reader_annotations_drawer.png)
 
@@ -71,21 +71,29 @@ Tailored stylus interactions with strict palm rejection, double-tap pen/highligh
 
 1. **Home (Library Control Center):**
    - **"Continue Reading" Carousel:** Displays the **10 most recently read books** with live progress, reading percentage, and current page. One click resumes reading right where you left off.
-   - **Adaptive Paginated Catalog:** Dynamic grid view that adapts to your screen width, supporting customizable page sizes and responsive column layouts.
+   - **Adaptive Paginated Catalog:** Dynamic grid view that adapts to your screen width, supporting customizable page sizes, responsive column layouts, and default pagination across the entire library (including "Last opened"). Users can browse and navigate locally cached books without re-downloading them.
    - **Virtual Library Switcher:** Filter your book collection on the fly without duplicating files on disk.
    - **Batch Book Selection:** Pick multiple books from search results or the catalog to group them into manual virtual collections.
    - **Real-Time Search:** Instant filtering across titles, authors, and tags.
+   - **Local Cover Caching & Offline Fallback:** Book covers viewed in the library are cached locally for fast retrieval and offline reuse; books without an embedded or reachable cover fall back seamlessly to an offline vector cover.
+   - **Auto-Reconnection Detection:** Automatically detects when a lost server connection is restored, refreshing the catalog and synchronizing queued reading data and annotations.
    - **Ergonomic Reading Themes:** **Sepia** (warm editorial daylight), **AMOLED Black** (pure `#000000` for OLED displays), and **Dark** (slate).
+   - **Modern Brand Identity & PWA Installation:** Open-book lunar brand insignia, dynamic SVG favicon, and maskable touch icons for mobile home-screen installation with theme-adaptive browser header colors.
 
 2. **Reader Experience:**
    - **Contextual Floating Menu:** Select text to reveal quick action controls: highlight color palette, notes, and clipboard copy.
    - **Customizable Highlight Palette:** Freely configure your own colors and semantic labels (e.g., *Key Idea*, *Definition*, *Question*, *Quote*).
    - **Freehand Stylus & Digital Inking:** Draw notes, margin diagrams, underlines, and freehand highlights directly on book pages with pressure sensitivity, palm rejection, and dedicated stylus hardware settings.
    - **Slide-out Lateral Drawer:** Chronologically lists all highlights, annotations, and notes with interactive color filtering.
-   - **Markdown Export:** Export annotations and excerpts directly to **Markdown (`.md`)** ready for Obsidian, Logseq, or notes apps.
-   - **Offline Reading (PWA):** Cached books appear in the library immediately on startup. Download books, their cover art, and pre-buffered page layouts into IndexedDB; an offline banner shows connection status and the number of books available offline.
-   - **Offline Annotation Sync:** Saved annotations and highlight colors remain available offline. Highlights, notes, drawings, and reading progress created without a connection are queued locally and synchronize when connectivity returns.
-   - **On-Demand Format Conversion:** If a book has no PDF, an available format supported by Calibre is automatically converted to PDF when opened and cached without altering the original library.
+   - **Multi-Format Deterministic Export:** Export annotations, highlights, and notes directly to **Hierarchical Markdown**, **Markdown grouped by color/page**, **JSON**, **JSONL**, **YAML**, and **TOML**, driven by PDF table of contents hierarchy and high-fidelity text reconstruction ready for Obsidian, Logseq, or automated knowledge workflows.
+   - **Dedicated Mobile & Touch Reader:** Tailored mobile reading interface featuring a compact single-row topbar, a collapsible Floating Action Button (FAB) for drawing and quick color selection, long-press text selection with a circular magnifying loupe, and a one-tap page stroke wipe button to clear the active page.
+   - **Precision Zoom & Ergonomic Navigation:** Dedicated **Fit-to-Width** (`W`), **Fit-to-Page** (`H`), and **Actual Size (1:1 / 100%)** (`Ctrl+0`) modes. Smooth **Ctrl + Wheel** and continuous trackpad/touchscreen pinch-to-zoom with real-time GPU preview and dynamic velocity scaling across an expanded range from **25% to 500%**. Viewport and cursor focal-point tracking prevents scroll jumping, with flicker-free off-DOM double-buffering.
+   - **Universal Text & Margin Selection:** Initiate selections smoothly from page margins, paragraph padding, or between lines with sub-glyph precision, edge-to-edge word expansion on double-click drag, and smart collision-avoiding floating HUD placement.
+   - **Fault-Tolerant Rendering:** If a PDF page canvas render encounters an issue, a recoverable error card with an inline retry button displays instead of an unrecoverable blank page.
+   - **Offline Reading (PWA):** Cached books appear in the library immediately on startup without network timeouts. Download books, their cover art, and pre-buffered page layouts into IndexedDB; an offline banner communicates connectivity status and the number of books available offline.
+   - **Persistent Outbox Annotation Sync:** Saved annotations and highlight colors remain available offline. Highlights, notes, freehand drawings, and reading progress created without a connection are queued locally in an outbox and synchronize automatically when connectivity returns.
+   - **In-App Update Notification:** An in-app banner alerts readers whenever an updated version of the application is available for one-click reload.
+   - **On-Demand Format Conversion:** If a book has no PDF, an available format supported by Calibre (beyond EPUB) is automatically converted to PDF when opened and cached without altering the original library.
 
 3. **Add New Books:**
    - Drag-and-drop or select one or multiple PDF files.

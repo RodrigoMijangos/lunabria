@@ -19,7 +19,16 @@ class LibraryViewModel {
     this.catalogSelectionBusy = false;
 
     this.uploadManager = new BookUploadManager(this.model, () => this.loadHome());
-    this.metadataManager = new BookMetadataManager(() => this.loadHome());
+    this.metadataManager = new BookMetadataManager(async (deletedBookId) => {
+      if (deletedBookId) {
+        const id = Number(deletedBookId);
+        this.model.removeBook(id);
+        this.selectedBookIds.delete(id);
+        this.renderBooks();
+        this.renderRecents();
+      }
+      await this.loadHome();
+    });
     this.vlManager = new VirtualLibraryManager(createdLibrary => this.onVirtualLibrariesChanged(createdLibrary));
     this.colorSettings = new HighlightColorSettingsManager();
     this.syncSettings = new SyncSettingsManager();
@@ -86,9 +95,22 @@ class LibraryViewModel {
 
   applyTheme(theme) {
     this.model.setTheme(theme);
-    document.documentElement.setAttribute('data-theme', this.model.theme);
-    const select = document.getElementById('theme-select');
-    if (select) select.value = this.model.theme;
+    if (typeof document !== 'undefined') {
+      if (document.documentElement && typeof document.documentElement.setAttribute === 'function') {
+        document.documentElement.setAttribute('data-theme', this.model.theme);
+      }
+      const select = typeof document.getElementById === 'function' ? document.getElementById('theme-select') : null;
+      if (select) select.value = this.model.theme;
+      const themeColorMeta = typeof document.querySelector === 'function' ? document.querySelector('meta[name=\"theme-color\"]') : null;
+      if (themeColorMeta && typeof themeColorMeta.setAttribute === 'function') {
+        const themeColors = {
+          sepia: '#f4ecd8',
+          dark: '#151a24',
+          amoled: '#000000',
+        };
+        themeColorMeta.setAttribute('content', themeColors[this.model.theme] || '#f4ecd8');
+      }
+    }
   }
 
   async loadHome() {
@@ -136,6 +158,15 @@ class LibraryViewModel {
       }
 
       if (
+        typeof localDB !== 'undefined' &&
+        localDB &&
+        page.total === 0 &&
+        !this.model.searchQuery &&
+        !this.model.activeVirtualLibraryId &&
+        typeof localDB.clearCachedBooks === 'function'
+      ) {
+        localDB.clearCachedBooks().catch(() => {});
+      } else if (
         typeof localDB !== 'undefined' &&
         localDB &&
         typeof localDB.saveCachedBooks === 'function' &&
@@ -566,6 +597,23 @@ class LibraryViewModel {
     } catch (error) {
       alert(`Could not delete virtual library: ${error.message}`);
     }
+  }
+
+  async deleteBook(bookId) {
+    const id = Number(bookId);
+    if (!Number.isSafeInteger(id)) return;
+    this.model.removeBook(id);
+    this.selectedBookIds.delete(id);
+    if (typeof localDB !== 'undefined' && localDB && typeof localDB.deleteBook === 'function') {
+      try {
+        await localDB.deleteBook(id);
+      } catch (err) {
+        console.warn('[LibraryViewModel] Error cleaning up local cache for deleted book:', err);
+      }
+    }
+    this.renderBooks();
+    this.renderRecents();
+    await this.loadHome();
   }
 
   selectVirtualLibrary(libraryId) {
