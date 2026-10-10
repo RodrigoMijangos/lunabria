@@ -1,6 +1,6 @@
 /**
  * BookUploadManager.js
- * Manages drag & drop file uploads and batch processing for the library.
+ * Manages drag & drop file uploads and background ingestion status.
  */
 class BookUploadManager {
   constructor(model, onUploadSuccess) {
@@ -8,6 +8,10 @@ class BookUploadManager {
     this.onUploadSuccess = onUploadSuccess;
     this.isUploading = false;
     this.modal = document.getElementById('upload-modal');
+    this.activeJobs = new Map();
+    this.jobPollTimer = null;
+    this.maxConcurrentUploads = 2;
+    this.jobPollIntervalMs = 2000;
   }
 
   init() {
@@ -24,10 +28,10 @@ class BookUploadManager {
     }
 
     if (fileInput) {
-      fileInput.onchange = (e) => {
-        if (e.target.files?.length) {
-          this.model.addFilesToUploadQueue(e.target.files);
-          e.target.value = '';
+      fileInput.onchange = event => {
+        if (event.target.files?.length) {
+          this.model.addFilesToUploadQueue(event.target.files);
+          event.target.value = '';
           this.renderUploadQueue();
         }
       };
@@ -35,57 +39,61 @@ class BookUploadManager {
 
     if (dropzone) {
       ['dragenter', 'dragover'].forEach(name => {
-        dropzone.addEventListener(name, (e) => {
-          e.preventDefault();
+        dropzone.addEventListener(name, event => {
+          event.preventDefault();
           dropzone.classList.add('drag-active');
         });
       });
 
       ['dragleave', 'drop'].forEach(name => {
-        dropzone.addEventListener(name, (e) => {
-          e.preventDefault();
+        dropzone.addEventListener(name, event => {
+          event.preventDefault();
           dropzone.classList.remove('drag-active');
         });
       });
 
-      dropzone.addEventListener('drop', (e) => {
+      dropzone.addEventListener('drop', event => {
         if (this.isUploading) return;
-        if (e.dataTransfer?.files?.length) {
-          this.model.addFilesToUploadQueue(e.dataTransfer.files);
+        if (event.dataTransfer?.files?.length) {
+          this.model.addFilesToUploadQueue(event.dataTransfer.files);
           this.renderUploadQueue();
         }
       });
     }
 
-    if (cancelBtn) {
-      cancelBtn.onclick = () => this.closeUploadModal();
-    }
+    if (cancelBtn) cancelBtn.onclick = () => this.closeUploadModal();
     if (closeBtn) closeBtn.onclick = () => this.closeUploadModal();
     if (clearAllBtn) {
       clearAllBtn.onclick = () => {
-        if (!this.isUploading) {
+        if (!this.isUploading && !this.hasQueuedJobs()) {
           this.model.clearUploadQueue();
           this.renderUploadQueue();
         }
       };
     }
+    if (sendBtn) sendBtn.onclick = () => this.startUploadBatch();
 
-    if (sendBtn) {
-      sendBtn.onclick = () => this.startUploadBatch();
-    }
+    this.restoreActiveJobs();
+  }
+
+  hasQueuedJobs() {
+    return this.model.uploadQueue.some(item =>
+      ['uploading', 'queued', 'processing'].includes(item.status)
+    );
   }
 
   openUploadModal() {
-    this.model.clearUploadQueue();
+    if (!this.isUploading) this.model.clearUploadQueue();
     this.renderUploadQueue();
     ModalView.open(this.modal);
   }
 
   closeUploadModal() {
-    if (this.isUploading) return;
     ModalView.close(this.modal);
-    this.model.clearUploadQueue();
-    this.renderUploadQueue();
+    if (!this.isUploading) {
+      this.model.clearUploadQueue();
+      this.renderUploadQueue();
+    }
   }
 
   renderUploadQueue() {
@@ -95,66 +103,175 @@ class BookUploadManager {
     const clearAllBtn = document.getElementById('upload-clear-all-btn');
     const fileInput = document.getElementById('upload-file-input');
     const browseBtn = document.getElementById('upload-browse-btn');
-    const cancelBtn = document.getElementById('upload-cancel-btn');
-    const closeBtn = document.getElementById('upload-close-x-btn');
     const sendBtn = document.getElementById('upload-send-btn');
+    const cancelBtn = document.getElementById('upload-cancel-btn');
     const queue = this.model.uploadQueue;
+    const hasActiveItems = this.hasQueuedJobs();
+
     if (queueContainer) queueContainer.style.display = queue.length ? 'block' : 'none';
     if (queueCount) queueCount.textContent = `Queued files (${queue.length}):`;
-    if (clearAllBtn) clearAllBtn.disabled = this.isUploading;
+    if (clearAllBtn) clearAllBtn.disabled = this.isUploading || hasActiveItems;
     if (fileInput) fileInput.disabled = this.isUploading;
     if (browseBtn) browseBtn.disabled = this.isUploading;
-    if (cancelBtn) cancelBtn.disabled = this.isUploading;
-    if (closeBtn) closeBtn.disabled = this.isUploading;
+    if (cancelBtn) cancelBtn.textContent = this.isUploading || hasActiveItems ? 'Close' : 'Cancel';
     UploadModalView.renderQueue(queueList, queue, (id) => {
       if (this.isUploading) return;
+      const item = queue.find(entry => entry.id === id);
+      if (!item || !['pending', 'error'].includes(item.status)) return;
       this.model.removeUploadItem(id);
       this.renderUploadQueue();
     });
 
     if (sendBtn) {
-      const remaining = queue.filter(item => item.status !== 'done').length;
-      sendBtn.disabled = this.isUploading || remaining === 0;
+      const retryable = queue.filter(item => ['pending', 'error'].includes(item.status));
+      sendBtn.disabled = this.isUploading || retryable.length === 0;
       sendBtn.textContent = queue.some(item => item.status === 'error')
-        ? `Retry (${remaining})`
-        : `Upload Books (${remaining})`;
+        ? `Retry (${retryable.length})`
+        : `Upload Books (${retryable.length})`;
     }
   }
 
   async startUploadBatch() {
-    const items = this.model.uploadQueue.filter(item => item.status !== 'done');
+    const items = this.model.uploadQueue.filter(item => ['pending', 'error'].includes(item.status));
     if (!items.length || this.isUploading) return;
 
     this.isUploading = true;
-    const sendBtn = document.getElementById('upload-send-btn');
-    if (sendBtn) {
-      sendBtn.disabled = true;
-      sendBtn.innerHTML = '<svg class="ui-icon ui-icon-spin" aria-hidden="true" focusable="false"><use href="./icons.svg#loader"></use></svg> Uploading...';
-    }
+    this.renderUploadQueue();
+    const autoFetchMetadata = Boolean(document.getElementById('upload-verify-toggle')?.checked);
+    let nextItemIndex = 0;
+
+    const uploadNext = async () => {
+      while (nextItemIndex < items.length) {
+        const item = items[nextItemIndex++];
+        item.status = 'uploading';
+        item.progress = 0;
+        item.jobId = null;
+        item.error = null;
+        this.renderUploadQueue();
+
+        try {
+          const response = await api.uploadBookWithProgress(item.file, {
+            autoFetchMetadata,
+            onProgress: progress => {
+              item.progress = progress;
+              this.renderUploadQueue();
+            }
+          });
+          const job = Array.isArray(response.jobs) ? response.jobs[0] : null;
+          const jobId = response.job_id || job?.job_id;
+          if (!jobId) throw new Error('Server did not return an upload job ID');
+
+          item.jobId = jobId;
+          item.status = job?.status === 'processing' ? 'processing' : 'queued';
+          item.progress = 100;
+          this.activeJobs.set(jobId, { item, filename: item.name });
+          this.scheduleJobPolling();
+          this.renderUploadQueue();
+        } catch (error) {
+          item.status = 'error';
+          item.error = error.message || 'Upload failed';
+          ToastView.show(`Could not upload ${item.name}: ${item.error}`, 'error');
+          this.renderUploadQueue();
+        }
+      }
+    };
 
     try {
-      for (const item of items) {
-        item.status = 'uploading';
-        this.renderUploadQueue();
-        await api.uploadBook(item.file);
-        item.status = 'done';
-        this.renderUploadQueue();
+      const workerCount = Math.min(this.maxConcurrentUploads, items.length);
+      await Promise.all(Array.from({ length: workerCount }, () => uploadNext()));
+      const acceptedCount = items.filter(item => ['queued', 'processing', 'done'].includes(item.status)).length;
+      if (acceptedCount) {
+        ToastView.show(`${acceptedCount} book${acceptedCount === 1 ? '' : 's'} sent for background processing.`);
       }
-      this.isUploading = false;
-      alert('All books were uploaded successfully!');
-      this.closeUploadModal();
-      if (this.onUploadSuccess) await this.onUploadSuccess();
-    } catch (err) {
-      const failedItem = items.find(item => item.status === 'uploading');
-      if (failedItem) {
-        failedItem.status = 'error';
-        failedItem.error = err.message;
-      }
-      this.renderUploadQueue();
-      alert('Upload error: ' + err.message);
     } finally {
       this.isUploading = false;
       this.renderUploadQueue();
+    }
+  }
+
+  async restoreActiveJobs() {
+    try {
+      const jobs = await api.getActiveUploadJobs();
+      for (const job of jobs) {
+        if (!job?.job_id || !['queued', 'processing'].includes(job.status)) continue;
+        this.activeJobs.set(job.job_id, { item: null, filename: job.filename || 'Book' });
+      }
+      if (this.activeJobs.size) this.scheduleJobPolling();
+    } catch (error) {
+      console.warn('[BookUploadManager] Could not restore background upload jobs:', error);
+    }
+  }
+
+  scheduleJobPolling() {
+    if (this.jobPollTimer !== null || this.activeJobs.size === 0) return;
+    this.jobPollTimer = setTimeout(async () => {
+      this.jobPollTimer = null;
+      try {
+        await this.pollUploadJobs();
+      } catch (error) {
+        console.error('[BookUploadManager] Upload status polling failed:', error);
+      } finally {
+        this.scheduleJobPolling();
+      }
+    }, this.jobPollIntervalMs);
+  }
+
+  async pollUploadJobs() {
+    const pending = Array.from(this.activeJobs.entries());
+    const results = await Promise.allSettled(
+      pending.map(async ([jobId, tracked]) => ({
+        jobId,
+        tracked,
+        job: await api.getUploadJob(jobId)
+      }))
+    );
+    let catalogChanged = false;
+
+    for (const [index, result] of results.entries()) {
+      if (result.status === 'rejected') {
+        if (/upload job not found/i.test(result.reason?.message || '')) {
+          const [jobId, tracked] = pending[index];
+          this.activeJobs.delete(jobId);
+          ToastView.show(`Could not find the import status for ${tracked.filename}.`, 'error');
+          continue;
+        }
+        console.warn('[BookUploadManager] Could not check an upload job:', result.reason);
+        continue;
+      }
+
+      const { jobId, tracked, job } = result.value;
+      if (job.status === 'queued' || job.status === 'processing') {
+        if (tracked.item) tracked.item.status = job.status;
+        continue;
+      }
+
+      if (job.status === 'completed') {
+        this.activeJobs.delete(jobId);
+        if (tracked.item) tracked.item.status = 'done';
+        ToastView.show(`${tracked.filename} was added to the library.`);
+        catalogChanged = true;
+      } else if (job.status === 'failed') {
+        this.activeJobs.delete(jobId);
+        const message = job.error || 'The server could not process this book.';
+        if (tracked.item) {
+          tracked.item.status = 'error';
+          tracked.item.error = message;
+        }
+        ToastView.show(`${tracked.filename} failed to import: ${message}`, 'error');
+      } else {
+        console.error('[BookUploadManager] Received an unknown upload job status:', job.status);
+        this.activeJobs.delete(jobId);
+      }
+    }
+
+    this.renderUploadQueue();
+    if (catalogChanged && this.onUploadSuccess) {
+      try {
+        await this.onUploadSuccess();
+      } catch (error) {
+        console.error('[BookUploadManager] Could not refresh the library after import:', error);
+        ToastView.show('A book was imported, but the library could not be refreshed.', 'error');
+      }
     }
   }
 }

@@ -425,3 +425,103 @@
     justify-content: center;
   }
 }
+
+.upload-queue-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.upload-queue-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.upload-queue-size,
+.upload-queue-label {
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.upload-queue-label {
+  min-width: 132px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove-upload-item-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toast-container {
+  position: fixed;
+  z-index: 11000;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, calc(100vw - 24px));
+  pointer-events: none;
+}
+
+.app-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-color);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--card-shadow);
+  pointer-events: auto;
+}
+
+.app-toast-error {
+  border-left-color: #dc2626;
+}
+
+.app-toast-dismiss {
+  min-width: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.app-toast-dismiss:hover {
+  background: var(--bg-secondary);
+}
+
+@media (max-width: 580px) {
+  .toast-container {
+    right: max(12px, env(safe-area-inset-right));
+    left: max(12px, env(safe-area-inset-left));
+    width: auto;
+  }
+
+  .upload-queue-item {
+    flex-wrap: wrap;
+  }
+
+  .upload-queue-label {
+    min-width: 0;
+    margin-left: 30px;
+    text-align: left;
+  }
+}

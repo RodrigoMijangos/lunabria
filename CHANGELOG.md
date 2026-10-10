@@ -11,6 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-09
+
+### Added
+- Book uploads show live progress and continue processing in the background with completion notifications.
+
+### Changed
+- The reverse proxy's optional plain-HTTP port moved from 8080 to 8085.
+
+### Fixed
+- Mobile text selection no longer lets the system context menu interrupt the gesture.
+
 ## [1.6.0] - 2026-10-09
 
 ### Added
@@ -486,7 +497,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.0...v1.4.1

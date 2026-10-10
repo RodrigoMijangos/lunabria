@@ -21,6 +21,25 @@ def get_db():
 def init_db():
     with get_db() as conn:
         cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS upload_jobs (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id TEXT UNIQUE NOT NULL,
+                filename TEXT NOT NULL,
+                staging_path TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
+                auto_fetch_metadata INTEGER NOT NULL DEFAULT 0,
+                isbn TEXT,
+                book_id INTEGER,
+                error TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_upload_jobs_status_sequence ON upload_jobs(status, sequence)"
+        )
         
         # 1. Virtual Libraries table
         # type can be: 'query' (Calibre search / regex) or 'manual' (list of selected book IDs)
@@ -130,3 +149,63 @@ def init_db():
             cursor.execute("UPDATE annotations SET category = ? WHERE category = ?", (en_cat, es_cat))
 
         conn.commit()
+
+
+def create_upload_jobs(jobs):
+    with get_db() as conn:
+        conn.executemany(
+            """
+            INSERT INTO upload_jobs (
+                job_id, filename, staging_path, status, auto_fetch_metadata, isbn
+            ) VALUES (?, ?, ?, 'queued', ?, ?)
+            """,
+            [
+                (
+                    job["job_id"],
+                    job["filename"],
+                    job["staging_path"],
+                    int(bool(job.get("auto_fetch_metadata"))),
+                    job.get("isbn"),
+                )
+                for job in jobs
+            ],
+        )
+
+
+def update_upload_job(job_id, status, error=None, book_id=None):
+    if status not in {"queued", "processing", "completed", "failed"}:
+        raise ValueError(f"Unsupported upload job status: {status}")
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE upload_jobs
+            SET status = ?, error = ?, book_id = COALESCE(?, book_id),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE job_id = ?
+            """,
+            (status, error, book_id, job_id),
+        )
+        if cursor.rowcount == 0:
+            raise KeyError(f"Upload job not found: {job_id}")
+
+
+def get_upload_job(job_id):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM upload_jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_active_upload_jobs():
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM upload_jobs
+            WHERE status IN ('queued', 'processing')
+            ORDER BY sequence
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]

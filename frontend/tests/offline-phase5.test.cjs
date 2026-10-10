@@ -163,6 +163,26 @@ test('SW allows slower API responses while keeping longer transfer timeout', asy
   assert.deepEqual(delays, [10000, 60000]);
 });
 
+test('SW does not apply an API timeout to book upload requests', async () => {
+  const delays = [];
+  const response = { status: 202 };
+  const { listeners } = createWorkerWorld({
+    fetch: async () => response,
+    setTimeout: (_callback, delay) => {
+      delays.push(delay);
+      return delays.length;
+    }
+  });
+  let responsePromise = null;
+  listeners.get('fetch')({
+    request: { url: 'https://lunabria.local/api/books/upload', method: 'POST' },
+    respondWith: promise => { responsePromise = promise; }
+  });
+
+  assert.equal(await responsePromise, response);
+  assert.deepEqual(delays, []);
+});
+
 test('SW caches viewed covers across page requests and worker activation', async () => {
   const coverResponse = {
     status: 200,

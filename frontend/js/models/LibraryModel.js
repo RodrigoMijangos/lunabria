@@ -164,7 +164,9 @@ class LibraryModel {
         file: file,
         name: file.name,
         size: file.size,
-        status: 'pending', // 'pending' | 'uploading' | 'done' | 'error'
+        status: 'pending',
+        progress: 0,
+        jobId: null,
         error: null
       });
     });

@@ -3,8 +3,13 @@
 # ========================================================
 
 # HTTPS with automatic local trust (for HTTP/2 in Chrome/Edge/Firefox)
-localhost:8443, :8443 {
-    tls internal
+
+{
+    skip_install_trust
+    local_certs
+}
+
+:8443 {
     encode zstd gzip
 
     # Logging
@@ -24,17 +29,17 @@ localhost:8443, :8443 {
     reverse_proxy localhost:8000 {
         # Transport settings for fast streaming
         transport http {
-            versions h1 h2c
+            versions 1.1 h2c
         }
     }
 }
 
-# Optional plain HTTP on port 8080
-:8080 {
+# Optional plain HTTP on port 8085
+:8085 {
     encode zstd gzip
     reverse_proxy localhost:8000 {
         transport http {
-            versions h1 h2c
+            versions 1.1 h2c
         }
     }
 }

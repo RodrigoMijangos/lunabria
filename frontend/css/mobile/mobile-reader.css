@@ -520,3 +520,21 @@ body.mobile-reader-active.mobile-text-selecting .pdf-viewport-container,
 body.mobile-reader-active.mobile-text-selecting .pdf-page-wrapper {
   touch-action: none !important;
 }
+
+/* Suppress default iOS Safari touch callout (menu/peek-pop) and unwanted drag on mobile reader */
+body.mobile-reader-active,
+body.mobile-reader-active #reader-body,
+body.mobile-reader-active #pdf-viewport,
+body.mobile-reader-active .pdf-viewport-container,
+body.mobile-reader-active .pdf-page-wrapper,
+body.mobile-reader-active .textLayer,
+body.mobile-reader-active .textLayer :is(.precise-line, .precise-word, span) {
+  -webkit-touch-callout: none !important;
+}
+
+body.mobile-reader-active .pdf-page-wrapper canvas,
+body.mobile-reader-active .pdf-viewport-container canvas {
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+  user-drag: none !important;
+}

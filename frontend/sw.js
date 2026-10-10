@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.6.0';
+const CACHE_NAME = 'lunabria-v1.7.0';
 const COVER_CACHE_NAME = 'lunabria-covers-v1';
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   'https://cdn.jsdelivr.net',
@@ -16,12 +16,12 @@ const STATIC_ASSETS = [
   './icons/maskable-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
-  './css/style.css?v=1.0.11-branding-tokens',
-  './css/mobile/mobile-reader.css?v=1.1.2',
+  './css/style.css?v=1.0.12-async-upload',
+  './css/mobile/mobile-reader.css?v=1.1.3',
   './js/services/http.js?v=1.0.0',
   './js/services/connectivity.js?v=1.0.4',
   './js/db.js?v=1.4.5',
-  './js/services/books.js?v=1.0.10',
+  './js/services/books.js?v=1.0.11-async-upload',
   './js/services/virtual-libraries.js?v=1.0.8',
   './js/services/metadata.js?v=1.0.8',
   './js/services/progress.js?v=1.0.8',
@@ -31,7 +31,7 @@ const STATIC_ASSETS = [
   './js/services/drawings.js?v=1.0.8',
   './js/api.js?v=1.0.8',
   './js/models/ReaderModel.js?v=1.3.0',
-  './js/models/LibraryModel.js?v=0.8.2',
+  './js/models/LibraryModel.js?v=0.8.3-async-upload',
   './js/views/reader/PDFPageView.js?v=0.6.2',
   './js/views/reader/TextLayerView.js?v=1.0.10-selection-hit-test',
   './js/views/reader/HighlightOverlayView.js?v=1.3.0',
@@ -44,12 +44,13 @@ const STATIC_ASSETS = [
   './js/views/library/BookCardView.js?v=1.4.3',
   './js/views/library/RecentReadsView.js?v=0.9.3',
   './js/views/library/VirtualLibraryView.js?v=1.0.9',
-  './js/views/library/UploadModalView.js?v=1.0.9',
+  './js/views/library/UploadModalView.js?v=1.0.10-async-upload',
+  './js/views/ui/ToastView.js?v=1.0.0',
   './js/views/LibraryViews.js?v=0.6.0',
   './js/views/library/CatalogView.js?v=1.0.8',
   './js/views/library/CatalogPaginationView.js?v=1.0.8',
   './js/views/library/CatalogSelectionView.js?v=1.0.8',
-  './js/viewmodels/library/BookUploadManager.js?v=1.0.9',
+  './js/viewmodels/library/BookUploadManager.js?v=1.0.10-async-upload',
   './js/viewmodels/library/BookMetadataManager.js?v=1.0.10',
   './js/viewmodels/library/VirtualLibraryManager.js?v=0.8.1',
   './js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0',
@@ -75,7 +76,7 @@ const STATIC_ASSETS = [
   './js/mobile/DeviceEnvironment.js?v=1.1.1',
   './js/mobile/MobileHUDView.js?v=1.1.2',
   './js/mobile/MobileDrawingToolbarView.js?v=1.3.0',
-  './js/mobile/MobileSelectionController.js?v=1.4.0',
+  './js/mobile/MobileSelectionController.js?v=1.4.1',
   './js/mobile/MobilePWAInstaller.js?v=1.1.0',
   './js/mobile/MobileReaderController.js?v=1.3.0',
   './js/viewmodels/ReaderViewModel.js?v=1.4.2',
@@ -163,6 +164,19 @@ self.addEventListener('fetch', (event) => {
 
   // For other API endpoints, verify connectivity with the actual request and fall back to offline 503.
   if (url.pathname.startsWith('/api/')) {
+    if (event.request.method === 'POST' && url.pathname === '/api/books/upload') {
+      event.respondWith(
+        fetch(event.request).catch(() => {
+          return new Response(JSON.stringify({ offline: true, error: 'No network connection' }), {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'application/json' }
+          });
+        })
+      );
+      return;
+    }
+
     // Prune deleted book cover from COVER_CACHE_NAME upon successful DELETE
     if (event.request.method === 'DELETE' && /^\/api\/books\/\d+$/.test(url.pathname)) {
       const match = url.pathname.match(/^\/api\/books\/(\d+)$/);

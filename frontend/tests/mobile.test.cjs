@@ -199,18 +199,18 @@ function createDOMContext() {
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
       maxTouchPoints: 5
     },
-    window: {
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      innerWidth: 375,
-      innerHeight: 667,
-      devicePixelRatio: 2,
-      getSelection: () => currentSelection,
-      navigator: {
+    window: (() => {
+      const w = new EventTargetStub();
+      w.innerWidth = 375;
+      w.innerHeight = 667;
+      w.devicePixelRatio = 2;
+      w.getSelection = () => currentSelection;
+      w.navigator = {
         userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)',
         maxTouchPoints: 5
-      }
-    },
+      };
+      return w;
+    })(),
     localStorage: {
       getItem: () => null,
       setItem: () => {}
@@ -1686,4 +1686,85 @@ test('Pressing E in eraser mode returns to previous drawing tool (pen, highlight
   // Press E again
   keydownListener({ key: 'e', code: 'KeyE', target: bodyEl, preventDefault() {} });
   assert.equal(model.drawTool, 'pan', 'Pressing E again must revert back to pan tool');
+});
+
+test('MobileSelectionController suppresses browser default action on long press and prevents premature cancellation', async () => {
+  const { context, elementsById, documentStub } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+  loadScript(context, 'js/mobile/MobileSelectionController.js');
+
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const MobileSelectionController = context.window.MobileSelectionController || context.MobileSelectionController;
+
+  const model = new ReaderModel();
+  model.setDrawTool('pan');
+
+  const viewportEl = elementsById.get('pdf-viewport');
+  const pageWrapper = new context.Element('div', { class: 'pdf-page-wrapper', 'data-page': '1' });
+  const textLayer = new context.Element('div', { class: 'textLayer' });
+  const wordSpan = new context.Element('span', { class: 'precise-word' });
+  wordSpan.firstChild = { nodeType: 3, textContent: 'Lunabria' };
+  wordSpan.textContent = 'Lunabria';
+  wordSpan.closest = (sel) => sel && (sel.includes('precise-word') || sel.includes('textLayer')) ? wordSpan : null;
+  textLayer.appendChild(wordSpan);
+  pageWrapper.appendChild(textLayer);
+  viewportEl.appendChild(pageWrapper);
+
+  documentStub.elementsFromPoint = (x, y) => [wordSpan, textLayer, pageWrapper];
+
+  const fakeReader = {
+    viewportEl,
+    floatingToolbar: elementsById.get('floating-toolbar'),
+    mobile: { device: { isMobileReaderActive: () => true } },
+    drawing: { setDrawTool: (tool) => { model.setDrawTool(tool); } },
+    annotations: { updateFloatingToolbar: () => {} }
+  };
+
+  const selectionController = new MobileSelectionController(fakeReader, model);
+  selectionController.loupe = { update: () => {}, hide: () => {} };
+  selectionController.init();
+
+  // 1. Initial pointerdown sets activePointerId and starts longPressTimer
+  await viewportEl.emit('pointerdown', { pointerType: 'touch', clientX: 50, clientY: 100, pointerId: 42, target: wordSpan });
+  assert.equal(selectionController.activePointerId, 42, 'Pointer ID must be captured');
+  assert.notEqual(selectionController.longPressTimer, null, 'Long press timer must be active');
+
+  // 2. Subsequent touchstart in same gesture must not wipe activePointerId or cancel timer
+  await viewportEl.emit('touchstart', { touches: [{ clientX: 50, clientY: 100 }], target: wordSpan });
+  assert.equal(selectionController.activePointerId, 42, 'Pointer ID must be preserved after touchstart');
+  assert.notEqual(selectionController.longPressTimer, null, 'Long press timer must remain pending');
+
+  // 3. Premature pointercancel during hold must NOT cancel longPressTimer
+  await viewportEl.emit('pointercancel');
+  assert.notEqual(selectionController.longPressTimer, null, 'pointercancel must not cancel pending longPressTimer');
+
+  // 4. contextmenu in reader area must be defaultPrevented
+  const menuEvt = await viewportEl.emit('contextmenu', { cancelable: true, target: wordSpan });
+  assert.equal(menuEvt.defaultPrevented, true, 'contextmenu on viewport must be suppressed');
+
+  const winMenuEvt = await context.window.emit('contextmenu', { cancelable: true, target: wordSpan });
+  assert.equal(winMenuEvt.defaultPrevented, true, 'contextmenu on window must be suppressed');
+
+  // 5. selectstart during hold/selection must be defaultPrevented
+  const selectEvt = await viewportEl.emit('selectstart', { cancelable: true, target: wordSpan });
+  assert.equal(selectEvt.defaultPrevented, true, 'selectstart must be suppressed during long press');
+
+  // 6. Completing the timer activates selection
+  selectionController.startLongPressSelection(selectionController.targetPoint);
+  assert.equal(selectionController.isSelecting, true, 'Long press activates selection');
+
+  // 7. Releasing ends selection cleanly
+  await viewportEl.emit('touchend');
+  assert.equal(selectionController.isSelecting, false, 'Selection ends on release');
+  assert.equal(selectionController.longPressTimer, null, 'Timer is cleared on release');
+
+  // 8. mobile-reader.css contains -webkit-touch-callout: none
+  const mobileCss = fs.readFileSync(path.join(frontend, 'css/mobile/mobile-reader.css'), 'utf8');
+  assert.ok(mobileCss.includes('-webkit-touch-callout: none !important'));
 });

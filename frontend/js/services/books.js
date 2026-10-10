@@ -58,8 +58,61 @@ const createBooksApiService = () => ({
     });
     if (!res.ok) throw new Error('Error uploading books');
     const result = await res.json();
-    console.log('[Lunabria] ✔️ Books processed and imported:', result);
+    console.log('[Lunabria] ✔️ Books accepted for background processing:', result);
     return result;
+  },
+
+  async uploadBookWithProgress(file, options = {}) {
+    const formData = new FormData();
+    formData.append('files', file, file.name);
+    if (options.autoFetchMetadata) formData.append('auto_fetch_metadata', 'true');
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/books/upload');
+      xhr.timeout = 10 * 60 * 1000;
+      xhr.upload.onprogress = event => {
+        if (event.lengthComputable && typeof options.onProgress === 'function') {
+          const percent = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          options.onProgress(percent);
+        }
+      };
+      xhr.onload = () => {
+        let result = {};
+        try {
+          result = JSON.parse(xhr.responseText || '{}');
+        } catch (_) {}
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(result);
+          return;
+        }
+        reject(new Error(result.detail || 'Error uploading book'));
+      };
+      xhr.onerror = () => reject(new Error('Network error while uploading book'));
+      xhr.ontimeout = () => reject(new Error('Upload timed out'));
+      xhr.onabort = () => reject(new Error('Upload was cancelled'));
+      xhr.send(formData);
+    });
+  },
+
+  async getActiveUploadJobs() {
+    const res = await fetch('/api/books/upload/jobs');
+    if (!res.ok) throw new Error('Error fetching active upload jobs');
+    return res.json();
+  },
+
+  async getUploadJob(jobId) {
+    const res = await fetch(`/api/books/upload/jobs/${encodeURIComponent(jobId)}`);
+    if (!res.ok) {
+      let detail = 'Error fetching upload job';
+      try {
+        const error = await res.json();
+        detail = error.detail || detail;
+      } catch (_) {}
+      throw new Error(detail);
+    }
+    return res.json();
   },
 
   // Recents (Top 10)

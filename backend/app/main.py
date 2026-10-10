@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.database import init_db
 from app.routers import books, metadata, virtual_libraries, reader, media
 from app.config import WORKSPACE_DIR
+from app.services.ingestion_queue import ingestion_queue
 
 import logging
 
@@ -23,7 +24,7 @@ logging.getLogger("asyncio").addFilter(_SuppressSocketSendErrorFilter())
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.6.0"
+    version="1.7.0"
 )
 
 import time
@@ -84,6 +85,17 @@ app.include_router(media.router)
 @app.on_event("startup")
 def startup_event():
     init_db()
+
+
+@app.on_event("startup")
+async def start_ingestion_queue():
+    await ingestion_queue.start()
+
+
+@app.on_event("shutdown")
+async def stop_ingestion_queue():
+    await ingestion_queue.stop()
+
 
 @app.get("/api/health", status_code=204, response_class=FastAPIResponse)
 def health_check():

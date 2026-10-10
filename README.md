@@ -222,7 +222,7 @@ Close the Calibre desktop application before uploading books or saving metadata,
    sudo systemctl restart caddy
    ```
 
-Once running, access the application locally at `http://localhost:8000` or through Caddy at `https://localhost:8443` (or `http://<SERVER-IP>:8080`).
+Once running, access the application locally at `http://localhost:8000` or through Caddy at `https://localhost:8443` (or `http://<SERVER-IP>:8085`).
 
 ---
 

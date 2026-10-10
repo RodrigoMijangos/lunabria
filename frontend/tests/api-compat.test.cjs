@@ -692,7 +692,8 @@ function parity(name, options, action, verify) {
 }
 
 const expectedKeys = [
-  'getBooks', 'getBook', 'deleteBook', 'uploadBook', 'uploadBooks', 'getRecents',
+  'getBooks', 'getBook', 'deleteBook', 'uploadBook', 'uploadBooks',
+  'uploadBookWithProgress', 'getActiveUploadJobs', 'getUploadJob', 'getRecents',
   'getVirtualLibraries', 'createVirtualLibrary', 'addBooksToVirtualLibrary',
   'deleteVirtualLibrary', 'getVirtualLibraryBooks', 'getMetadataSources',
   'saveMetadataSources', 'fetchMetadataOnline', 'fetchMetadataByIsbn', 'updateMetadata',
@@ -710,9 +711,16 @@ test('facade preserves global identity, own keys/order, descriptors and unchange
   assert.deepEqual(Object.keys(extracted.api), expectedKeys);
   assert.deepEqual(Object.keys(extracted.context), Object.keys(original.context), 'no extra window globals');
   assert.equal(vm.runInContext('api === window.api', extracted.context), true);
+  const newOrChangedMethods = new Set([
+    'uploadBooks', 'uploadBookWithProgress', 'getActiveUploadJobs', 'getUploadJob'
+  ]);
   for (const key of expectedKeys) {
-    const a = Object.getOwnPropertyDescriptor(original.api, key);
     const b = Object.getOwnPropertyDescriptor(extracted.api, key);
+    if (newOrChangedMethods.has(key)) {
+      assert.equal(typeof b.value, 'function', key);
+      continue;
+    }
+    const a = Object.getOwnPropertyDescriptor(original.api, key);
     for (const flag of ['writable', 'enumerable', 'configurable']) assert.equal(b[flag], a[flag], key);
     if (typeof a.value === 'function') {
       assert.equal(b.value.name, a.value.name, key);
@@ -739,7 +747,7 @@ test('service factories allocate isolated state and remain usable on alternate r
 
 const networkMethods = [
   ['getBooks', ['luna & sol', 4]], ['getBook', [4]], ['deleteBook', [4]],
-  ['uploadBook', [{ name: 'moon.pdf' }]], ['uploadBooks', [{ submitted: true }]],
+  ['uploadBook', [{ name: 'moon.pdf' }]],
   ['getRecents', []], ['getVirtualLibraries', []], ['createVirtualLibrary', [{ name: 'Moon' }]],
   ['addBooksToVirtualLibrary', [4, [1, 2]]], ['deleteVirtualLibrary', [4]], ['getVirtualLibraryBooks', [4]],
   ['getMetadataSources', []], ['saveMetadataSources', [['google', 'amazon']]],
@@ -791,13 +799,18 @@ test('getAnnotations accepts an empty 200 response and rejects HTTP errors', asy
   assert.equal((await env.api.getAnnotations(4)).length, 0);
   await assert.rejects(env.api.getAnnotations(4), /Error fetching annotations/);
 });
-parity('uploadBooks forwards the exact supplied body object', {}, async env => {
+test('uploadBooks forwards the exact body and reports background acceptance', async () => {
+  const env = harness();
   const body = { original: true };
+  const messages = [];
+  env.context.console.log = (...args) => messages.push(args);
   env.setFetchHandler((_url, settings) => {
     assert.equal(settings.body, body);
     return Promise.resolve({ ok: true, json: async () => body });
   });
   assert.equal(await env.api.uploadBooks(body), body);
+  assert.equal(env.calls.find(call => call[0] === 'fetch')[1], '/api/books/upload');
+  assert.equal(messages.at(-1)[0], '[Lunabria] ✔️ Books accepted for background processing:');
 });
 parity('metadata delegation honors facade overrides and call receiver', {}, async ({ api }) => {
   api.fetchMetadataOnline = function (data) { assert.equal(this, api); return { overridden: data }; };

@@ -1,18 +1,41 @@
-import os
+import asyncio
+import logging
 import shutil
 import unicodedata
+from uuid import uuid4
 from pathlib import Path
 from typing import Optional, List, Literal
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 
 from app.config import UPLOAD_DIR
+from app import database
 from app.services.calibre_service import calibre_service
+from app.services.ingestion_queue import ingestion_queue
 from app.services.library_service import library_service
 from app.services.reader_service import reader_service
 from app.models import BookBase, PaginatedBooksResponse
 
 router = APIRouter(prefix="/api/books", tags=["Books"])
+logger = logging.getLogger(__name__)
+
+
+def _copy_upload_to_staging(upload_file, destination):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("wb") as buffer:
+        shutil.copyfileobj(upload_file, buffer, length=1024 * 1024)
+
+
+def _public_upload_job(job):
+    return {
+        "job_id": job["job_id"],
+        "filename": job["filename"],
+        "status": job["status"],
+        "error": job.get("error"),
+        "book_id": job.get("book_id"),
+        "created_at": job.get("created_at"),
+        "updated_at": job.get("updated_at"),
+    }
 
 @router.get("", response_model=PaginatedBooksResponse)
 def list_books(
@@ -77,68 +100,107 @@ def get_book(book_id: int):
         raise HTTPException(status_code=404, detail="Book not found")
     return book
 
-@router.post("/upload")
+@router.post("/upload", status_code=202)
 async def upload_books(
     files: List[UploadFile] = File(...),
     auto_fetch_metadata: bool = Form(False),
     isbns: Optional[str] = Form(None)  # Comma-separated or JSON list of ISBNs matching files
 ):
-    """
-    Uploads one or multiple PDF books.
-    - If auto_fetch_metadata is True, attempts to fetch metadata via Calibre CLI using ISBN or filename.
-    - If False, imports the file directly into Calibre without external lookups.
-    """
-    isbn_list = []
-    if isbns:
-        isbn_list = [i.strip() for i in isbns.split(",") if i.strip()]
+    """Stage PDF uploads and enqueue them for background Calibre ingestion."""
+    if not ingestion_queue.is_running:
+        raise HTTPException(status_code=503, detail="Book ingestion worker is unavailable.")
 
-    added_books = []
-    for idx, file in enumerate(files):
-        if not file.filename.lower().endswith(".pdf"):
-            continue
+    isbn_list = [value.strip() for value in (isbns or "").split(",") if value.strip()]
+    prepared = []
+    for index, upload_file in enumerate(files):
+        filename = (upload_file.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+        if (
+            not filename
+            or not filename.lower().endswith(".pdf")
+            or any(ord(character) < 32 for character in filename)
+        ):
+            for prior_file in files:
+                await prior_file.close()
+            raise HTTPException(status_code=400, detail="Only valid PDF filenames can be uploaded.")
 
-        temp_path = UPLOAD_DIR / file.filename
-        try:
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+        job_id = uuid4().hex
+        staged_path = UPLOAD_DIR / "staging" / f"{job_id}.pdf"
+        prepared.append({
+            "job_id": job_id,
+            "filename": filename,
+            "staging_path": str(staged_path),
+            "auto_fetch_metadata": auto_fetch_metadata,
+            "isbn": isbn_list[index] if index < len(isbn_list) else None,
+            "upload_file": upload_file,
+        })
 
-            # Derive initial title from filename
-            clean_title = Path(file.filename).stem.replace("_", " ").replace("-", " ")
-            isbn = isbn_list[idx] if idx < len(isbn_list) else None
-
-            # Add to calibre
+    staged_paths = []
+    job_records = [
+        {key: value for key, value in job.items() if key != "upload_file"}
+        for job in prepared
+    ]
+    records_created = False
+    try:
+        for job in prepared:
+            staged_path = Path(job["staging_path"])
+            staged_paths.append(staged_path)
+            await asyncio.to_thread(
+                _copy_upload_to_staging,
+                job["upload_file"].file,
+                staged_path,
+            )
+        await asyncio.to_thread(
+            database.create_upload_jobs,
+            job_records,
+        )
+        records_created = True
+        await ingestion_queue.enqueue_many(job_records)
+    except Exception as error:
+        for staged_path in staged_paths:
             try:
-                book_id = calibre_service.add_book(
-                    file_path=str(temp_path),
-                    title=clean_title,
-                    isbn=isbn
-                )
-            except Exception as add_err:
-                raise HTTPException(status_code=409, detail=str(add_err))
-
-            # If user wanted automatic metadata fetch
-            if auto_fetch_metadata and isbn:
+                staged_path.unlink(missing_ok=True)
+            except OSError:
+                logger.exception("Could not remove rejected staged upload %s", staged_path)
+        if records_created:
+            for job in job_records:
                 try:
-                    meta = calibre_service.fetch_metadata(isbn=isbn)
-                    calibre_service.update_metadata(
-                        book_id=book_id,
-                        title=meta.get("title") or clean_title,
-                        authors=", ".join(meta.get("authors") or []) or None,
-                        tags=", ".join(meta.get("tags") or []) or None,
-                        comments=meta.get("comments"),
-                        isbn=meta.get("isbn") or isbn
+                    await asyncio.to_thread(
+                        database.update_upload_job,
+                        job["job_id"],
+                        "failed",
+                        "The upload could not be added to the background queue.",
                     )
-                except Exception as meta_err:
-                    print(f"Warning: Failed to fetch metadata for uploaded book {book_id}: {meta_err}")
+                except Exception:
+                    logger.exception(
+                        "Could not record rejected upload job %s",
+                        job["job_id"],
+                    )
+        logger.exception("Could not queue uploaded books")
+        raise HTTPException(status_code=503, detail="The uploaded books could not be queued.") from error
+    finally:
+        for job in prepared:
+            await job["upload_file"].close()
 
-            book = calibre_service.get_book(book_id)
-            if book:
-                added_books.append(book)
-        finally:
-            if temp_path.exists():
-                os.remove(temp_path)
+    jobs = [_public_upload_job({**job, "status": "queued"}) for job in job_records]
+    return {
+        "job_id": jobs[0]["job_id"] if len(jobs) == 1 else None,
+        "filename": jobs[0]["filename"] if len(jobs) == 1 else None,
+        "status": "queued",
+        "jobs": jobs,
+    }
 
-    return {"message": f"{len(added_books)} books added successfully", "books": added_books}
+
+@router.get("/upload/jobs")
+def get_active_upload_jobs():
+    return [_public_upload_job(job) for job in database.get_active_upload_jobs()]
+
+
+@router.get("/upload/jobs/{job_id}")
+def get_upload_job(job_id: str):
+    job = database.get_upload_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Upload job not found.")
+    return _public_upload_job(job)
 
 @router.delete("/{book_id}")
 def delete_book(book_id: int):
@@ -172,5 +234,3 @@ def get_page_layout(book_id: int, page_number: int):
     if not layout:
         raise HTTPException(status_code=404, detail="Could not extract page layout")
     return layout
-
-

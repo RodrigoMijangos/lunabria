@@ -55,15 +55,18 @@ class MobileSelectionController {
         }
       }
 
-      this.activePointerId = pointerId;
+      if (pointerId != null) {
+        this.activePointerId = pointerId;
+      }
       this.touchStartX = clientX;
       this.touchStartY = clientY;
       this.targetPoint = { x: clientX, y: clientY };
 
-      clearTimeout(this.longPressTimer);
-      this.longPressTimer = setTimeout(() => {
-        this.startLongPressSelection(this.targetPoint);
-      }, 450);
+      if (!this.longPressTimer) {
+        this.longPressTimer = setTimeout(() => {
+          this.startLongPressSelection(this.targetPoint);
+        }, 450);
+      }
     };
 
     const handleMove = (clientX, clientY, e) => {
@@ -171,8 +174,8 @@ class MobileSelectionController {
 
     viewport.addEventListener('pointerup', handleEnd, { passive: true });
     viewport.addEventListener('pointercancel', (e) => {
-      // Do not abort active selection if pointer was merely canceled by browser scroll heuristic
-      if (!this.isSelecting) {
+      // Do not abort active selection or pending long-press if pointer was merely canceled by browser scroll heuristic
+      if (!this.isSelecting && !this.longPressTimer) {
         handleEnd();
       }
     }, { passive: true });
@@ -198,7 +201,7 @@ class MobileSelectionController {
 
     viewport.addEventListener('touchend', handleEnd, { passive: true });
     viewport.addEventListener('touchcancel', (e) => {
-      if (!this.isSelecting || !e.touches || e.touches.length === 0) {
+      if ((!this.isSelecting && !this.longPressTimer) || !e.touches || e.touches.length === 0) {
         handleEnd();
       }
     }, { passive: true });
@@ -251,15 +254,44 @@ class MobileSelectionController {
       }, { passive: true });
     }
 
-    // Suppress system context menu on mobile reader viewport
-    viewport.addEventListener('contextmenu', (e) => {
+    // Suppress system context menu on mobile reader viewport and window
+    const suppressContextMenu = (e) => {
       const isMobile = this.reader?.mobile?.device?.isMobileReaderActive?.() ||
         document.body.classList.contains('mobile-reader-active') ||
         (typeof window !== 'undefined' && window.innerWidth <= 850);
       if (isMobile) {
-        e.preventDefault();
+        const isReaderArea = e.target && typeof e.target.closest === 'function'
+          ? Boolean(e.target.closest('#reader-body, #pdf-viewport, .pdf-page-wrapper, .textLayer'))
+          : true;
+        if (isReaderArea || this.isSelecting || this.longPressTimer) {
+          e.preventDefault();
+        }
       }
-    });
+    };
+    viewport.addEventListener('contextmenu', suppressContextMenu);
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('contextmenu', suppressContextMenu, { capture: true });
+    }
+
+    // Suppress native system selection toolbar during long-press hold and active mobile selection
+    const suppressSelectStart = (e) => {
+      const isMobile = this.reader?.mobile?.device?.isMobileReaderActive?.() ||
+        document.body.classList.contains('mobile-reader-active') ||
+        (typeof window !== 'undefined' && window.innerWidth <= 850);
+      if (isMobile && (this.isSelecting || this.longPressTimer)) {
+        if (e.target && typeof e.target.closest === 'function') {
+          if (e.target.closest('#reader-body, #pdf-viewport, .pdf-page-wrapper, .textLayer')) {
+            e.preventDefault();
+          }
+        } else {
+          e.preventDefault();
+        }
+      }
+    };
+    viewport.addEventListener('selectstart', suppressSelectStart);
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('selectstart', suppressSelectStart, { capture: true });
+    }
   }
 
   startLongPressSelection(point) {
