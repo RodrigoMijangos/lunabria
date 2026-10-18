@@ -8,6 +8,7 @@ class ReaderModel {
   constructor() {
     this.bookId = null;
     this.pdfDoc = null;
+    this.navigationMap = new ReaderNavigationMap();
     this.totalPages = 0;
     this.currentPage = 1;
     this.scale = 1.3;
@@ -66,6 +67,7 @@ class ReaderModel {
   reset() {
     this.bookId = null;
     this.pdfDoc = null;
+    this.navigationMap.reset();
     this.totalPages = 0;
     this.currentPage = 1;
     this.scale = 1.3;

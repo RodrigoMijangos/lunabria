@@ -7,12 +7,17 @@ const vm = require('node:vm');
 const baseline = require('./reader.baseline.test.cjs');
 const frontend = path.resolve(__dirname, '..');
 const source = file => fs.readFileSync(path.join(frontend, 'js', file), 'utf8');
+const loadReaderModel = context => {
+  vm.runInContext(source('models/ReaderNavigationMap.js'), context);
+  vm.runInContext(source('models/ReaderModel.js'), context);
+};
 const addedScripts = [
   'services/reader/ReaderSelectionGeometry.js',
   'services/reader/ReaderTextTargetGeometry.js',
   'services/reader/ReaderOfflineService.js',
   'viewmodels/reader/ReaderEventBindings.js',
-  'viewmodels/reader/ReaderDocumentLifecycle.js'
+  'viewmodels/reader/ReaderDocumentLifecycle.js',
+  'views/reader/TableOfContentsView.js'
 ];
 const clone = value => structuredClone(value);
 const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height });
@@ -109,7 +114,7 @@ function world(original = false) {
     }; }
   };
   const context = vm.createContext(sandbox);
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   if (!original) for (const file of addedScripts) vm.runInContext(source(file), context, { filename: file });
   vm.runInContext(original ? baseline.annotation : source('viewmodels/reader/ReaderAnnotationViewModel.js'), context);
   vm.runInContext(original ? baseline.reader : source('viewmodels/ReaderViewModel.js'), context);
@@ -152,7 +157,19 @@ function loadNativeSelectionController(context) {
 test('public methods and constructor-owned state remain available', () => {
   const old = world(true), current = world();
   const names = w => Object.getOwnPropertyNames(Object.getPrototypeOf(w.reader));
-  assert.deepStrictEqual(names(current).filter(name => name !== 'reconcileServerConnection'), names(old));
+  const addedMethods = [
+    'navigateToAssistedDestination',
+    'returnToPreviousReadingPoint',
+    'dismissJumpBreadcrumb',
+    'showJumpBreadcrumb',
+    'scheduleJumpBreadcrumbHide',
+    'hideJumpBreadcrumb'
+  ];
+  assert.deepStrictEqual(
+    names(current).filter(name => name !== 'reconcileServerConnection' && !addedMethods.includes(name)),
+    names(old)
+  );
+  for (const name of addedMethods) assert.equal(typeof current.reader[name], 'function', name);
   assert.equal(typeof current.reader.reconcileServerConnection, 'function');
   assert.deepStrictEqual(clone(current.reader.model), clone(old.reader.model));
   for (const key of Object.keys(old.reader)) assert.ok(Object.hasOwn(current.reader, key), key);
@@ -735,7 +752,7 @@ test('ReaderNativeSelectionLoupeController suppresses loupe on click and activat
     }
   });
 
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   loadNativeSelectionController(context);
 
   const model = new context.window.ReaderModel();
@@ -803,7 +820,7 @@ test('ReaderNativeSelectionLoupeController resolves element and stale caret resu
     NodeFilter: { SHOW_TEXT: 4 },
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   loadNativeSelectionController(context);
 
   const words = [];
@@ -856,7 +873,7 @@ test('ReaderNativeSelectionLoupeController uses the caret span in a PDF.js fallb
     NodeFilter: { SHOW_TEXT: 4 },
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   loadNativeSelectionController(context);
 
   const textLayer = { querySelectorAll: selector => selector === 'span' ? spans : [], contains: node => nodes.includes(node) };
@@ -900,7 +917,7 @@ test('ReaderNativeSelectionLoupeController uses the caret span in a PDF.js fallb
     NodeFilter: { SHOW_TEXT: 4 },
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   loadNativeSelectionController(context);
 
   const nodes = [], spans = [];
@@ -947,7 +964,7 @@ test('ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
     NodeFilter: { SHOW_TEXT: 4 },
     ReaderSelectionLoupeView: class { update() {} hide() {} }
   });
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   loadNativeSelectionController(context);
 
   const word1 = { textContent: 'granularity', nodeType: 3 };
@@ -1053,7 +1070,7 @@ test('ReaderNativeSelectionLoupeController preserves full initial word and expan
     }
   });
 
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   vm.runInContext(source('viewmodels/reader/ReaderNativeSelectionLoupeController.js'), context);
 
   const model = new context.window.ReaderModel();
@@ -1133,7 +1150,7 @@ test('ReaderToolbarManager wheel zoom uses fast 0.25 step with delta intensity s
     requestAnimationFrame: fn => { frames.push(fn); return 1; }
   });
 
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   vm.runInContext(source('viewmodels/reader/ReaderToolbarManager.js'), context);
 
   const model = new context.window.ReaderModel();
@@ -1183,7 +1200,7 @@ test('ReaderToolbarManager continuous trackpad pinch zoom scales proportionally 
     requestAnimationFrame: fn => { frames.push(fn); return 1; }
   });
 
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   vm.runInContext(source('viewmodels/reader/ReaderToolbarManager.js'), context);
 
   const model = new context.window.ReaderModel();
@@ -1336,7 +1353,7 @@ test('ReaderModel.getPageAnnotations matches string and numeric page numbers and
     localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     window: {}
   });
-  vm.runInContext(source('models/ReaderModel.js'), context);
+  loadReaderModel(context);
   const model = new context.window.ReaderModel();
   model.setAnnotations([
     { id: 'a1', page: 2, color: 'Green', text: 'Sample definition' },

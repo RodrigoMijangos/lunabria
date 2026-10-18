@@ -1,23 +1,43 @@
 # 🌙 Lunabria (PWA Everywhere)
 
-A modern reading and library management web application connected to Calibre, featuring **HTTP/2** streaming and an ergonomic reading experience inspired by modern e-readers. Accessible from any modern browser and device (desktop, tablet, mobile) as an **offline-capable Progressive Web App (PWA)**.
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![Python: 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB.svg?logo=python&logoColor=white)](https://python.org)
+[![Calibre Compatible](https://img.shields.io/badge/Calibre-CLI_Integrated-orange.svg)](https://calibre-ebook.com)
+[![Architecture: MVVM + Vanilla JS](https://img.shields.io/badge/Frontend-Vanilla_JS_MVVM-yellow.svg)](docs/architecture.md)
+[![PWA Ready](https://img.shields.io/badge/PWA-Offline_First-purple.svg)](#3-offline-reading-pwa--outbox-sync)
+[![Protocol: HTTP/2](https://img.shields.io/badge/Protocol-HTTP%2F2-brightgreen.svg)](#5-start-caddy-reverse-proxy-with-http2-support)
+
+**Lunabria** is a modern, self-hosted reading platform and personal library workstation connected directly to your existing Calibre library. Accessible from any modern browser and installable on all your devices (desktop, tablet, smartphone) as an **offline-capable Progressive Web App (PWA)** with **HTTP/2** multiplexed streaming.
+
+Lunabria bridges the gap between Calibre library management and deep, distraction-free study: sub-glyph text selection, semantic multi-color highlight categories, pressure-sensitive digital inking with palm rejection, touch-optimized mobile navigation with hold-to-select magnifying loupe, and deterministic notes export designed for Obsidian, Logseq, and Personal Knowledge Management (PKM) workflows.
 
 > [!IMPORTANT]
 > **Copyright & Content Policy**: Lunabria is an open-source, self-hosted reading platform and personal library manager. All book titles, covers, and excerpts shown in the screenshots, demo fixtures, and documentation are strictly works in the **public domain** (courtesy of Project Gutenberg and open archives). Lunabria does **not** host, distribute, or bundle copyrighted books. Users must not share or distribute copyrighted materials without appropriate authorization, and are solely responsible for ensuring that all files in their personal Calibre libraries comply with applicable intellectual property laws.
 
 ---
 
+## 🎯 Target Audience
+
+Lunabria is intentionally designed for:
+
+- 🏠 **Homelab Self-Hosters**: Users who already curate their Calibre libraries and want zero-copy reading on their local network or homelab (Raspberry Pi, mini PC, or VPS) with low resource consumption, direct CLI integration, and robust HTTP/2 streaming.
+- 🎓 **Active Readers & Researchers**: Students, academics, and non-fiction readers who require deep annotation, customizable semantic highlights (*Key Idea*, *Definition*, *Question*, *Quote*), chapter-aware table of contents navigation, and clean Markdown export to Obsidian, Logseq, or Notion.
+- ✍️ **Tablet & Stylus Users**: Readers on iPads (Apple Pencil), Microsoft Surface (Surface Pen), or Android tablets who want real-time digital inking, margin sketching, freehand highlighter blending, and hardware-tailored palm rejection.
+- 📱 **Everyday Mobile Readers**: Anyone who wants to continue reading on their phone with an installable PWA, seamless offline caching, a dedicated circular magnifying loupe for thumb-precision text selection, and AMOLED black theme.
+
+---
+
 ## 📸 Screenshots & UI Showcase
 
 ### Library Control Center & Continue Reading
-Adaptive paginated book grid, collection filters, and live reading progress indicators.
+Adaptive paginated book grid, virtual library filters, live reading progress indicators, and lunar branding insignia.
 
 ![Library Catalog & Continue Reading Carousel](docs/screenshots/01_library_catalog.png)
 
 ---
 
 ### PDF Reader & Real-Time Highlights
-Ergonomic reading interface with full text layer selection, page scrubber, and digital stylus support.
+Ergonomic reading interface with full sub-glyph text layer selection, page scrubber, and digital stylus support.
 
 ![PDF Reader Interface](docs/screenshots/04_pdf_reader.png)
 
@@ -65,53 +85,79 @@ Tailored stylus interactions with strict palm rejection, double-tap pen/highligh
 
 ---
 
+### Virtual Libraries & Dynamic Collection Management
+Organize extensive collections effortlessly using Calibre-native tag queries, regular expressions, or manual curated selections without file duplication.
+
+![Virtual Libraries Management](docs/screenshots/09_virtual_libraries_management.png)
+
+---
+
+### Ergonomic Reading Themes & AMOLED Black Mode
+Multiple eye-care themes including Sepia and true OLED `#000000` AMOLED Black for distraction-free night reading and battery conservation.
+
+![AMOLED Black Theme Showcase](docs/screenshots/10_theme_showcase_amoled.png)
+
+---
+
+### PWA Offline Storage & Autosave Outbox Engine
+Dedicated sync manager with storage quotas, offline cache controls, and background outbox sync ensuring zero data loss across disconnected sessions.
+
+![Offline PWA & Outbox Sync Settings](docs/screenshots/11_offline_pwa_sync.png)
+
+---
+
+### Mobile Touch Reader & Circular Magnifying Loupe
+Tailored mobile touch reading experience featuring a single-row compact topbar, floating action button (FAB), and hold-to-select circular magnifying loupe for precision thumb navigation.
+
+![Mobile Touch Reader & Circular Magnifying Loupe](docs/screenshots/05_mobile_loupe_selection.png)
+
+---
+
 ## 🌟 Key Features
 
-### 1. Core System Views
+### 1. Library Control Center (Home)
+- **"Continue Reading" Carousel:** Instantly resume your **10 most recently read books** with real-time progress bars, completion percentage, and current page.
+- **Adaptive Paginated Catalog:** Dynamic grid view that scales gracefully with your viewport width, supporting custom page sizes, responsive column layouts, and local cover caching.
+- **Virtual Library Switcher:** Filter your book collection on the fly without duplicating files on disk (Query/Regex mode or manual book selection).
+- **Batch Book Management:** Select multiple books from search results or the catalog to group them into manual virtual collections.
+- **Real-Time Live Search:** Instant keyword filtering across titles, authors, and Calibre tags.
+- **Local Cover Caching & Vector Fallback:** Book covers viewed in the library are cached locally in IndexedDB for instant retrieval and offline reuse; books without an embedded cover fall back seamlessly to an offline vector cover.
+- **Reconnection Detection:** Automatically detects when a dropped connection is restored, refreshing the catalog and syncing queued reading progress.
+- **Ergonomic Themes:** **Sepia** (warm daylight tone), **AMOLED Black** (pure `#000000` for OLED displays), and **Dark** (slate).
+- **Brand Identity & PWA Installation:** Open-book lunar brand insignia, dynamic SVG favicon, and maskable touch icons for mobile home-screen installation.
 
-1. **Home (Library Control Center):**
-   - **"Continue Reading" Carousel:** Displays the **10 most recently read books** with live progress, reading percentage, and current page. One click resumes reading right where you left off.
-   - **Adaptive Paginated Catalog:** Dynamic grid view that adapts to your screen width, supporting customizable page sizes, responsive column layouts, and default pagination across the entire library (including "Last opened"). Users can browse and navigate locally cached books without re-downloading them.
-   - **Virtual Library Switcher:** Filter your book collection on the fly without duplicating files on disk.
-   - **Batch Book Selection:** Pick multiple books from search results or the catalog to group them into manual virtual collections.
-   - **Real-Time Search:** Instant filtering across titles, authors, and tags.
-   - **Local Cover Caching & Offline Fallback:** Book covers viewed in the library are cached locally for fast retrieval and offline reuse; books without an embedded or reachable cover fall back seamlessly to an offline vector cover.
-   - **Auto-Reconnection Detection:** Automatically detects when a lost server connection is restored, refreshing the catalog and synchronizing queued reading data and annotations.
-   - **Ergonomic Reading Themes:** **Sepia** (warm editorial daylight), **AMOLED Black** (pure `#000000` for OLED displays), and **Dark** (slate).
-   - **Modern Brand Identity & PWA Installation:** Open-book lunar brand insignia, dynamic SVG favicon, and maskable touch icons for mobile home-screen installation with theme-adaptive browser header colors.
+### 2. Reading Workstation & Digital Inking
+- **Universal Sub-Glyph Text Selection:** Initiate selections smoothly from page margins, paragraph padding, or between lines with edge-to-edge word expansion on double-click drag and collision-avoiding floating HUD placement.
+- **Contextual Floating Menu:** Select text to reveal quick action controls: highlight color palette, notes, and clipboard copy.
+- **Reader Navigation:** Browse a book's table of contents, follow internal PDF links and matching chapter or section references in the text, then return to your previous reading position.
+- **Customizable Semantic Highlight Taxonomy:** Freely configure your own colors and semantic labels (e.g., *Key Idea*, *Definition*, *Question*, *Quote*).
+- **Freehand Stylus & Digital Inking:** Draw notes, margin diagrams, underlines, and freehand highlights directly on book pages with pressure dynamics, palm rejection, and dedicated hardware settings.
+- **Slide-Out Lateral Drawer:** Chronologically lists all highlights, annotations, and notes with interactive color filtering.
+- **Deterministic Multi-Format PKM Export:** Export annotations and highlights to **Hierarchical Markdown**, **Markdown grouped by color/page**, **JSON**, **JSONL**, **YAML**, and **TOML**, driven by PDF table of contents hierarchy ready for Obsidian, Logseq, or automated knowledge workflows.
+- **Dedicated Mobile & Touch Reader:** Tailored mobile reading interface featuring a compact single-row topbar, a collapsible Floating Action Button (FAB) for drawing and quick color selection, long-press text selection with a circular magnifying loupe, and a one-tap page stroke wipe button.
+- **Precision Zoom & Ergonomic Navigation:** Dedicated **Fit-to-Width** (`W`), **Fit-to-Page** (`H`), and **Actual Size (1:1 / 100%)** (`Ctrl+0`) modes. Smooth **Ctrl + Wheel** and continuous trackpad/touchscreen pinch-to-zoom with real-time GPU preview and dynamic velocity scaling across an expanded range from **25% to 500%**.
+- **Fault-Tolerant Rendering:** If a PDF page canvas render encounters an issue, a recoverable error card with an inline retry button displays instead of an unrecoverable blank page.
+- **On-Demand Format Conversion:** If a book has no PDF, an available format supported by Calibre (such as EPUB) is automatically converted to PDF when opened and cached without altering the original library files.
 
-2. **Reader Experience:**
-   - **Contextual Floating Menu:** Select text to reveal quick action controls: highlight color palette, notes, and clipboard copy.
-   - **Customizable Highlight Palette:** Freely configure your own colors and semantic labels (e.g., *Key Idea*, *Definition*, *Question*, *Quote*).
-   - **Freehand Stylus & Digital Inking:** Draw notes, margin diagrams, underlines, and freehand highlights directly on book pages with pressure sensitivity, palm rejection, and dedicated stylus hardware settings.
-   - **Slide-out Lateral Drawer:** Chronologically lists all highlights, annotations, and notes with interactive color filtering.
-   - **Multi-Format Deterministic Export:** Export annotations, highlights, and notes directly to **Hierarchical Markdown**, **Markdown grouped by color/page**, **JSON**, **JSONL**, **YAML**, and **TOML**, driven by PDF table of contents hierarchy and high-fidelity text reconstruction ready for Obsidian, Logseq, or automated knowledge workflows.
-   - **Dedicated Mobile & Touch Reader:** Tailored mobile reading interface featuring a compact single-row topbar, a collapsible Floating Action Button (FAB) for drawing and quick color selection, long-press text selection with a circular magnifying loupe, and a one-tap page stroke wipe button to clear the active page.
-   - **Precision Zoom & Ergonomic Navigation:** Dedicated **Fit-to-Width** (`W`), **Fit-to-Page** (`H`), and **Actual Size (1:1 / 100%)** (`Ctrl+0`) modes. Smooth **Ctrl + Wheel** and continuous trackpad/touchscreen pinch-to-zoom with real-time GPU preview and dynamic velocity scaling across an expanded range from **25% to 500%**. Viewport and cursor focal-point tracking prevents scroll jumping, with flicker-free off-DOM double-buffering.
-   - **Universal Text & Margin Selection:** Initiate selections smoothly from page margins, paragraph padding, or between lines with sub-glyph precision, edge-to-edge word expansion on double-click drag, and smart collision-avoiding floating HUD placement.
-   - **Fault-Tolerant Rendering:** If a PDF page canvas render encounters an issue, a recoverable error card with an inline retry button displays instead of an unrecoverable blank page.
-   - **Offline Reading (PWA):** Cached books appear in the library immediately on startup without network timeouts. Download books, their cover art, and pre-buffered page layouts into IndexedDB; an offline banner communicates connectivity status and the number of books available offline.
-   - **Persistent Outbox Annotation Sync:** Saved annotations and highlight colors remain available offline. Highlights, notes, freehand drawings, and reading progress created without a connection are queued locally in an outbox and synchronize automatically when connectivity returns.
-   - **In-App Update Notification:** An in-app banner alerts readers whenever an updated version of the application is available for one-click reload.
-   - **On-Demand Format Conversion:** If a book has no PDF, an available format supported by Calibre (beyond EPUB) is automatically converted to PDF when opened and cached without altering the original library.
+### 3. Offline Reading (PWA) & Outbox Sync
+- **Full Offline PWA:** Cached books appear in the library immediately on startup without network timeouts. Download books, their cover art, and pre-buffered page layouts into IndexedDB.
+- **Offline Banner:** Clear indicator communicating connectivity status and the number of books available offline.
+- **Persistent Outbox Annotation Sync:** Highlights, notes, freehand drawings, and reading progress created without a connection are queued locally in an outbox and synchronize automatically once network access returns.
+- **In-App Update Notification:** In-app banner alerts readers whenever an updated version of the application is available for one-click reload.
 
-3. **Add New Books:**
-   - Drag-and-drop or select one or multiple PDF files.
-   - **Verification Wizard:** Optional ISBN lookup before importing to automatically retrieve official title, authors, tags, and summary via Calibre, or direct import without metadata scraping.
-
-4. **Calibre Metadata Editor:**
-   - Modify title, authors, tags, series, series index, and synopsis.
-   - **"Download Metadata" Assistant:** Runs Calibre CLI (`fetch-ebook-metadata`) to scrape summaries and high-resolution book covers.
-   - Configure metadata sources (Google Books, Open Library, Amazon, Goodreads).
-   - Commits changes directly to Calibre's `metadata.db` via `calibredb set_metadata`.
+### 4. Book Ingestion & Calibre Metadata Management
+- **Asynchronous Book Ingestion:** Drag-and-drop or select files to upload with HTTP 202 background job processing, byte progress reporting, and non-blocking toast notifications.
+- **Calibre Metadata Editor:** Modify title, authors, tags, series, series index, and synopsis directly.
+- **Online Metadata Assistant:** Runs Calibre CLI (`fetch-ebook-metadata`) to scrape summaries and high-resolution book covers from Google Books, Open Library, Amazon, and Goodreads.
+- **Direct Library Integration:** Commits metadata updates safely to Calibre's `metadata.db` via `calibredb set_metadata`.
 
 ---
 
 ## 📚 Virtual Libraries (2 Creation Modes)
 
-- **Query / Regex Mode:** Define Calibre-native search syntax (e.g., `tags:"=University"` or regular expressions).
-- **Manual Mode:** Check off specific books from the catalog or search queries to create curated reading lists.
-- **Zero Duplication:** No physical files are moved or duplicated.
+- **Query / Regex Mode:** Define Calibre-native search syntax (e.g., `tags:"=University"` or regular expressions) to create automatic dynamic views.
+- **Manual Mode:** Check off specific books from catalog search queries to create curated reading lists.
+- **Zero Disk Duplication:** No physical files are moved or duplicated.
 
 ---
 
@@ -140,13 +186,13 @@ Lunabria interfaces directly with your Calibre library and CLI utilities. Keep t
 
 ## 🔍 Known Issues & Typography Limitations
 
-For a detailed technical overview of book compatibility edge cases—such as scanned books without OCR, custom font ligatures, code blocks, or temporary layout desyncs (and their workarounds)—please consult:
+For a detailed technical overview of book compatibility edge cases—such as scanned books without OCR, custom font ligatures, monospaced code blocks, or temporary layout desyncs (and their workarounds)—please consult:
 
 👉 **[Docs: Known Issues & Typography Limitations](docs/known_issues.md)**
 
 ---
 
-## 🖥️ Run on a Windows desktop
+## 🖥️ Run on a Windows Desktop
 
 1. Install Python 3.11 or later and Calibre for Windows. Make sure `calibredb`, `ebook-convert`, and `fetch-ebook-metadata` are available in `PATH`.
 2. Create a `.env` file in the repository root and point it to your Calibre library. For a local-only desktop instance, use:
@@ -215,7 +261,6 @@ Close the Calibre desktop application before uploading books or saving metadata,
    ```
    *Or configure manually by copying `systemd/lunabria.service` to `/etc/systemd/system/` with your absolute paths.*
 
-
 5. **Start Caddy Reverse Proxy (with HTTP/2 support):**
    ```bash
    sudo cp caddy/Caddyfile /etc/caddy/Caddyfile
@@ -223,6 +268,15 @@ Close the Calibre desktop application before uploading books or saving metadata,
    ```
 
 Once running, access the application locally at `http://localhost:8000` or through Caddy at `https://localhost:8443` (or `http://<SERVER-IP>:8085`).
+
+---
+
+## 🏛️ Architecture & Technical Documentation
+
+For in-depth details on Lunabria's architectural design, modular contracts, and responsibility boundaries, refer to:
+
+- [Architecture & Responsibilities Specification](docs/architecture.md)
+- [Known Issues & Typography Limitations](docs/known_issues.md)
 
 ---
 

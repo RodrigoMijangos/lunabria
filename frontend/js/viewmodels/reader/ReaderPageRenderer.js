@@ -3,12 +3,13 @@
  * Orchestrates PDF.js page rendering, text layer injection, and viewport DOM layout.
  */
 class ReaderPageRenderer {
-  constructor(model, viewportEl, bodyEl, annotationCoordinator, drawingCoordinator) {
+  constructor(model, viewportEl, bodyEl, annotationCoordinator, drawingCoordinator, linkCallbacks = {}) {
     this.model = model;
     this.viewportEl = viewportEl;
     this.bodyEl = bodyEl;
     this.annotationCoordinator = annotationCoordinator;
     this.drawingCoordinator = drawingCoordinator;
+    this.linkCallbacks = linkCallbacks || {};
     this.intersectionObserver = null;
     this.pageObserver = null;
     this.visibleFlowPages = new Map();
@@ -302,20 +303,103 @@ class ReaderPageRenderer {
     await this.renderTextLayer(pageWrapper, page, pageNumber, pageWidth, pageHeight, viewport, effectiveScale, generation);
     if (!this.isCurrentGeneration(generation)) return false;
 
-    // 3. Highlight Layer
+    await this.renderInternalLinks(pageWrapper, page, viewport, pageNumber, generation);
+    if (!this.isCurrentGeneration(generation)) return false;
+
+    // 4. Highlight Layer
     const highlightLayer = HighlightOverlayView.createHighlightLayerContainer();
     pageWrapper.appendChild(highlightLayer);
     if (this.annotationCoordinator) {
       this.annotationCoordinator.renderPageHighlights(highlightLayer, pageNumber);
     }
 
-    // 4. Freehand Ink & Drawing Canvas Layer
+    // 5. Freehand Ink & Drawing Canvas Layer
     const drawCanvas = DrawingCanvasView.createDrawingCanvas(pageNumber, pageWidth, pageHeight, outputScale);
     pageWrapper.appendChild(drawCanvas);
     if (this.drawingCoordinator) {
       await this.drawingCoordinator.setupDrawingLayer(drawCanvas, pageWrapper, pageNumber, effectiveScale, outputScale);
     }
     return this.isCurrentGeneration(generation);
+  }
+
+  async renderInternalLinks(pageWrapper, page, viewport, pageNumber, generation) {
+    if (typeof page.getAnnotations !== 'function') {
+      console.error(`[ReaderPageRenderer] PDF.js annotations are unavailable for page ${pageNumber}.`);
+      return;
+    }
+
+    let annotations;
+    try {
+      annotations = await page.getAnnotations({ intent: 'display' });
+    } catch (error) {
+      console.error(`[ReaderPageRenderer] Could not read PDF links for page ${pageNumber}:`, error);
+      return;
+    }
+    if (!Array.isArray(annotations)) {
+      console.error(`[ReaderPageRenderer] Invalid PDF annotations response for page ${pageNumber}.`);
+      return;
+    }
+    if (!this.isCurrentGeneration(generation)) return;
+
+    const internalLinks = annotations.filter(annotation =>
+      annotation?.subtype === 'Link' &&
+      !annotation.url &&
+      !annotation.unsafeUrl &&
+      (!annotation.action || annotation.action === 'GoTo') &&
+      Array.isArray(annotation.rect) &&
+      annotation.rect.length === 4 &&
+      annotation.rect.every(Number.isFinite) &&
+      annotation.dest != null
+    );
+    const links = await Promise.all(internalLinks.map(async annotation => {
+      try {
+        const targetPage = await this.resolveLinkDestination(annotation.dest);
+        if (!targetPage) {
+          console.warn(`[ReaderPageRenderer] Ignoring an unresolved internal PDF link on page ${pageNumber}.`);
+          return null;
+        }
+        return {
+          targetPage,
+          rect: annotation.rect,
+          label: String(annotation.title || annotation.contents || `Go to page ${targetPage}`)
+        };
+      } catch (error) {
+        console.warn(`[ReaderPageRenderer] Could not resolve an internal PDF link on page ${pageNumber}:`, error);
+        return null;
+      }
+    }));
+    if (!this.isCurrentGeneration(generation)) return;
+
+    const layer = new LinkOverlayView(
+      pageWrapper,
+      links.filter(Boolean),
+      viewport,
+      this.model,
+      this.drawingCoordinator,
+      this.linkCallbacks.onInternalLinkNavigate
+    ).render();
+    if (layer) pageWrapper.appendChild(layer);
+  }
+
+  async resolveLinkDestination(destination) {
+    const pdfDoc = this.model.pdfDoc;
+    const pageCount = this.model.totalPages || pdfDoc.numPages;
+    if (!Number.isInteger(pageCount) || pageCount < 1) return null;
+
+    const knownPage = this.model.navigationMap?.resolveDestination(destination);
+    if (Number.isInteger(knownPage) && knownPage > 0 && knownPage <= pageCount) return knownPage;
+
+    const resolved = typeof destination === 'string'
+      ? (typeof pdfDoc.getDestination === 'function' ? await pdfDoc.getDestination(destination) : null)
+      : destination;
+    if (!Array.isArray(resolved) || resolved.length === 0) return null;
+
+    const pageReference = resolved[0];
+    const pageIndex = Number.isInteger(pageReference)
+      ? pageReference
+      : (typeof pdfDoc.getPageIndex === 'function' ? await pdfDoc.getPageIndex(pageReference) : null);
+    if (!Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= pageCount) return null;
+    return pageIndex + 1;
   }
 
   renderPageErrorState(pageWrapper, pageNumber, effectiveScale, generation) {
@@ -388,6 +472,20 @@ class ReaderPageRenderer {
           viewport: viewport
         });
         await textLayer.render();
+      }
+    }
+
+    if (this.isCurrentGeneration(generation) &&
+        typeof this.linkCallbacks.onTextReferenceNavigate === 'function') {
+      try {
+        TextLayerView.decorateCrossReferences(
+          textLayerDiv,
+          this.model.navigationMap,
+          pageNumber,
+          this.linkCallbacks.onTextReferenceNavigate
+        );
+      } catch (error) {
+        console.error(`[ReaderPageRenderer] Could not link text references on page ${pageNumber}:`, error);
       }
     }
   }

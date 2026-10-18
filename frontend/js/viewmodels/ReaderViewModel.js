@@ -25,6 +25,22 @@ class ReaderViewModel {
     this.highlightActionMenu = document.getElementById('highlight-action-menu');
     this.drawer = document.getElementById('reader-drawer');
     this.drawerBackdrop = document.getElementById('drawer-backdrop');
+    this.jumpBreadcrumb = document.getElementById('reader-jump-breadcrumb');
+    this.jumpReturnLabel = document.getElementById('reader-jump-return-label');
+    this.jumpAnnouncement = document.getElementById('reader-jump-announcement');
+    this.jumpBreadcrumbElements = {
+      breadcrumb: this.jumpBreadcrumb,
+      readerContainer: this.container,
+      returnButton: document.getElementById('reader-jump-return-btn'),
+      returnLabel: this.jumpReturnLabel,
+      announcement: this.jumpAnnouncement
+    };
+    this.jumpBreadcrumbTimer = null;
+    this.jumpBreadcrumbTransitionTimer = null;
+    this.jumpBreadcrumb?.addEventListener('focusout', event => {
+      if (this.jumpBreadcrumb.contains?.(event.relatedTarget)) return;
+      if (!this.jumpBreadcrumbTimer && !this.jumpBreadcrumb.hidden) this.scheduleJumpBreadcrumbHide();
+    });
 
     // Granular Sub-ViewModels / Coordinators
     this.nav = new ReaderNavigationViewModel(
@@ -40,9 +56,17 @@ class ReaderViewModel {
         onRenderRequest: (page, focalPoint) => this.renderCurrentViewMode(page, focalPoint).catch((error) => {
           console.error('[ReaderViewModel] Error rendering page:', error);
         }),
-        onSaveProgress: () => this.debounceSaveProgress()
+        onSaveProgress: () => this.debounceSaveProgress(),
+        onPageChanged: page => this.tableOfContents?.updateActivePage(page)
       }
     );
+
+    this.tableOfContents = new TableOfContentsView(this.model, {
+      onNavigate: page => {
+        this.navigateToAssistedDestination(page);
+        if (this.mobile?.device?.isMobileReaderActive()) this.toolbar?.toggleDrawer(false);
+      }
+    });
 
     this.drawing = new ReaderDrawingViewModel(
       this.model,
@@ -72,7 +96,13 @@ class ReaderViewModel {
       this.viewportEl,
       this.bodyEl,
       this.annotations,
-      this.drawing
+      this.drawing,
+      {
+        onInternalLinkNavigate: (targetPage, sourcePage) =>
+          this.navigateToAssistedDestination(targetPage, sourcePage),
+        onTextReferenceNavigate: (targetPage, sourcePage) =>
+          this.navigateToAssistedDestination(targetPage, sourcePage)
+      }
     );
 
     this.notes = new ReaderNotesViewModel(
@@ -101,8 +131,11 @@ class ReaderViewModel {
         drawing: this.drawing,
         annotations: this.annotations,
         notes: this.notes,
+        tableOfContents: this.tableOfContents,
         onClose: () => this.close(),
-        onDownloadOffline: (onProgress) => this.cacheCurrentPdf(onProgress)
+        onDownloadOffline: (onProgress) => this.cacheCurrentPdf(onProgress),
+        onReturnToPreviousReadingPoint: () => this.returnToPreviousReadingPoint(),
+        onDismissJumpBreadcrumb: () => this.dismissJumpBreadcrumb()
       }
     );
 
@@ -154,6 +187,95 @@ class ReaderViewModel {
     return this.documentLifecycle.close();
   }
 
+  navigateToAssistedDestination(targetPage, sourcePage = this.model.currentPage) {
+    if (!Number.isInteger(targetPage) || targetPage < 1) return false;
+
+    const recorded = targetPage !== sourcePage &&
+      typeof this.model.navigationMap?.pushJump === 'function' &&
+      this.model.navigationMap.pushJump(sourcePage);
+    this.nav.goToPage(targetPage);
+    if (recorded) {
+      this.showJumpBreadcrumb(`Jumped to page ${targetPage}. Return to page ${sourcePage}.`);
+    }
+    return true;
+  }
+
+  returnToPreviousReadingPoint() {
+    const originPage = this.model.navigationMap?.popJump?.() ?? null;
+    if (!Number.isInteger(originPage) || originPage < 1) {
+      this.hideJumpBreadcrumb(true);
+      return false;
+    }
+
+    const breadcrumbHadFocus = this.jumpBreadcrumb?.contains?.(document.activeElement);
+    this.nav.goToPage(originPage);
+    if (this.model.navigationMap?.hasJumpHistory?.()) {
+      const nextOrigin = this.model.navigationMap.peekJumpOrigin();
+      this.showJumpBreadcrumb(`Returned to page ${originPage}. Return to page ${nextOrigin}.`);
+    } else {
+      this.hideJumpBreadcrumb(true);
+      if (breadcrumbHadFocus) document.getElementById('reader-page-input')?.focus?.();
+      if (this.jumpAnnouncement) this.jumpAnnouncement.textContent = `Returned to page ${originPage}.`;
+    }
+    return true;
+  }
+
+  dismissJumpBreadcrumb() {
+    const breadcrumbHadFocus = this.jumpBreadcrumb?.contains?.(document.activeElement);
+    this.hideJumpBreadcrumb(true);
+    if (breadcrumbHadFocus) document.getElementById('reader-page-input')?.focus?.();
+  }
+
+  showJumpBreadcrumb(announcement) {
+    if (!this.jumpBreadcrumb) return false;
+    const originPage = this.model.navigationMap?.peekJumpOrigin?.();
+    if (!Number.isInteger(originPage) || originPage < 1) return false;
+
+    clearTimeout(this.jumpBreadcrumbTimer);
+    clearTimeout(this.jumpBreadcrumbTransitionTimer);
+    this.jumpBreadcrumbTimer = null;
+    this.jumpBreadcrumbTransitionTimer = null;
+    ReaderHUDView.showJumpBreadcrumb(
+      this.jumpBreadcrumbElements,
+      originPage,
+      this.model.currentPage,
+      announcement
+    );
+    this.scheduleJumpBreadcrumbHide();
+    return true;
+  }
+
+  scheduleJumpBreadcrumbHide() {
+    if (!this.jumpBreadcrumb || this.jumpBreadcrumb.hidden) return;
+    clearTimeout(this.jumpBreadcrumbTimer);
+    this.jumpBreadcrumbTimer = setTimeout(() => {
+      this.jumpBreadcrumbTimer = null;
+      if (this.jumpBreadcrumb.contains?.(document.activeElement)) return;
+      this.hideJumpBreadcrumb();
+    }, 12000);
+  }
+
+  hideJumpBreadcrumb(immediate = false) {
+    clearTimeout(this.jumpBreadcrumbTimer);
+    clearTimeout(this.jumpBreadcrumbTransitionTimer);
+    this.jumpBreadcrumbTimer = null;
+    this.jumpBreadcrumbTransitionTimer = null;
+    if (!this.jumpBreadcrumb) return;
+
+    if (!immediate && this.jumpBreadcrumb.contains?.(document.activeElement)) return;
+    const hideImmediately = immediate || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if (hideImmediately) {
+      ReaderHUDView.hideJumpBreadcrumb(this.jumpBreadcrumbElements, true);
+      return;
+    }
+
+    ReaderHUDView.hideJumpBreadcrumb(this.jumpBreadcrumbElements);
+    this.jumpBreadcrumbTransitionTimer = setTimeout(() => {
+      ReaderHUDView.hideJumpBreadcrumb(this.jumpBreadcrumbElements, true);
+      this.jumpBreadcrumbTransitionTimer = null;
+    }, 200);
+  }
+
   async renderCurrentViewMode(pageNumber, focalPoint = null) {
     if (this.model.viewMode === 'notes') {
       this.notes.renderNotesMode();
@@ -162,6 +284,7 @@ class ReaderViewModel {
         if (p === this.model.currentPage) return;
         this.model.setCurrentPage(p);
         this.nav.updateHUD();
+        this.tableOfContents?.updateActivePage(p);
         this.debounceSaveProgress();
       }, pageNumber, focalPoint);
     } else if (this.model.viewMode === 'dual') {
@@ -169,6 +292,7 @@ class ReaderViewModel {
     } else {
       await this.renderer.renderPage(pageNumber, focalPoint);
     }
+    this.tableOfContents?.updateActivePage(this.model.currentPage);
   }
 
   // ============================================================

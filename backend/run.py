@@ -1,5 +1,6 @@
 import sys
 import os
+import shutil
 import subprocess
 import argparse
 from pathlib import Path
@@ -18,6 +19,22 @@ def get_lan_ip() -> str | None:
     except Exception:
         return None
 
+def find_openssl() -> str:
+    """Locate openssl binary, checking PATH and common Git installation paths on Windows."""
+    bin_name = shutil.which("openssl")
+    if bin_name:
+        return bin_name
+    if sys.platform == "win32":
+        candidates = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "usr" / "bin" / "openssl.exe",
+            Path(os.environ.get("ProgramFiles", "C:\\Program Files")) / "Git" / "usr" / "bin" / "openssl.exe",
+            Path(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")) / "Git" / "usr" / "bin" / "openssl.exe",
+        ]
+        for c in candidates:
+            if c.is_file():
+                return str(c)
+    return "openssl"
+
 def ensure_ssl_certificates(cert_path: Path, key_path: Path, extra_ips: list[str] | None = None) -> bool:
     """Generate self-signed certificate if not present."""
     if cert_path.exists() and key_path.exists():
@@ -30,9 +47,10 @@ def ensure_ssl_certificates(cert_path: Path, key_path: Path, extra_ips: list[str
             if ip and ip not in ("127.0.0.1", "0.0.0.0", "localhost"):
                 san_list.append(f"IP:{ip}")
     san_str = ",".join(san_list)
+    openssl_bin = find_openssl()
     try:
         cmd = [
-            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            openssl_bin, "req", "-x509", "-newkey", "rsa:2048", "-nodes",
             "-keyout", str(key_path),
             "-out", str(cert_path),
             "-days", "365",
@@ -175,4 +193,3 @@ def start_server():
 
 if __name__ == "__main__":
     start_server()
-

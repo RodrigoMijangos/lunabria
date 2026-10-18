@@ -226,6 +226,10 @@ test('all local HTML scripts exist and instantiate real singletons in HTML order
   for (const script of scripts) assert.ok(fs.statSync(assetPath(script.src)).isFile(), script.src);
   const world = browserWorld();
   assert.deepEqual(world.loaded, scripts.map(script => script.src));
+  const linkOverlayIndex = world.loaded.findIndex(script => script.includes('/LinkOverlayView.js'));
+  const pageRendererIndex = world.loaded.findIndex(script => script.includes('/ReaderPageRenderer.js'));
+  assert.ok(linkOverlayIndex >= 0 && linkOverlayIndex < pageRendererIndex,
+    'LinkOverlayView must load before ReaderPageRenderer');
   for (const expression of [
     'window === globalThis', 'window.api === api', 'window.reader === reader', 'window.app === app',
     'reader instanceof MoonReader', 'reader instanceof ReaderViewModel',
@@ -254,13 +258,184 @@ test('reader and API events bind and run without network or IndexedDB', async ()
     for (const event of events) assert.ok(target.listeners.get(event)?.length, `Missing event: ${event}`);
   }
   const drawer = world.elements.get('reader-drawer');
-  await world.elements.get('reader-drawer-toggle-btn').emit('click');
+  const toggle = world.elements.get('reader-drawer-toggle-btn');
+  const close = world.elements.get('drawer-close-btn');
+  const chapters = world.elements.get('drawer-tab-chapters');
+  const notes = world.elements.get('drawer-tab-notes');
+  const chapterPanel = world.elements.get('table-of-contents-panel');
+  const notesPanel = world.elements.get('drawer-notes-panel');
+  toggle.focus = () => { world.document.activeElement = toggle; };
+  close.focus = () => { world.document.activeElement = close; };
+  chapters.focus = () => { world.document.activeElement = chapters; };
+  notes.focus = () => { world.document.activeElement = notes; };
+  world.document.activeElement = toggle;
+
+  await toggle.emit('click');
   assert.equal(drawer.classList.contains('open'), true);
-  await world.elements.get('drawer-close-btn').emit('click');
+  assert.equal(drawer.attributes['aria-hidden'], 'false');
+  assert.equal(toggle.attributes['aria-expanded'], 'true');
+  assert.equal(drawer.inert, false);
+  assert.equal(world.document.activeElement, close);
+  assert.equal(chapterPanel.hidden, false);
+  assert.equal(notesPanel.hidden, true);
+
+  let prevented = false;
+  await chapters.emit('keydown', { key: 'ArrowRight', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(chapters.attributes['aria-selected'], 'false');
+  assert.equal(notes.attributes['aria-selected'], 'true');
+  assert.equal(world.document.activeElement, notes);
+  await notes.emit('keydown', { key: 'Home', preventDefault() {} });
+  assert.equal(chapters.attributes['aria-selected'], 'true');
+  assert.equal(notes.attributes['aria-selected'], 'false');
+
+  prevented = false;
+  await drawer.emit('keydown', { key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
   assert.equal(drawer.classList.contains('open'), false);
+  assert.equal(drawer.attributes['aria-hidden'], 'true');
+  assert.equal(toggle.attributes['aria-expanded'], 'false');
+  assert.equal(drawer.inert, true);
+  assert.equal(world.document.activeElement, toggle);
   await world.window.emit('beforeunload');
   await world.window.emit('pagehide');
   assert.deepEqual(world.forbiddenCalls, []);
+});
+
+test('TOC selection navigates to its page and closes the mobile drawer', async () => {
+  const world = browserWorld();
+  const reader = world.window.reader;
+  const navigatedPages = [];
+  const drawerStates = [];
+  reader.model.navigationMap.setTableOfContents([
+    { title: 'Chapter', page: 4, level: 0, children: [] }
+  ]);
+  reader.nav.goToPage = page => navigatedPages.push(page);
+  reader.mobile.device.isMobileReaderActive = () => true;
+  reader.toolbar.toggleDrawer = state => drawerStates.push(state);
+  reader.tableOfContents.render(1);
+
+  const list = world.elements.get('table-of-contents-list');
+  await list.children[0].children[0].emit('click');
+  assert.deepEqual(navigatedPages, [4]);
+  assert.deepEqual(Array.from(reader.model.navigationMap.jumpHistory), [1]);
+  assert.equal(world.elements.get('reader-jump-breadcrumb').hidden, false);
+  assert.equal(world.elements.get('reader-jump-return-label').textContent, 'Back to page 1');
+  assert.deepEqual(drawerStates, [false]);
+});
+
+test('internal PDF navigation records the source page before navigating', () => {
+  const world = browserWorld();
+  const { reader } = world.window;
+  const historyAtNavigation = [];
+  reader.nav.goToPage = page => {
+    historyAtNavigation.push({ page, origins: Array.from(reader.model.navigationMap.jumpHistory) });
+  };
+
+  reader.renderer.linkCallbacks.onInternalLinkNavigate(9, 3);
+
+  assert.deepEqual(historyAtNavigation, [{ page: 9, origins: [3] }]);
+  assert.equal(world.elements.get('reader-jump-breadcrumb').hidden, false);
+  assert.equal(world.elements.get('reader-jump-return-label').textContent, 'Back to page 3');
+});
+
+test('reader return controls and keyboard shortcuts pop only assisted jump history', async () => {
+  const world = browserWorld();
+  const { reader } = world.window;
+  const navigatedPages = [];
+  reader.container.style.display = 'flex';
+  reader.nav.goToPage = page => navigatedPages.push(page);
+  reader.model.navigationMap.pushJump(7);
+  reader.showJumpBreadcrumb();
+
+  await world.elements.get('reader-jump-return-btn').emit('click');
+  assert.deepEqual(navigatedPages, [7]);
+  assert.equal(reader.model.navigationMap.hasJumpHistory(), false);
+  assert.equal(world.elements.get('reader-jump-breadcrumb').hidden, true);
+
+  reader.model.navigationMap.pushJump(4);
+  let prevented = false;
+  await world.window.emit('keydown', {
+    key: 'ArrowLeft',
+    altKey: true,
+    target: world.document.body,
+    preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, true);
+  assert.deepEqual(navigatedPages, [7, 4]);
+
+  reader.model.navigationMap.pushJump(3);
+  prevented = false;
+  await world.window.emit('keydown', {
+    key: 'Backspace',
+    target: world.document.body,
+    preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, true);
+  assert.deepEqual(navigatedPages, [7, 4, 3]);
+
+  const textInput = {
+    closest(selector) {
+      return selector.startsWith('textarea, input') ? this : null;
+    }
+  };
+  reader.model.navigationMap.pushJump(2);
+  prevented = false;
+  await world.window.emit('keydown', {
+    key: 'Backspace',
+    target: textInput,
+    preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, false);
+  assert.deepEqual(navigatedPages, [7, 4, 3]);
+
+  let drawingsCleared = 0;
+  reader.model.isDrawMode = true;
+  reader.drawing.clearCurrentPageDrawings = () => drawingsCleared++;
+  prevented = false;
+  await world.window.emit('keydown', {
+    key: 'Backspace',
+    target: world.document.body,
+    preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, true);
+  assert.equal(drawingsCleared, 1);
+  assert.deepEqual(Array.from(reader.model.navigationMap.jumpHistory), [2]);
+
+  reader.model.navigationMap.reset();
+  prevented = false;
+  await world.window.emit('keydown', {
+    key: 'ArrowLeft',
+    altKey: true,
+    target: world.document.body,
+    preventDefault() { prevented = true; }
+  });
+  assert.equal(prevented, false);
+  assert.deepEqual(navigatedPages, [7, 4, 3]);
+});
+
+test('jump breadcrumb dismisses immediately and auto-hides after 12 seconds', async () => {
+  const world = browserWorld();
+  const { reader } = world.window;
+  const breadcrumb = world.elements.get('reader-jump-breadcrumb');
+  reader.model.navigationMap.pushJump(6);
+  reader.showJumpBreadcrumb();
+  await world.elements.get('reader-jump-dismiss-btn').emit('click');
+  assert.equal(breadcrumb.hidden, true);
+  assert.deepEqual(Array.from(reader.model.navigationMap.jumpHistory), [6]);
+
+  reader.showJumpBreadcrumb();
+  const timeout = Array.from(world.timers.entries()).find(([, timer]) => timer.delay === 12000);
+  assert.ok(timeout, 'Expected a 12-second dismissal timer');
+  timeout[1].callback();
+  assert.equal(breadcrumb.classList.contains('is-hiding'), true);
+  assert.equal(breadcrumb.inert, true);
+
+  const transition = Array.from(world.timers.entries()).find(([, timer]) => timer.delay === 200);
+  assert.ok(transition, 'Expected the fade transition to finish');
+  transition[1].callback();
+  assert.equal(breadcrumb.hidden, true);
+  assert.equal(world.elements.get('reader-container').classList.contains('has-jump-breadcrumb'), false);
 });
 
 test('DOMContentLoaded delegates to the existing app singleton', async () => {
@@ -308,7 +483,7 @@ test('STATIC_ASSETS are unique local existing resources and cache release matche
   const backend = fs.readFileSync(path.join(frontend, '..', 'backend', 'app', 'main.py'), 'utf8');
   const version = backend.match(/\bversion\s*=\s*['"]([^'"]+)['"]/);
   assert.ok(version, 'Backend FastAPI version not found');
-  assert.equal(version[1], '1.7.0');
+  assert.equal(version[1], '1.8.0');
   // Frontend-only revisions refresh the shell without publishing a new API release.
   const cacheVersion = cacheName.match(/^lunabria-v(\d+\.\d+\.\d+)(?:-[a-z0-9-]+)?$/);
   assert.ok(cacheVersion, 'Invalid shell cache name');

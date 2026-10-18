@@ -360,6 +360,7 @@ body.mobile-reader-active #reader-offline-btn,
 body.mobile-reader-active #reader-sync-btn,
 body.mobile-reader-active #mobile-view-mode-btn,
 body.mobile-reader-active #reader-drawer-toggle-btn,
+body.mobile-reader-active #reader-notes-toggle-btn,
 body.mobile-reader-active #mobile-wipe-strokes-btn {
   display: inline-flex !important;
   align-items: center !important;
@@ -379,6 +380,7 @@ body.mobile-reader-active #mobile-wipe-strokes-btn {
 body.mobile-reader-active #reader-offline-btn,
 body.mobile-reader-active #reader-sync-btn,
 body.mobile-reader-active #mobile-view-mode-btn,
+body.mobile-reader-active #reader-notes-toggle-btn,
 body.mobile-reader-active #mobile-wipe-strokes-btn {
   background-color: var(--bg-surface, #fcf9f2) !important;
   border: 1.5px solid var(--border-color, #dcd2b8) !important;
@@ -395,6 +397,7 @@ body.mobile-reader-active #reader-offline-btn:active,
 body.mobile-reader-active #reader-sync-btn:active,
 body.mobile-reader-active #mobile-view-mode-btn:active,
 body.mobile-reader-active #reader-drawer-toggle-btn:active,
+body.mobile-reader-active #reader-notes-toggle-btn:active,
 body.mobile-reader-active #mobile-wipe-strokes-btn:active {
   transform: scale(0.92) !important;
 }
@@ -409,6 +412,7 @@ body.mobile-reader-active #reader-offline-btn .ui-icon,
 body.mobile-reader-active #reader-sync-btn .ui-icon,
 body.mobile-reader-active #mobile-view-mode-btn .ui-icon,
 body.mobile-reader-active #reader-drawer-toggle-btn .ui-icon,
+body.mobile-reader-active #reader-notes-toggle-btn .ui-icon,
 body.mobile-reader-active #mobile-wipe-strokes-btn .ui-icon,
 body.mobile-reader-active #mobile-scenario-indicator .ui-icon {
   width: 19px !important;
@@ -537,4 +541,51 @@ body.mobile-reader-active .pdf-viewport-container canvas {
   -webkit-touch-callout: none !important;
   -webkit-user-drag: none !important;
   user-drag: none !important;
+}
+
+/* Mobile Bottom Sheet Presentation for Reader Drawer */
+@media (max-width: 768px), (pointer: coarse) and (max-width: 1024px) {
+  body.mobile-reader-active .drawer,
+  body.mobile-reader-active #reader-drawer {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 82vh !important;
+    height: auto !important;
+    border-left: none !important;
+    border-top: 1px solid var(--border-color) !important;
+    border-radius: 18px 18px 0 0 !important;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.28) !important;
+    transform: translateY(100%) !important;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 12px)) !important;
+  }
+
+  body.mobile-reader-active .drawer.open,
+  body.mobile-reader-active #reader-drawer.open {
+    transform: translateY(0) !important;
+  }
+
+  body.mobile-reader-active .drawer-drag-handle {
+    display: block !important;
+    width: 42px !important;
+    height: 4px !important;
+    background-color: var(--border-color) !important;
+    border-radius: 999px !important;
+    margin: 8px auto 0 !important;
+    flex-shrink: 0 !important;
+  }
+
+  body.mobile-reader-active .toc-entry {
+    min-height: 48px !important;
+    padding-block: 10px !important;
+    font-size: 0.95rem !important;
+  }
+}
+
+.drawer-drag-handle {
+  display: none;
 }

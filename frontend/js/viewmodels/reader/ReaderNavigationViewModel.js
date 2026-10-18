@@ -15,6 +15,7 @@ class ReaderNavigationViewModel {
 
   goToPage(pageNumber) {
     const clamped = this.model.setCurrentPage(pageNumber);
+    if (this.callbacks.onPageChanged) this.callbacks.onPageChanged(clamped);
     this.updateHUD();
 
     if (this.callbacks.onSaveProgress) {

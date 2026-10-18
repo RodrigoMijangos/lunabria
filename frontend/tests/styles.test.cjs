@@ -5,20 +5,20 @@ const path = require('node:path');
 const test = require('node:test');
 
 const cssDirectory = path.join(__dirname, '..', 'css');
-// Immutable fingerprint of style.css before the mechanical extraction (UTF-8, LF).
-const originalFixture = {
-  sha256: 'b7e567dac5e5e20571117df85866d06385be2699269f247f17e849618bc86152',
-  bytes: 67143,
-  lines: 3275,
+// Locked fingerprint includes the reader TOC and internal-link styling (UTF-8, LF).
+const extractedSheetsFixture = {
+  sha256: '29e1c01a247bcfdcbb0aec51c575764778b9199f656b711c866bb772b5423d12',
+  bytes: 74732,
+  lines: 3605,
 };
 const sheets = [
   ['themes.css', 74],
   ['base-navbar.css', 245],
   ['library-catalog.css', 433],
   ['library-cards.css', 268],
-  ['reader-pages.css', 564],
+  ['reader-pages.css', 688],
   ['drawing.css', 300],
-  ['reader-selection-drawer.css', 356],
+  ['reader-selection-drawer.css', 562],
   ['modals.css', 372],
   ['notebook.css', 459],
   ['responsive.css', 204],
@@ -98,13 +98,13 @@ test('style.css imports every extracted sheet once in original cascade order', (
   );
 });
 
-test('concatenation without separators matches the original SHA-256 fixture', () => {
+test('concatenation without separators matches the locked extracted CSS fixture', () => {
   // The intentional icon/theme refinements are appended separately, not part of extraction.
   const bytes = Buffer.concat(sheets.map(([name]) =>
     readFileSync(path.join(cssDirectory, name))));
-  assert.equal(bytes.length, originalFixture.bytes);
-  assert.equal(createHash('sha256').update(bytes).digest('hex'), originalFixture.sha256);
-  assert.equal(bytes.toString('utf8').split('\n').length - 1, originalFixture.lines);
+  assert.equal(bytes.length, extractedSheetsFixture.bytes);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), extractedSheetsFixture.sha256);
+  assert.equal(bytes.toString('utf8').split('\n').length - 1, extractedSheetsFixture.lines);
   assert.deepEqual(Buffer.from(bytes.toString('utf8'), 'utf8'), bytes);
 });
 
@@ -135,6 +135,42 @@ test('visual refinements are isolated from document and annotation rendering', (
   for (const rgb of ['168, 82, 34', '226, 135, 67', '245, 158, 11']) {
     assert.ok(text.includes(`--ui-accent-rgb: ${rgb}`));
   }
+});
+
+test('reader drawer TOC styles cover hierarchy, focus, touch and reduced motion', () => {
+  const text = readFileSync(path.join(cssDirectory, 'reader-selection-drawer.css'), 'utf8');
+  assert.match(text, /\.table-of-contents-children\s*\{/);
+  assert.match(text, /\.toc-entry\s*\{[^}]*min-height:\s*42px/);
+  assert.match(text, /\.toc-entry-title\s*\{[^}]*text-overflow:\s*ellipsis/);
+  assert.match(text, /\.toc-entry\.active\s*\{[^}]*background:\s*var\(--accent-light\)/);
+  assert.match(text, /\.reader-drawer-tabs \.drawer-tab:focus-visible/);
+  assert.match(text, /@media\s*\(max-width:\s*560px\)/);
+  assert.match(text, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.drawer-backdrop/);
+  assert.match(text, /\.toc-entry:disabled\s*\{[^}]*color:\s*var\(--text-secondary\)/);
+});
+
+test('internal PDF links are accessible without intercepting page gestures', () => {
+  const text = readFileSync(path.join(cssDirectory, 'reader-pages.css'), 'utf8');
+  assert.match(text, /\.pdf-link-layer\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(text, /\.pdf-internal-link\s*\{[^}]*min-width:\s*24px[^}]*min-height:\s*24px/);
+  assert.match(text, /\.pdf-internal-link\s*\{[^}]*pointer-events:\s*none\s*!important/);
+  assert.match(text, /\.pdf-internal-link:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent-color\)/);
+  assert.match(text, /\[data-theme="dark"\]\s+\.pdf-internal-link/);
+  assert.match(text, /\[data-theme="amoled"\]\s+\.pdf-internal-link/);
+});
+
+test('text references and the jump breadcrumb remain accessible and responsive', () => {
+  const text = readFileSync(path.join(cssDirectory, 'reader-pages.css'), 'utf8');
+  assert.match(text, /\.reader-reference-link\s*\{[^}]*text-decoration-line:\s*underline/);
+  assert.match(text, /\.reader-reference-link\s*\{[^}]*text-decoration-style:\s*dotted/);
+  assert.match(text, /\.reader-reference-link\s*\{[^}]*text-decoration-color:\s*var\(--accent-color\)/);
+  assert.match(text, /\.reader-reference-link:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent-color\)/);
+  assert.match(text, /\.reader-jump-return-btn,\s*\.reader-jump-dismiss-btn\s*\{[^}]*min-height:\s*44px/);
+  assert.match(text, /\.reader-view\.has-jump-breadcrumb \.reader-body\s*\{[^}]*padding-top:/);
+  assert.match(text, /env\(safe-area-inset-top/);
+  assert.match(text, /@media\s*\(max-width:\s*560px\)/);
+  assert.match(text, /@media\s*\(min-width:\s*561px\)\s+and\s+\(max-width:\s*900px\)/);
+  assert.match(text, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[^}]*\.reader-jump-breadcrumb/);
 });
 
 test('sync modal declares responsive layout safeguards for mobile viewports', () => {

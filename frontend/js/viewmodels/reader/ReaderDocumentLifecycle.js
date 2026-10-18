@@ -8,6 +8,7 @@ class ReaderDocumentLifecycle {
   async open(bookId, startPage = null) {
     const reader = this.reader;
     const sequence = ++reader.openSequence;
+    reader.hideJumpBreadcrumb?.(true);
     const previousDocument = reader.model.pdfDoc;
     const previousLoadingTask = reader.loadingTask;
     reader.loadingTask = null;
@@ -68,6 +69,8 @@ class ReaderDocumentLifecycle {
       }
       reader.loadingTask = null;
       reader.model.setBook(bookId, pdfDoc, pdfDoc.numPages);
+      await this.loadNavigationMap(pdfDoc, sequence);
+      if (sequence !== reader.openSequence) return;
 
       let isPdfCached = false;
       let areLayoutsCached = false;
@@ -164,6 +167,82 @@ class ReaderDocumentLifecycle {
       alert('Error opening book: ' + err.message);
       reader.close();
     }
+  }
+
+  async loadNavigationMap(pdfDoc, sequence) {
+    const reader = this.reader;
+    const navigationMap = reader.model.navigationMap;
+    navigationMap.reset();
+    if (!pdfDoc || typeof pdfDoc.getOutline !== 'function') return false;
+
+    try {
+      const outline = await pdfDoc.getOutline();
+      if (sequence !== reader.openSequence) return false;
+      if (!Array.isArray(outline)) return true;
+
+      const destinations = new Map();
+      const toc = [];
+      for (const item of outline) {
+        const entry = await this.createNavigationEntry(item, 0, pdfDoc, destinations);
+        if (entry) toc.push(entry);
+      }
+
+      if (sequence !== reader.openSequence) return false;
+      navigationMap.setTableOfContents(toc, destinations);
+      return true;
+    } catch (error) {
+      if (sequence === reader.openSequence) {
+        navigationMap.reset();
+        console.warn('[ReaderViewModel] Could not load the PDF table of contents:', error);
+      }
+      return false;
+    }
+  }
+
+  async createNavigationEntry(item, level, pdfDoc, destinations) {
+    if (!item || typeof item !== 'object') return null;
+
+    let page = null;
+    if (item.dest != null) {
+      try {
+        page = await this.resolveDestinationPage(pdfDoc, item.dest);
+        if (page !== null && typeof item.dest === 'string') {
+          destinations.set(item.dest, page);
+        }
+      } catch (error) {
+        console.warn('[ReaderViewModel] Could not resolve a PDF outline destination:', error);
+      }
+    }
+
+    const children = [];
+    if (Array.isArray(item.items)) {
+      for (const child of item.items) {
+        const entry = await this.createNavigationEntry(child, level + 1, pdfDoc, destinations);
+        if (entry) children.push(entry);
+      }
+    }
+
+    return {
+      title: String(item.title ?? ''),
+      page,
+      level,
+      children
+    };
+  }
+
+  async resolveDestinationPage(pdfDoc, destination) {
+    const resolved = typeof destination === 'string'
+      ? (typeof pdfDoc.getDestination === 'function' ? await pdfDoc.getDestination(destination) : null)
+      : destination;
+    if (!Array.isArray(resolved) || resolved.length === 0) return null;
+
+    const pageReference = resolved[0];
+    const pageIndex = Number.isInteger(pageReference)
+      ? pageReference
+      : await pdfDoc.getPageIndex(pageReference);
+    if (!Number.isInteger(pageIndex) || pageIndex < 0) return null;
+    if (Number.isInteger(pdfDoc.numPages) && pageIndex >= pdfDoc.numPages) return null;
+    return pageIndex + 1;
   }
 
   reconcileServerConnection() {
@@ -350,6 +429,7 @@ class ReaderDocumentLifecycle {
   async close() {
     const reader = this.reader;
     reader.openSequence += 1;
+    reader.hideJumpBreadcrumb?.(true);
     const loadingTask = reader.loadingTask;
     const pdfDoc = reader.model.pdfDoc;
     reader.loadingTask = null;

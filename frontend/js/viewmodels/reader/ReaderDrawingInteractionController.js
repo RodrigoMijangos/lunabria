@@ -110,13 +110,13 @@ class ReaderDrawingInteractionController {
     }
 
     // Ensure draw mode is active when pen or eraser is selected on mobile reader
-    if (isMobileReader && (isTouch || isPen) && (this.model.drawTool === 'pen' || this.model.drawTool === 'eraser') && !this.model.isDrawMode) {
+    if (isMobileReader && isTouch && (this.model.drawTool === 'pen' || this.model.drawTool === 'eraser') && !this.model.isDrawMode) {
       this.model.isDrawMode = true;
       this.viewportEl.classList.add('draw-mode-active');
       this.bodyEl.classList.add('draw-mode-active');
     }
 
-    const shouldDraw = isPen || this.model.isDrawMode;
+    const shouldDraw = this.model.isDrawMode;
     if (!shouldDraw) return;
 
     // Double-Click / Double-Tap toggles from freehand drawing to text selection.

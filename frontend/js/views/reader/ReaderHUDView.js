@@ -56,6 +56,40 @@ const ReaderHUDView = {
     container.appendChild(buttons);
   },
 
+  showJumpBreadcrumb(elements, originPage, currentPage, announcementText) {
+    const { breadcrumb, readerContainer, returnButton, returnLabel, announcement } = elements;
+    if (!breadcrumb || !Number.isInteger(originPage) || originPage < 1) return false;
+
+    breadcrumb.classList.remove('is-hiding');
+    breadcrumb.hidden = false;
+    breadcrumb.inert = false;
+    breadcrumb.setAttribute('aria-hidden', 'false');
+    readerContainer?.classList.add('has-jump-breadcrumb');
+    if (returnLabel) returnLabel.textContent = `Back to page ${originPage}`;
+    returnButton?.setAttribute('aria-label', `Return to page ${originPage}`);
+    if (announcement) {
+      announcement.textContent = announcementText ||
+        `Jumped to page ${currentPage}. Return to page ${originPage}.`;
+    }
+    return true;
+  },
+
+  hideJumpBreadcrumb(elements, immediate = false) {
+    const { breadcrumb, readerContainer } = elements;
+    if (!breadcrumb) return false;
+
+    breadcrumb.setAttribute('aria-hidden', 'true');
+    breadcrumb.inert = true;
+    if (immediate) {
+      breadcrumb.hidden = true;
+      breadcrumb.classList.remove('is-hiding');
+      readerContainer?.classList.remove('has-jump-breadcrumb');
+    } else {
+      breadcrumb.classList.add('is-hiding');
+    }
+    return true;
+  },
+
   updateDrawToolButtons(toolButtons, activeTool) {
     const { penBtn, highlighterBtn, eraserBtn, panBtn } = toolButtons;
     penBtn?.classList.toggle('active', activeTool === 'pen');

@@ -9,6 +9,7 @@ const vm = require('node:vm');
 const frontend = path.resolve(__dirname, '..');
 const loadedScripts = new WeakMap();
 const scriptDependencies = new Map([
+  ['js/models/ReaderModel.js', ['js/models/ReaderNavigationMap.js']],
   ['js/mobile/MobileSelectionController.js', ['js/services/reader/ReaderTextTargetGeometry.js']],
   ['js/viewmodels/reader/ReaderNativeSelectionLoupeController.js', ['js/services/reader/ReaderTextTargetGeometry.js']],
   ['js/viewmodels/reader/ReaderDrawingViewModel.js', [
@@ -343,6 +344,48 @@ test('ReaderDrawingViewModel allows touch drawing on mobile reader bypassing str
   assert.equal(model.isDrawMode, true, 'Draw mode must be activated when drawing with pen');
 });
 
+test('ReaderDrawingViewModel keeps a mobile stylus as a pointer when draw mode is off', () => {
+  const { context, elementsById } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/views/reader/DrawingCanvasView.js');
+  loadScript(context, 'js/views/reader/ReaderHUDView.js');
+  loadScript(context, 'js/views/reader/ReaderSelectionLoupeView.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderTextHighlightController.js');
+  loadScript(context, 'js/viewmodels/reader/ReaderDrawingViewModel.js');
+
+  const model = new context.window.ReaderModel();
+  model.setDrawTool('pen');
+  const viewportEl = elementsById.get('pdf-viewport');
+  const bodyEl = elementsById.get('reader-body');
+  const reader = {
+    viewportEl,
+    mobile: { device: { isMobileReaderActive: () => true } }
+  };
+  const drawingVM = new context.window.ReaderDrawingViewModel(model, viewportEl, bodyEl, () => null, reader);
+  const pageWrapper = new context.Element('div');
+  const drawCanvas = new context.Element('canvas');
+  let prevented = false;
+  let stopped = false;
+
+  drawingVM.handleDrawingPointerDown({
+    pointerType: 'pen',
+    pointerId: 7,
+    clientX: 120,
+    clientY: 160,
+    button: 0,
+    buttons: 1,
+    target: pageWrapper,
+    preventDefault() { prevented = true; },
+    stopPropagation() { stopped = true; }
+  }, 1, pageWrapper, drawCanvas, 1, 1);
+
+  assert.equal(model.isDrawMode, false);
+  assert.equal(drawingVM.isDrawing, false);
+  assert.equal(prevented, false);
+  assert.equal(stopped, false);
+});
+
 test('ReaderDrawingViewModel does not auto-activate draw mode on desktop mouse clicks when draw mode is off', () => {
   const { context, elementsById } = createDOMContext();
 
@@ -405,6 +448,18 @@ test('ReaderDrawingViewModel does not auto-activate draw mode on desktop mouse c
   assert.equal(bodyEl.classList.contains('draw-mode-active'), false, 'Body must not have draw-mode-active class');
   assert.equal(prevented, false, 'Default action must not be prevented so text selection can proceed');
   assert.equal(stopped, false, 'Event propagation must not be stopped');
+
+  // 1b. A stylus remains a pointer when drawing mode is off
+  prevented = false;
+  stopped = false;
+  drawingVM.handleDrawingPointerDown({
+    ...mouseDownEvent,
+    pointerType: 'pen',
+    pointerId: 2
+  }, 1, pageWrapper, drawCanvas, 1, 1);
+  assert.equal(drawingVM.isDrawing, false, 'A stylus click must not draw while drawing mode is off');
+  assert.equal(prevented, false, 'A stylus click must remain available to text selection and links');
+  assert.equal(stopped, false, 'A stylus click must remain available to link activation');
 
   // 2. setDrawTool on desktop must not force draw mode on
   drawingVM.setDrawTool('eraser');
@@ -827,6 +882,17 @@ test('MobileSelectionController long-press shows loupe and preserves pan mode wi
   };
 
   selectionController.init();
+  let longPressDelay = null;
+  context.setTimeout = (_callback, delay) => {
+    longPressDelay = delay;
+    return 1;
+  };
+  context.clearTimeout = () => {};
+  await viewportEl.emit('pointerdown', {
+    pointerType: 'touch', pointerId: 42, clientX: 50, clientY: 100, target: wordSpan
+  });
+  assert.equal(longPressDelay, 400, 'Link tap suppression and mobile text selection share the 400ms hold threshold');
+  await viewportEl.emit('pointerup');
 
   // 1. Long-press triggers selection
   selectionController.startLongPressSelection({ x: 50, y: 100 });

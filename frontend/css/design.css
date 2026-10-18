@@ -525,3 +525,57 @@
     text-align: left;
   }
 }
+
+/* Table of Contents search and filtering */
+.toc-search-container {
+  position: relative;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.toc-search-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.toc-search-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(var(--brand-accent-rgb), 0.2);
+}
+
+.toc-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toc-search-clear:hover {
+  color: var(--text-primary);
+}
+
+.toc-search-clear .ui-icon {
+  width: 14px;
+  height: 14px;
+}

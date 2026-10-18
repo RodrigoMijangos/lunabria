@@ -62,11 +62,13 @@ function createLifecycleHarness({
   const model = {
     annotations: [],
     fitMode: 'page',
+    navigationMap: { reset() {}, setTableOfContents() {} },
     reset() {
       this.annotations = [];
       this.bookId = null;
       this.currentPage = 0;
       this.totalPages = 0;
+      this.navigationMap.reset();
     },
     setColors(colors) { this.colors = colors; },
     setBook(bookId, pdfDoc, totalPages) {

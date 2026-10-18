@@ -15,6 +15,13 @@ class ReaderToolbarManager {
     this.drawing = coordinators.drawing;
     this.annotations = coordinators.annotations;
     this.notes = coordinators.notes;
+    this.tableOfContents = coordinators.tableOfContents;
+    this.onReturnToPreviousReadingPoint = coordinators.onReturnToPreviousReadingPoint;
+    this.onDismissJumpBreadcrumb = coordinators.onDismissJumpBreadcrumb;
+    this.drawerToggle = document.getElementById('reader-drawer-toggle-btn');
+    this.notesToggle = document.getElementById('reader-notes-toggle-btn');
+    this.activeDrawerTab = 'chapters';
+    this.drawerReturnFocus = null;
     this.onClose = coordinators.onClose;
     this.onDownloadOffline = coordinators.onDownloadOffline;
   }
@@ -23,8 +30,18 @@ class ReaderToolbarManager {
     this.bindReaderHeaderEvents();
     this.bindDrawingToolbarEvents();
     this.bindKeyboardShortcuts();
+    this.bindJumpBreadcrumbEvents();
     this.bindDrawerEvents();
     this.bindWheelZoom();
+  }
+
+  bindJumpBreadcrumbEvents() {
+    document.getElementById('reader-jump-return-btn')?.addEventListener('click', () => {
+      this.onReturnToPreviousReadingPoint?.();
+    });
+    document.getElementById('reader-jump-dismiss-btn')?.addEventListener('click', () => {
+      this.onDismissJumpBreadcrumb?.();
+    });
   }
 
   bindReaderHeaderEvents() {
@@ -83,9 +100,12 @@ class ReaderToolbarManager {
       }
     });
 
-    // Drawer toggle
-    document.getElementById('reader-drawer-toggle-btn')?.addEventListener('click', () => {
-      this.toggleDrawer();
+    // Drawer toggles (TOC & Notes)
+    this.drawerToggle?.addEventListener('click', () => {
+      this.toggleDrawerTab('chapters');
+    });
+    this.notesToggle?.addEventListener('click', () => {
+      this.toggleDrawerTab('notes');
     });
 
     document.getElementById('reader-offline-btn')?.addEventListener('click', () => {
@@ -149,6 +169,25 @@ class ReaderToolbarManager {
   }
 
   bindDrawerEvents() {
+    const tabs = [
+      { name: 'chapters', button: document.getElementById('drawer-tab-chapters'), panel: document.getElementById('table-of-contents-panel') },
+      { name: 'notes', button: document.getElementById('drawer-tab-notes'), panel: document.getElementById('drawer-notes-panel') }
+    ];
+    tabs.forEach((tab, index) => {
+      tab.button?.addEventListener('click', () => this.activateDrawerTab(tab.name));
+      tab.button?.addEventListener('keydown', event => {
+        let nextIndex = null;
+        if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+        else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = tabs.length - 1;
+        if (nextIndex === null) return;
+        event.preventDefault();
+        this.activateDrawerTab(tabs[nextIndex].name, true);
+      });
+    });
+    this.activateDrawerTab(this.activeDrawerTab);
+    this.drawer?.addEventListener('keydown', event => this.handleDrawerKeydown(event));
     this.drawerBackdrop?.addEventListener('click', () => this.toggleDrawer(false));
     document.getElementById('drawer-close-btn')?.addEventListener('click', () => this.toggleDrawer(false));
     document.getElementById('drawer-view-mode-btn')?.addEventListener('click', () => {
@@ -196,11 +235,95 @@ class ReaderToolbarManager {
     });
   }
 
+  activateDrawerTab(name, focus = false) {
+    const tabs = [
+      { name: 'chapters', button: document.getElementById('drawer-tab-chapters'), panel: document.getElementById('table-of-contents-panel') },
+      { name: 'notes', button: document.getElementById('drawer-tab-notes'), panel: document.getElementById('drawer-notes-panel') }
+    ];
+    const activeTab = tabs.find(tab => tab.name === name);
+    if (!activeTab) return;
+
+    this.activeDrawerTab = name;
+    for (const tab of tabs) {
+      const isActive = tab === activeTab;
+      if (tab.button) {
+        tab.button.classList.toggle('active', isActive);
+        tab.button.setAttribute('aria-selected', String(isActive));
+        tab.button.tabIndex = isActive ? 0 : -1;
+      }
+      if (tab.panel) tab.panel.hidden = !isActive;
+    }
+
+    if (name === 'chapters') this.tableOfContents?.render(this.model.currentPage);
+    if (focus) activeTab.button?.focus?.();
+  }
+
+  handleDrawerKeydown(event) {
+    if (!this.drawer?.classList.contains('open')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.toggleDrawer(false);
+      return;
+    }
+    if (event.key !== 'Tab') return;
+
+    const focusable = Array.from(this.drawer.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )).filter(element => !element.closest?.('[hidden]') && !element.disabled);
+    if (!focusable.length) {
+      event.preventDefault();
+      this.drawer.focus?.();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    const isInside = this.drawer.contains?.(active);
+    if (event.shiftKey && (active === first || !isInside)) {
+      event.preventDefault();
+      last.focus?.();
+    } else if (!event.shiftKey && (active === last || !isInside)) {
+      event.preventDefault();
+      first.focus?.();
+    }
+  }
+
+  toggleDrawerTab(tabName) {
+    if (!this.drawer) return;
+    const isOpen = this.drawer.classList.contains('open');
+    if (!isOpen) {
+      this.activeDrawerTab = tabName;
+      this.toggleDrawer(true);
+    } else if (this.activeDrawerTab === tabName) {
+      this.toggleDrawer(false);
+    } else {
+      this.activateDrawerTab(tabName, true);
+    }
+  }
+
   toggleDrawer(forceState = null) {
     if (!this.drawer) return;
-    const isOpen = forceState !== null ? Boolean(forceState) : !this.drawer.classList.contains('open');
+    const wasOpen = this.drawer.classList.contains('open');
+    const isOpen = forceState !== null ? Boolean(forceState) : !wasOpen;
+    if (wasOpen === isOpen) return;
+
+    if (isOpen) this.drawerReturnFocus = document.activeElement || this.drawerToggle;
     this.drawer.classList.toggle('open', isOpen);
+    this.drawer.inert = !isOpen;
+    this.drawer.setAttribute('aria-hidden', String(!isOpen));
+    this.drawerToggle?.setAttribute('aria-expanded', String(isOpen));
+    this.notesToggle?.setAttribute('aria-expanded', String(isOpen));
     if (this.drawerBackdrop) this.drawerBackdrop.classList.toggle('open', isOpen);
+    if (isOpen) {
+      this.activateDrawerTab(this.activeDrawerTab);
+      const initialFocus = document.getElementById('drawer-close-btn');
+      initialFocus?.focus?.();
+    } else {
+      const returnFocus = this.drawerReturnFocus || this.drawerToggle;
+      this.drawerReturnFocus = null;
+      returnFocus?.focus?.();
+    }
   }
 
   bindDrawingToolbarEvents() {
@@ -322,6 +445,13 @@ class ReaderToolbarManager {
       if (this.container.style.display !== 'flex') return;
       const isInteractiveTarget = this.isInteractiveTarget(e.target);
 
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowLeft') {
+        if (!isInteractiveTarget && this.onReturnToPreviousReadingPoint?.()) {
+          e.preventDefault();
+        }
+        return;
+      }
+
       if (e.code === 'Space' && !isInteractiveTarget) {
         if (this.model.isDrawMode || this.model.isSpacePanActive) {
           e.preventDefault();
@@ -338,6 +468,12 @@ class ReaderToolbarManager {
       }
 
       if (isInteractiveTarget) return;
+
+      if (!this.model.isDrawMode && !e.altKey && !e.ctrlKey && !e.metaKey &&
+          e.key === 'Backspace' && this.onReturnToPreviousReadingPoint?.()) {
+        e.preventDefault();
+        return;
+      }
 
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z' || e.key === 'Z') {
@@ -433,6 +569,19 @@ class ReaderToolbarManager {
               return;
             }
             this.drawing.toggleDrawMode(false);
+            return;
+          }
+        }
+
+        if (!this.model.isDrawMode) {
+          if (e.key === 't' || e.key === 'T') {
+            e.preventDefault();
+            this.toggleDrawerTab('chapters');
+            return;
+          }
+          if (e.key === 'n' || e.key === 'N') {
+            e.preventDefault();
+            this.toggleDrawerTab('notes');
             return;
           }
         }
@@ -577,4 +726,3 @@ class ReaderToolbarManager {
 }
 
 window.ReaderToolbarManager = ReaderToolbarManager;
-

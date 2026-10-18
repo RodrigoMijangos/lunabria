@@ -20,7 +20,7 @@
 
   <!-- PDF.js official textLayer stylesheet -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/web/pdf_viewer.min.css">
-  <link rel="stylesheet" href="./css/style.css?v=1.0.12-async-upload">
+  <link rel="stylesheet" href="./css/style.css?v=1.0.14-reader-links">
   <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.3">
   
   <!-- PDF.js library -->
@@ -229,7 +229,8 @@
               <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#book-open"></use></svg>
               <span id="mobile-view-mode-label" class="hud-btn-label">Página</span>
             </button>
-            <button id="reader-drawer-toggle-btn" class="hud-btn hud-btn-primary" title="Notes, Highlights, and Table of Contents" aria-label="Annotations"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg><span class="hud-btn-label">Annotations</span></button>
+            <button id="reader-drawer-toggle-btn" class="hud-btn hud-btn-primary" title="Table of Contents (Shortcut: T)" aria-label="Table of Contents" aria-controls="reader-drawer" aria-expanded="false"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#toc"></use></svg><span class="hud-btn-label">Chapters</span></button>
+            <button id="reader-notes-toggle-btn" class="hud-btn hud-btn-outline" title="Notes &amp; Highlights (Shortcut: N)" aria-label="Notes &amp; Highlights" aria-controls="reader-drawer" aria-expanded="false"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#notes"></use></svg><span class="hud-btn-label">Notes</span></button>
             <div id="mobile-scenario-indicator" class="mobile-device-indicator" title="Mobile scenario active" aria-label="Mobile scenario active">
               <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#smartphone"></use></svg>
             </div>
@@ -250,6 +251,21 @@
         <button id="reader-draw-toggle-btn" class="hud-btn hud-btn-outline" title="Drawing Mode / Smart Pen (Shortcut: P or D)"><svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg><span class="reader-draw-toggle-label">Draw</span></button>
       </div>
     </div>
+
+    <div id="reader-jump-breadcrumb" class="reader-jump-breadcrumb" role="group"
+         aria-label="Return to previous reading point" aria-hidden="true" hidden inert>
+      <button id="reader-jump-return-btn" class="reader-jump-return-btn" type="button"
+              aria-label="Return to previous reading point">
+        <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#arrow-left"></use></svg>
+        <span id="reader-jump-return-label">Back to previous page</span>
+      </button>
+      <button id="reader-jump-dismiss-btn" class="reader-jump-dismiss-btn" type="button"
+              title="Dismiss return option" aria-label="Dismiss return option">
+        <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg>
+      </button>
+    </div>
+    <div id="reader-jump-announcement" class="reader-jump-announcement" role="status"
+         aria-live="polite" aria-atomic="true"></div>
 
     <!-- Reader Body (PDF Viewport) -->
     <div id="reader-body" class="reader-body">
@@ -475,27 +491,57 @@
     </div>
 
     <!-- Slide-out Drawer (Moon lateral panel) -->
-    <div id="drawer-backdrop" class="drawer-backdrop"></div>
-    <aside id="reader-drawer" class="drawer">
+    <div id="drawer-backdrop" class="drawer-backdrop" aria-hidden="true"></div>
+    <aside id="reader-drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="reader-drawer-title" aria-hidden="true" inert>
+      <div class="drawer-drag-handle" aria-hidden="true"></div>
       <div class="drawer-header">
-        <h3 style="font-size: 1.1rem; font-weight: 700;">Notes & Highlights</h3>
-        <button id="drawer-close-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
-      </div>
-      
-      <div style="padding: 10px 16px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px;">
-        <button id="drawer-view-mode-btn" type="button" class="btn btn-secondary btn-sm" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600;">
-          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#desktop"></use></svg> <span>Open Full Annotations View</span>
-        </button>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 0.82rem; font-weight: 600;">Filter by Color:</span>
-          <select id="export-format-select" style="font-size: 0.78rem; padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-color); color: var(--text-color);"><option value="md_hierarchy">Hierarchical Markdown</option><option value="md_color">Markdown by color</option><option value="json">JSON</option><option value="jsonl">JSONL</option><option value="yaml">YAML</option><option value="toml">TOML</option></select><button id="export-notes-btn" class="btn btn-sm btn-primary" style="font-size: 0.78rem; margin-left: 4px;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Export</button>
-        </div>
+        <h3 id="reader-drawer-title">Chapters &amp; Notes</h3>
+        <button id="drawer-close-btn" type="button" class="btn btn-icon" data-drawer-initial-focus title="Close chapters and annotations" aria-label="Close chapters and annotations"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
       </div>
 
-      <div class="drawer-content">
-        <div id="drawer-color-pills" class="color-pills-filter"></div>
-        <div id="annotations-list"></div>
+      <div id="drawer-tabs-nav" class="drawer-tabs reader-drawer-tabs" role="tablist" aria-label="Reader sections">
+        <button id="drawer-tab-chapters" type="button" class="drawer-tab active" role="tab" aria-selected="true" aria-controls="table-of-contents-panel" tabindex="0">Chapters</button>
+        <button id="drawer-tab-notes" type="button" class="drawer-tab" role="tab" aria-selected="false" aria-controls="drawer-notes-panel" tabindex="-1">Notes</button>
       </div>
+
+      <section id="table-of-contents-panel" class="reader-drawer-panel" role="tabpanel" aria-labelledby="drawer-tab-chapters" tabindex="0">
+        <div class="toc-search-container">
+          <input type="search" id="toc-search-input" class="toc-search-input" placeholder="Search chapters..." aria-label="Search chapters" autocomplete="off" />
+          <button id="toc-search-clear" type="button" class="btn btn-icon btn-sm toc-search-clear" title="Clear chapter search" aria-label="Clear chapter search" hidden>
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg>
+          </button>
+        </div>
+        <p id="table-of-contents-empty" class="toc-empty-state" role="status" hidden>No table of contents available.</p>
+        <p id="table-of-contents-no-results" class="toc-empty-state" role="status" hidden>No chapters matching search.</p>
+        <ul id="table-of-contents-list" class="table-of-contents-list"></ul>
+      </section>
+
+      <section id="drawer-notes-panel" class="reader-drawer-panel drawer-notes-panel" role="tabpanel" aria-labelledby="drawer-tab-notes" tabindex="0" hidden>
+        <div class="drawer-notes-controls">
+          <button id="drawer-view-mode-btn" type="button" class="btn btn-secondary btn-sm">
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#desktop"></use></svg> <span>Open Full Annotations View</span>
+          </button>
+          <div class="drawer-export-controls">
+            <label for="export-format-select">Export:</label>
+            <select id="export-format-select">
+              <option value="md_hierarchy">Hierarchical Markdown</option>
+              <option value="md_color">Markdown by color</option>
+              <option value="json">JSON</option>
+              <option value="jsonl">JSONL</option>
+              <option value="yaml">YAML</option>
+              <option value="toml">TOML</option>
+            </select>
+            <button id="export-notes-btn" type="button" class="btn btn-sm btn-primary">
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Export
+            </button>
+          </div>
+        </div>
+
+        <div class="drawer-content">
+          <div id="drawer-color-pills" class="color-pills-filter"></div>
+          <div id="annotations-list"></div>
+        </div>
+      </section>
     </aside>
   </div>
 
@@ -784,15 +830,16 @@
   <script src="./js/api.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Models -->
-  <script src="./js/models/ReaderModel.js?v=1.3.0"></script>
+  <script src="./js/models/ReaderNavigationMap.js?v=1.0.1-reader-jumps"></script>
+  <script src="./js/models/ReaderModel.js?v=1.3.1"></script>
   <script src="./js/models/LibraryModel.js?v=0.8.3-async-upload"></script>
 
   <!-- MVVM Architecture: Modular Reader Views -->
   <script src="./js/views/reader/PDFPageView.js?v=0.6.2"></script>
-  <script src="./js/views/reader/TextLayerView.js?v=1.0.10-selection-hit-test"></script>
+  <script src="./js/views/reader/TextLayerView.js?v=1.0.11-cross-references"></script>
   <script src="./js/views/reader/HighlightOverlayView.js?v=1.3.0"></script>
   <script src="./js/views/reader/DrawingCanvasView.js?v=0.6.0"></script>
-  <script src="./js/views/reader/ReaderHUDView.js?v=0.6.21"></script>
+  <script src="./js/views/reader/ReaderHUDView.js?v=0.6.22-jump-breadcrumb"></script>
   <script src="./js/views/reader/ReaderSelectionLoupeView.js?v=0.6.8"></script>
   <script src="./js/views/reader/NotesView.js?v=1.0.9"></script>
   <script src="./js/views/ReaderViews.js?v=0.6.0"></script>
@@ -820,28 +867,30 @@
   <script src="./js/viewmodels/LibraryViewModel.js?v=1.4.12"></script>
 
   <!-- MVVM Architecture: Modular Reader ViewModels -->
-  <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.6"></script>
+  <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.7"></script>
+  <script src="./js/views/reader/TableOfContentsView.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0"></script>
   <script src="./js/services/reader/ReaderTextTargetGeometry.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.0"></script>
-  <script src="./js/viewmodels/reader/ReaderDrawingInteractionController.js?v=1.0.0"></script>
+  <script src="./js/viewmodels/reader/ReaderDrawingInteractionController.js?v=1.0.1"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0"></script>
   <script src="./js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout"></script>
   <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.2"></script>
-  <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.0"></script>
+  <script src="./js/views/reader/LinkOverlayView.js?v=1.0.0"></script>
+  <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references"></script>
   <script src="./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9"></script>
-  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.1"></script>
+  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.3-jump-return"></script>
   <script src="./js/services/reader/ReaderOfflineService.js?v=1.0.9"></script>
   <script src="./js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0"></script>
-  <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.3"></script>
+  <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.5-reader-jumps"></script>
   <script src="./js/mobile/DeviceEnvironment.js?v=1.1.1"></script>
   <script src="./js/mobile/MobileHUDView.js?v=1.1.2"></script>
   <script src="./js/mobile/MobileDrawingToolbarView.js?v=1.3.0"></script>
-  <script src="./js/mobile/MobileSelectionController.js?v=1.4.1"></script>
+  <script src="./js/mobile/MobileSelectionController.js?v=1.4.2"></script>
   <script src="./js/mobile/MobileReaderController.js?v=1.3.0"></script>
-  <script src="./js/viewmodels/ReaderViewModel.js?v=1.4.2"></script>
+  <script src="./js/viewmodels/ReaderViewModel.js?v=1.4.5-jump-return"></script>
 
   <!-- MVVM Architecture: Facades & Singletons -->
   <script src="./js/reader.js?v=0.6.0"></script>

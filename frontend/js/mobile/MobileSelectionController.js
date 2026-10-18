@@ -1,7 +1,7 @@
 /**
  * MobileSelectionController.js
  * Implements touch text selection and magnifying loupe for mobile PDF reading:
- * - Detects touch hold (~450ms) on text in the textLayer
+ * - Detects touch hold (~400ms) on text in the textLayer
  * - Activates magnifying loupe during selection drag
  * - Allows user to adjust and expand text selection at will
  * - Hides the loupe when the selection gesture finishes
@@ -65,7 +65,7 @@ class MobileSelectionController {
       if (!this.longPressTimer) {
         this.longPressTimer = setTimeout(() => {
           this.startLongPressSelection(this.targetPoint);
-        }, 450);
+        }, 400);
       }
     };
 

@@ -1,68 +1,68 @@
-# 🔍 Known Issues & Typography Limitations (Casos Borde y Limitaciones Conocidas)
+# 🔍 Known Issues & Typography Limitations
 
-Este documento recopila limitaciones técnicas inherentes a la extracción tipográfica de documentos PDF, fuentes no catalogadas, libros escaneados y discrepancias temporales de layout en el visor de Lunabria.
-
----
-
-## 📑 Índice de Casos y Limitaciones
-
-1. [Falta de Capa de Texto (Libros Escaneados o Basados en Imágenes sin OCR)](#1-falta-de-capa-de-texto-libros-escaneados-o-basados-en-imágenes-sin-ocr)
-2. [Geometrías Complejas, Kerning Asimétrico y Glifos Problemáticos](#2-geometrías-complejas-kerning-asimétrico-y-glifos-problemáticos)
-3. [Tipografías Monospaciadas, Bloques de Código y Subíndices/Superíndices](#3-tipografías-monospaciadas-bloques-de-código-y-subíndicessuperíndices)
-4. [Espacios en Blanco Finales y Saltos de Bloque en Formatos Específicos](#4-espacios-en-blanco-finales-y-saltos-de-bloque-en-formatos-específicos)
-5. [Carga Cruzada / Desfase Temporal del Layout entre Documentos](#5-carga-cruzada--desfase-temporal-del-layout-entre-documentos)
+This document compiles technical constraints inherent to PDF typographic extraction, uncataloged fonts, scanned books, and layout synchronization nuances in the Lunabria reader.
 
 ---
 
-### 1. Falta de Capa de Texto (Libros Escaneados o Basados en Imágenes sin OCR)
-* **Descripción:** Algunos libros (principalmente digitalizaciones antiguas, facsímiles o PDFs que consisten exclusivamente en imágenes JPG/TIFF compiladas) carecen por completo de una capa de texto vectorial subyacente (`text stream`).
-* **Comportamiento en Lunabria:**
-  * El visor renderiza la página visualmente con fidelidad mediante Canvas.
-  * No es posible seleccionar texto con el cursor ni aplicar resaltados semánticos basados en texto ([`TextLayerView`](../frontend/js/views/reader/TextLayerView.js)), ya que el motor PyMuPDF/PDF.js no detecta cadenas ni caracteres.
-* **Workaround / Solución:**
-  * Se puede utilizar el **modo stylus / dibujo libre** para anotar a mano o subrayar con el resaltador gráfico sobre el canvas.
-  * Para habilitar selección y búsqueda de texto nativa, se recomienda procesar el documento con herramientas OCR como `OCRmyPDF` antes de importarlo a Calibre.
+## 📑 Index of Cases and Limitations
+
+1. [Missing Text Layer (Scanned or Image-Based Books Without OCR)](#1-missing-text-layer-scanned-or-image-based-books-without-ocr)
+2. [Complex Geometries, Asymmetric Kerning, and Problematic Glyphs](#2-complex-geometries-asymmetric-kerning-and-problematic-glyphs)
+3. [Monospaced Fonts, Code Blocks, and Subscripts/Superscripts](#3-monospaced-fonts-code-blocks-and-subscriptssuperscripts)
+4. [Trailing Whitespace and Line-Break Delimiters in Specific Formats](#4-trailing-whitespace-and-line-break-delimiters-in-specific-formats)
+5. [Cross-Document Layout Synchronization Timing](#5-cross-document-layout-synchronization-timing)
 
 ---
 
-### 2. Geometrías Complejas, Kerning Asimétrico y Glifos Problemáticos
-* **Descripción:** Determinados libros técnicos o de editoriales académicas emplean fuentes OpenType/Type 1 con ligaduras personalizadas (`fi`, `fl`, `ff`), pares de kerning agresivos o signos de puntuación pegados a comillas (p. ej., `“Package”`, `! All`, `ing te`).
-
-![Desfases de kerning y ligaduras complejas](screenshots/known_issue_kerning_offsets.png)
-
-* **Comportamiento en Lunabria:**
-  * Al seleccionar texto, pueden apreciarse micro-separaciones o pequeños saltos entre el signo de puntuación y la palabra adyacente (rectángulos delimitadores independientes dentro de `.precise-word`).
-  * En fragmentos como `! All` o `“Package”`, el delimitador puede generar un salto en la caja de selección debido a que el motor del PDF emite la comilla o el signo de exclamación en un bloque tipográfico de ancho cero o con matriz de transformación separada.
-* **Impacto:** Es una discrepancia puramente cosmética en el overlay de selección (`::selection`); el texto copiado al portapapeles o guardado en anotaciones mantiene los caracteres correctos.
-
----
-
-### 3. Tipografías Monospaciadas, Bloques de Código y Subíndices/Superíndices
-* **Descripción:** En fragmentos con instrucciones en ensamblador o código (ej. MIPS, C++, Python) y expresiones con subíndices matemáticos (como `$t1, imm_{31:0}, L`):
-
-![Bloques de código y subíndices](screenshots/known_issue_monospaced_code.png)
-
-* **Comportamiento en Lunabria:**
-  * Los subíndices y caracteres de control suelen tener una línea base vertical ($y_0$) desplazada varios puntos respecto al texto principal.
-  * La separación de palabras de PyMuPDF puede interpretar el subíndice como una micro-palabra aislada, generando cajas de selección segmentadas por palabra en lugar de una franja homogénea.
-* **Impacto:** La selección visual aparece fragmentada en bloques rectangulares individuales por token; sin embargo, el texto se extrae y exporta fielmente a Markdown.
+### 1. Missing Text Layer (Scanned or Image-Based Books Without OCR)
+* **Description:** Some books (primarily older digital scans, facsimiles, or PDFs consisting exclusively of compiled JPG/TIFF page images) lack an underlying vector text stream entirely.
+* **Behavior in Lunabria:**
+  * The reader renders pages with high visual fidelity via Canvas.
+  * Text selection with the cursor and text-based semantic highlights ([`TextLayerView`](../frontend/js/views/reader/TextLayerView.js)) are unavailable because the PyMuPDF/PDF.js extraction engine cannot detect characters or text spans.
+* **Workaround / Solution:**
+  * Use the **stylus / freehand drawing mode** to write handwritten notes or highlight over the canvas with the graphical marker.
+  * To enable native text selection and search, run an OCR tool such as `OCRmyPDF` on the file before importing it into Calibre.
 
 ---
 
-### 4. Espacios en Blanco Finales y Saltos de Bloque en Formatos Específicos
-* **Descripción:** En listings de código con declaraciones extensas (ej. endpoints HTTP largos como `GET /v1/health/service/{service_name}?passing=true`):
+### 2. Complex Geometries, Asymmetric Kerning, and Problematic Glyphs
+* **Description:** Certain technical or academic publications use OpenType/Type 1 fonts with custom ligatures (`fi`, `fl`, `ff`), aggressive kerning pairs, or punctuation glyphs bound tightly to quotation marks (e.g., `“Package”`, `! All`, `ing te`).
 
-![Espacio final de línea y delimitador](screenshots/known_issue_trailing_spaces.png)
+![Kerning offsets and complex ligatures](screenshots/known_issue_kerning_offsets.png)
 
-* **Comportamiento en Lunabria:**
-  * Si el PDF define un espacio o delimitador al final de la línea que sobrepasa el último carácter visible, puede aparecer un pequeño remanente o cursor vertical al borde derecho de la caja.
-* **Impacto:** Representa el delimitador de salto de línea / espacio conservado para evitar que al copiar el código se fusionen líneas consecutivas sin espacio.
+* **Behavior in Lunabria:**
+  * During text selection, minor subpixel separations or tiny jumps may appear between punctuation marks and adjacent words (as independent bounding boxes within `.precise-word`).
+  * In fragments such as `! All` or `“Package”`, the boundary delimiter can produce a gap in the selection box because the PDF engine outputs the quotation mark or exclamation mark in a zero-width font block or with a distinct transformation matrix.
+* **Impact:** This is a purely cosmetic artifact in the visual selection overlay (`::selection`). Text copied to the clipboard or saved in annotations preserves all characters accurately.
 
 ---
 
-### 5. Carga Cruzada / Desfase Temporal del Layout entre Documentos
-* **Descripción:** En ocasiones excepcionales, al cambiar rápidamente de libro en el visor sin recargar la pestaña del navegador, el visor puede retener en caché o dibujar el layout tipográfico (coordenadas de palabras) del documento anterior sobre las páginas del nuevo documento.
-* **Causa:** Las peticiones asíncronas de layout de página (`/api/books/{id}/pages/{page}/layout`) resuelven con ligeras diferencias de tiempo respecto a la renderización del canvas de PDF.js cuando hay navegación concurrente rápida.
-* **Solución Rápida (Workaround):**
-  * **Hacer un zoom in o zoom out** (con la rueda del ratón, `Ctrl + Scroll` o los botones de zoom en el HUD): esto invalida inmediatamente el árbol DOM del `TextLayerView`, cancela las tareas de renderizado previas y fuerza un recalculo limpio de geometrías de la página actual.
-  * También se puede alternar entre la vista paginada y la vista de flujo continuo.
+### 3. Monospaced Fonts, Code Blocks, and Subscripts/Superscripts
+* **Description:** In code listings, assembly instructions (e.g., MIPS, C++, Python), or mathematical expressions with subscripts/superscripts (such as `$t1, imm_{31:0}, L`):
+
+![Code blocks and subscripts](screenshots/known_issue_monospaced_code.png)
+
+* **Behavior in Lunabria:**
+  * Subscripts, superscripts, and control characters often have a vertical baseline ($y_0$) offset by several points relative to the main line of text.
+  * PyMuPDF word separation may treat the subscript as an isolated micro-word, producing segmented per-token selection boxes instead of a single contiguous highlight bar.
+* **Impact:** The visual highlight appears partitioned into individual rectangular boxes per token; however, text is extracted, normalized, and exported faithfully to Markdown.
+
+---
+
+### 4. Trailing Whitespace and Line-Break Delimiters in Specific Formats
+* **Description:** In code listings containing long statements (e.g., lengthy HTTP endpoints like `GET /v1/health/service/{service_name}?passing=true`):
+
+![Trailing line space and delimiter](screenshots/known_issue_trailing_spaces.png)
+
+* **Behavior in Lunabria:**
+  * When a PDF specifies a trailing space or line delimiter extending past the last visible glyph, a narrow vertical indicator may appear at the right boundary of the box.
+* **Impact:** This preserves the line break or spacing delimiter so copied code blocks do not inadvertently merge consecutive lines without spaces.
+
+---
+
+### 5. Cross-Document Layout Synchronization Timing
+* **Description:** In rare circumstances when rapidly switching between different books in the reader without reloading the browser tab, the viewer may momentarily display or cache the typographic layout (word coordinate stream) of the previous document over the pages of the newly opened document.
+* **Root Cause:** Asynchronous page layout requests (`/api/books/{id}/pages/{page}/layout`) resolve with slight timing differences relative to PDF.js canvas rendering during rapid concurrent navigation.
+* **Quick Workaround:**
+  * **Zoom in or zoom out** (using the mouse wheel, `Ctrl + Scroll`, or the zoom buttons in the HUD): this invalidates the DOM tree of `TextLayerView`, cancels active rendering tasks, and triggers a clean recalculation of page geometries.
+  * Alternating between paged view and continuous flow view also forces a layout reset.

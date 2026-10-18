@@ -11,6 +11,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-18
+
+Interactive table of contents, in-text cross references and touch-optimized navigation.
+
+### Added
+- Interactive table of contents in the reader with nested chapter hierarchy, current section tracking and real-time chapter search.
+- Dedicated reader top-bar buttons and keyboard shortcuts (`T` for contents, `N` for notes).
+- Mobile bottom sheet with grab handle and generous touch targets for chapter and note browsing on smaller screens.
+- Internal PDF link navigation and in-text cross-reference recognition with back-navigation breadcrumb to return to the previous reading point.
+
+### Fixed
+- Local HTTPS certificate generation on Windows automatically detects OpenSSL installations bundled with Git when OpenSSL is not in the system PATH.
+
 ## [1.7.0] - 2026-10-09
 
 ### Added
@@ -497,7 +510,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.4.1...v1.5.0
