@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 from app import database
 from app.services.calibre_service import calibre_service
+from app.services.pdf_metadata_extractor import extract_pdf_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -20,18 +21,37 @@ def process_upload_job(job):
 
     if job.get("auto_fetch_metadata"):
         try:
-            metadata = calibre_service.fetch_metadata(
-                isbn=job.get("isbn"),
-                title=clean_title,
+            extracted = extract_pdf_metadata(file_path)
+
+            candidate_isbns = []
+            if job.get("isbn"):
+                candidate_isbns.append(job.get("isbn"))
+            for candidate in extracted.get("isbns", []):
+                if candidate not in candidate_isbns:
+                    candidate_isbns.append(candidate)
+
+            metadata = calibre_service.fetch_metadata_cascade(
+                candidate_isbns=candidate_isbns,
+                pdf_title=extracted.get("title"),
+                pdf_author=extracted.get("author"),
+                clean_title=clean_title,
             )
-            calibre_service.update_metadata(
-                book_id=book_id,
-                title=metadata.get("title") or clean_title,
-                authors=", ".join(metadata.get("authors") or []) or None,
-                tags=", ".join(metadata.get("tags") or []) or None,
-                comments=metadata.get("comments"),
-                isbn=metadata.get("isbn") or job.get("isbn"),
-            )
+
+            if metadata.get("matched"):
+                calibre_service.update_metadata(
+                    book_id=book_id,
+                    title=metadata.get("title") or clean_title,
+                    authors=", ".join(metadata.get("authors") or []) or None,
+                    tags=", ".join(metadata.get("tags") or []) or None,
+                    comments=metadata.get("comments"),
+                    isbn=metadata.get("isbn") or job.get("isbn"),
+                )
+            else:
+                logger.info(
+                    "No online metadata match found for job %s; keeping original book %s as uploaded.",
+                    job["job_id"],
+                    book_id,
+                )
         except Exception:
             logger.warning(
                 "Could not fetch metadata for uploaded book job %s",

@@ -80,6 +80,12 @@ class AnnotationResponse(AnnotationBase):
     created_at: str
     updated_at: str
 
+class SelectedAnnotationsExportRequest(BaseModel):
+    annotation_ids: List[str] = Field(min_length=1)
+    format: str = Field(default="md", pattern="^(md|json|jsonl|yaml|toml)$")
+    group_by: str = Field(default="color", pattern="^(color|page|hierarchy)$")
+    stamp: bool = False
+
 class HighlightColor(BaseModel):
     id: str
     name: str
@@ -108,6 +114,7 @@ class MetadataFetchResponse(BaseModel):
     comments: Optional[str] = None
     has_cover: bool = False
     cover_data_base64: Optional[str] = None
+    matched: bool = False
 
 class MetadataUpdateRequest(BaseModel):
     title: Optional[str] = None

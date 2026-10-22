@@ -66,6 +66,17 @@ def parse_toc_sections(doc: Optional[pymupdf.Document], book_id: int) -> List[Di
     return _pdf.parse_toc_sections(doc, book_id, _normalize_text=normalize_text)
 
 
+def get_export_sections(pdf_path: Optional[str], book_id: int) -> Tuple[List[Dict[str, Any]], Optional[int]]:
+    if not pdf_path:
+        return [], None
+
+    doc = pymupdf.open(pdf_path)
+    try:
+        return parse_toc_sections(doc, book_id), doc.page_count
+    finally:
+        doc.close()
+
+
 def clean_none(value: Any) -> Any:
     return _model.clean_none(value)
 

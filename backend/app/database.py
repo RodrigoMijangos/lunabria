@@ -29,7 +29,7 @@ def init_db():
                 filename TEXT NOT NULL,
                 staging_path TEXT NOT NULL,
                 status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
-                auto_fetch_metadata INTEGER NOT NULL DEFAULT 0,
+                auto_fetch_metadata INTEGER NOT NULL DEFAULT 1,
                 isbn TEXT,
                 book_id INTEGER,
                 error TEXT,

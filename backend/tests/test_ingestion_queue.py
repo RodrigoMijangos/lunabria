@@ -187,6 +187,40 @@ class TestUploadEndpoint(unittest.TestCase):
                     self.assertEqual(status.json()["status"], "queued")
                     self.assertEqual(missing.status_code, 404)
 
+    def test_upload_defaults_auto_fetch_metadata_to_true(self):
+        class FakeQueue:
+            is_running = True
+
+            def __init__(self):
+                self.jobs = []
+
+            async def enqueue_many(self, jobs):
+                self.jobs.extend(jobs)
+
+        with tempfile.TemporaryDirectory(prefix="lunabria-upload-default-") as temp_dir:
+            root = Path(temp_dir)
+            staging_root = root / "uploads"
+            database_path = root / "app_state.db"
+            queue = FakeQueue()
+            app = FastAPI()
+            app.include_router(router)
+
+            with (
+                patch("app.database.APP_STATE_DB_PATH", str(database_path)),
+                patch("app.routers.books.UPLOAD_DIR", staging_root),
+                patch("app.routers.books.ingestion_queue", queue),
+            ):
+                database.init_db()
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/books/upload",
+                        files=[("files", ("book.pdf", b"%PDF-1.7 sample", "application/pdf"))],
+                    )
+                    self.assertEqual(response.status_code, 202)
+                    result = response.json()
+                    job = database.get_upload_job(result["job_id"])
+                    self.assertEqual(job["auto_fetch_metadata"], 1)
+
     def test_upload_rejects_non_pdf_files(self):
         class FakeQueue:
             is_running = True
@@ -256,6 +290,106 @@ class TestUploadEndpoint(unittest.TestCase):
                         self.assertEqual(response.json()["status"], "queued")
                 finally:
                     release_worker.set()
+
+
+class TestProcessUploadJobCascade(unittest.TestCase):
+    def test_process_upload_job_updates_metadata_on_match(self):
+        job = {
+            "job_id": "test-job-1",
+            "staging_path": "/tmp/dummy.pdf",
+            "filename": "my_test_book.pdf",
+            "auto_fetch_metadata": True,
+            "isbn": None,
+        }
+
+        with (
+            patch("app.services.ingestion_queue.calibre_service.add_book", return_value=101) as mock_add,
+            patch(
+                "app.services.ingestion_queue.extract_pdf_metadata",
+                return_value={"isbns": ["9780132350884"], "title": "Clean Code", "author": "Robert C. Martin"}
+            ) as mock_extract,
+            patch(
+                "app.services.ingestion_queue.calibre_service.fetch_metadata_cascade",
+                return_value={
+                    "matched": True,
+                    "title": "Clean Code: A Handbook of Agile Software Craftsmanship",
+                    "authors": ["Robert C. Martin"],
+                    "tags": ["Programming"],
+                    "comments": "Great book",
+                    "isbn": "9780132350884",
+                }
+            ) as mock_cascade,
+            patch("app.services.ingestion_queue.calibre_service.update_metadata") as mock_update,
+        ):
+            from app.services.ingestion_queue import process_upload_job
+            book_id = process_upload_job(job)
+            self.assertEqual(book_id, 101)
+            mock_add.assert_called_once_with(file_path="/tmp/dummy.pdf", title="my test book", isbn=None)
+            mock_extract.assert_called_once_with("/tmp/dummy.pdf")
+            mock_cascade.assert_called_once_with(
+                candidate_isbns=["9780132350884"],
+                pdf_title="Clean Code",
+                pdf_author="Robert C. Martin",
+                clean_title="my test book",
+            )
+            mock_update.assert_called_once_with(
+                book_id=101,
+                title="Clean Code: A Handbook of Agile Software Craftsmanship",
+                authors="Robert C. Martin",
+                tags="Programming",
+                comments="Great book",
+                isbn="9780132350884",
+            )
+
+    def test_process_upload_job_safe_fallback_keeps_book_unmodified(self):
+        job = {
+            "job_id": "test-job-2",
+            "staging_path": "/tmp/unmatched.pdf",
+            "filename": "Unknown_Doc.pdf",
+            "auto_fetch_metadata": True,
+            "isbn": None,
+        }
+
+        with (
+            patch("app.services.ingestion_queue.calibre_service.add_book", return_value=102) as mock_add,
+            patch(
+                "app.services.ingestion_queue.extract_pdf_metadata",
+                return_value={"isbns": [], "title": None, "author": None}
+            ),
+            patch(
+                "app.services.ingestion_queue.calibre_service.fetch_metadata_cascade",
+                return_value={"matched": False, "title": "Unknown Doc", "authors": []}
+            ),
+            patch("app.services.ingestion_queue.calibre_service.update_metadata") as mock_update,
+        ):
+            from app.services.ingestion_queue import process_upload_job
+            book_id = process_upload_job(job)
+            self.assertEqual(book_id, 102)
+            mock_add.assert_called_once_with(file_path="/tmp/unmatched.pdf", title="Unknown Doc", isbn=None)
+            # Safe fallback: update_metadata MUST NOT be called!
+            mock_update.assert_not_called()
+
+    def test_process_upload_job_skips_fetch_when_auto_fetch_is_false(self):
+        job = {
+            "job_id": "test-job-3",
+            "staging_path": "/tmp/manual.pdf",
+            "filename": "manual.pdf",
+            "auto_fetch_metadata": False,
+            "isbn": None,
+        }
+
+        with (
+            patch("app.services.ingestion_queue.calibre_service.add_book", return_value=103) as mock_add,
+            patch("app.services.ingestion_queue.extract_pdf_metadata") as mock_extract,
+            patch("app.services.ingestion_queue.calibre_service.fetch_metadata_cascade") as mock_cascade,
+            patch("app.services.ingestion_queue.calibre_service.update_metadata") as mock_update,
+        ):
+            from app.services.ingestion_queue import process_upload_job
+            book_id = process_upload_job(job)
+            self.assertEqual(book_id, 103)
+            mock_extract.assert_not_called()
+            mock_cascade.assert_not_called()
+            mock_update.assert_not_called()
 
 
 if __name__ == "__main__":

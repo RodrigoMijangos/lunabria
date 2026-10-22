@@ -701,6 +701,7 @@ const expectedKeys = [
   'getProgress', 'markBookOpened', 'saveProgress', 'ensureAutoSaveTimer',
   'stopAutoSaveTimer', 'restartAutoSaveTimer', 'syncPendingProgress',
   'flushPendingProgressBeacon', 'getPageLayout', 'prefetchLayouts', 'getAnnotations',
+  'getAnnotationExportSections', 'exportAnnotations',
   'createAnnotation', 'updateAnnotation', 'deleteAnnotation', 'getColors', 'saveColors',
   'getPageDrawings', 'savePageDrawings', 'clearPageDrawings'
 ];
@@ -712,7 +713,8 @@ test('facade preserves global identity, own keys/order, descriptors and unchange
   assert.deepEqual(Object.keys(extracted.context), Object.keys(original.context), 'no extra window globals');
   assert.equal(vm.runInContext('api === window.api', extracted.context), true);
   const newOrChangedMethods = new Set([
-    'uploadBooks', 'uploadBookWithProgress', 'getActiveUploadJobs', 'getUploadJob'
+    'uploadBooks', 'uploadBookWithProgress', 'getActiveUploadJobs', 'getUploadJob',
+    'getAnnotationExportSections', 'exportAnnotations'
   ]);
   for (const key of expectedKeys) {
     const b = Object.getOwnPropertyDescriptor(extracted.api, key);

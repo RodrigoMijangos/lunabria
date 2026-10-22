@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.8.0';
+const CACHE_NAME = 'lunabria-v1.9.0';
 const COVER_CACHE_NAME = 'lunabria-covers-v1';
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   'https://cdn.jsdelivr.net',
@@ -16,7 +16,7 @@ const STATIC_ASSETS = [
   './icons/maskable-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
-  './css/style.css?v=1.0.14-reader-links',
+  './css/style.css?v=1.0.15-annotation-export',
   './css/mobile/mobile-reader.css?v=1.1.3',
   './js/services/http.js?v=1.0.0',
   './js/services/connectivity.js?v=1.0.4',
@@ -26,12 +26,12 @@ const STATIC_ASSETS = [
   './js/services/metadata.js?v=1.0.8',
   './js/services/progress.js?v=1.0.8',
   './js/services/layouts.js?v=1.0.8',
-  './js/services/annotations.js?v=1.0.9',
+  './js/services/annotations.js?v=1.1.0-annotation-export',
   './js/services/colors.js?v=1.0.8',
   './js/services/drawings.js?v=1.0.8',
   './js/api.js?v=1.0.8',
   './js/models/ReaderNavigationMap.js?v=1.0.1-reader-jumps',
-  './js/models/ReaderModel.js?v=1.3.1',
+  './js/models/ReaderModel.js?v=1.3.2-annotation-export',
   './js/models/LibraryModel.js?v=0.8.3-async-upload',
   './js/views/reader/PDFPageView.js?v=0.6.2',
   './js/views/reader/TextLayerView.js?v=1.0.11-cross-references',
@@ -68,11 +68,11 @@ const STATIC_ASSETS = [
   './js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0',
   './js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0',
   './js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout',
-  './js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.2',
+  './js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.3-annotation-export',
   './js/views/reader/LinkOverlayView.js?v=1.0.0',
   './js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references',
   './js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9',
-  './js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.3-jump-return',
+  './js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.4-annotation-export',
   './js/services/reader/ReaderOfflineService.js?v=1.0.9',
   './js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0',
   './js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.5-reader-jumps',

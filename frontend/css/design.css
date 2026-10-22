@@ -160,6 +160,142 @@
   box-shadow: 0 2px 8px rgba(var(--ui-accent-rgb), 0.25);
 }
 
+.annotation-export-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding-inline: 4px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.annotation-export-checkbox {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+.annotation-export-select:focus-within {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.drawer-export-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.drawer-export-field,
+.drawer-export-scope-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.drawer-export-controls label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.drawer-export-controls select,
+.drawer-export-controls input[type="number"] {
+  min-width: 0;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
+.drawer-export-scope-field[hidden] {
+  display: none;
+}
+
+.export-page-range {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+}
+
+.export-page-range label[for="export-end-page-input"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.export-page-range #export-start-page-input {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.export-page-range #export-end-page-input {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+#export-selection-field p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+#export-selection-count {
+  color: var(--text-primary) !important;
+  font-weight: 700;
+}
+
+.drawer-export-status {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.drawer-export-status:empty {
+  display: none;
+}
+
+.drawer-export-controls button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.drawer-export-controls select:focus-visible,
+.drawer-export-controls input:focus-visible,
+.drawer-export-controls button:focus-visible,
+.annotation-export-checkbox:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .drawer-export-controls {
+    gap: 10px;
+  }
+
+  .drawer-export-controls select,
+  .drawer-export-controls input[type="number"],
+  .drawer-export-controls button {
+    min-height: 44px;
+  }
+
+  .annotation-export-select {
+    min-height: 44px;
+    padding-inline: 6px;
+  }
+}
+
 /* Keep annotation controls legible without tinting them with the page beneath. */
 .floating-toolbar {
   box-sizing: border-box;

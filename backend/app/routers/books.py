@@ -103,7 +103,7 @@ def get_book(book_id: int):
 @router.post("/upload", status_code=202)
 async def upload_books(
     files: List[UploadFile] = File(...),
-    auto_fetch_metadata: bool = Form(False),
+    auto_fetch_metadata: bool = Form(True),
     isbns: Optional[str] = Form(None)  # Comma-separated or JSON list of ISBNs matching files
 ):
     """Stage PDF uploads and enqueue them for background Calibre ingestion."""

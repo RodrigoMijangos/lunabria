@@ -10,6 +10,7 @@ from app.models import (
     AnnotationCreate, 
     AnnotationUpdate, 
     AnnotationResponse,
+    SelectedAnnotationsExportRequest,
     HighlightColor
 )
 from datetime import datetime
@@ -85,23 +86,74 @@ def delete_annotation(annot_id: str):
     return {"message": "Annotation deleted"}
 
 # --- Export Highlights & Notes ---
-@router.get("/api/books/{book_id}/export")
-def export_annotations(
-    book_id: int, 
-    format: str = Query("md", pattern="^(md|json|jsonl|yaml|toml)$"),
-    group_by: str = Query("color", pattern="^(color|page|hierarchy)$"),
-    color: Optional[str] = Query(None),
-    stamp: bool = Query(False)
-):
+def _select_export_annotations(
+    annotations: List[Dict[str, Any]],
+    scope: str,
+    *,
+    page: Optional[int] = None,
+    start_page: Optional[int] = None,
+    end_page: Optional[int] = None,
+    section_index: Optional[int] = None,
+    sections: Optional[List[Dict[str, Any]]] = None,
+    total_pages: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    has_page_bounds = any(value is not None for value in (page, start_page, end_page, section_index))
+
+    if scope == "all":
+        if has_page_bounds:
+            raise HTTPException(status_code=422, detail="Page and section filters require a matching export scope.")
+        return annotations
+
+    if scope == "page":
+        if page is None or start_page is not None or end_page is not None or section_index is not None:
+            raise HTTPException(status_code=422, detail="A single page is required for page exports.")
+        if total_pages is not None and page > total_pages:
+            raise HTTPException(status_code=422, detail="Page is outside this book.")
+        return [annotation for annotation in annotations if annotation["page"] == page]
+
+    if scope == "range":
+        if start_page is None or end_page is None or page is not None or section_index is not None:
+            raise HTTPException(status_code=422, detail="Both start_page and end_page are required for range exports.")
+        if start_page > end_page:
+            raise HTTPException(status_code=422, detail="start_page must be less than or equal to end_page.")
+        if total_pages is not None and end_page > total_pages:
+            raise HTTPException(status_code=422, detail="Page range is outside this book.")
+        return [
+            annotation for annotation in annotations
+            if start_page <= annotation["page"] <= end_page
+        ]
+
+    if scope == "section":
+        if section_index is None or any(value is not None for value in (page, start_page, end_page)):
+            raise HTTPException(status_code=422, detail="A table-of-contents section is required for section exports.")
+        if not sections:
+            raise HTTPException(status_code=422, detail="This book has no table of contents for chapter exports.")
+        if section_index >= len(sections):
+            raise HTTPException(status_code=422, detail="The selected table-of-contents section does not exist.")
+        section = sections[section_index]
+        page_start = section["page_start"]
+        page_end = section["page_end"]
+        return [
+            annotation for annotation in annotations
+            if page_start <= annotation["page"] <= page_end
+        ]
+
+    raise HTTPException(status_code=422, detail="Unsupported annotation export scope.")
+
+
+def _render_annotations_export(
+    book_id: int,
+    annotations: List[Dict[str, Any]],
+    format: str,
+    group_by: str,
+    color: Optional[str],
+    stamp: bool,
+    pdf_path: Optional[str]
+) -> Response:
     book_info = calibre_service.get_book(book_id) or {"id": book_id, "title": f"Book {book_id}", "authors": "Unknown"}
-    annotations = reader_service.list_annotations(book_id=book_id)
     highlight_colors = reader_service.get_highlight_colors()
-    
-    pdf_path_obj = calibre_service.get_pdf_path(book_id)
-    pdf_path = str(pdf_path_obj) if pdf_path_obj else None
-    
     exported_at = datetime.utcnow().isoformat() + "Z" if stamp else None
-    
+
     model = notes_export.build_model(
         annotations=annotations,
         book_info=book_info,
@@ -110,7 +162,7 @@ def export_annotations(
         color_filter=color,
         exported_at=exported_at
     )
-    
+
     if format == "json":
         content = notes_export.render_json(model)
         media_type = "application/json"
@@ -131,11 +183,103 @@ def export_annotations(
         content = notes_export.render_md(model, group_by)
         media_type = "text/markdown"
         ext = "md"
-        
+
     return Response(
         content=content,
         media_type=media_type,
         headers={"Content-Disposition": f"attachment; filename=notes_book_{book_id}.{ext}"}
+    )
+
+
+@router.get("/api/books/{book_id}/export-sections")
+def get_annotation_export_sections(book_id: int):
+    pdf_path_obj = calibre_service.get_pdf_path(book_id)
+    sections, total_pages = notes_export.get_export_sections(
+        str(pdf_path_obj) if pdf_path_obj else None,
+        book_id
+    )
+    return {
+        "sections": [
+            {
+                "index": index,
+                "title": section["title"],
+                "level": section["level"],
+                "page_start": section["page_start"],
+                "page_end": section["page_end"]
+            }
+            for index, section in enumerate(sections)
+        ],
+        "total_pages": total_pages
+    }
+
+
+@router.get("/api/books/{book_id}/export")
+def export_annotations(
+    book_id: int,
+    format: str = Query("md", pattern="^(md|json|jsonl|yaml|toml)$"),
+    group_by: str = Query("color", pattern="^(color|page|hierarchy)$"),
+    color: Optional[str] = Query(None),
+    stamp: bool = Query(False),
+    scope: str = Query("all", pattern="^(all|page|range|section)$"),
+    page: Optional[int] = Query(None, ge=1),
+    start_page: Optional[int] = Query(None, ge=1),
+    end_page: Optional[int] = Query(None, ge=1),
+    section_index: Optional[int] = Query(None, ge=0)
+):
+    annotations = reader_service.list_annotations(book_id=book_id)
+    pdf_path_obj = calibre_service.get_pdf_path(book_id)
+    pdf_path = str(pdf_path_obj) if pdf_path_obj else None
+
+    sections, total_pages = notes_export.get_export_sections(pdf_path, book_id) if scope != "all" else ([], None)
+    annotations = _select_export_annotations(
+        annotations,
+        scope,
+        page=page,
+        start_page=start_page,
+        end_page=end_page,
+        section_index=section_index,
+        sections=sections,
+        total_pages=total_pages
+    )
+
+    return _render_annotations_export(
+        book_id,
+        annotations,
+        format,
+        group_by,
+        color,
+        stamp,
+        pdf_path
+    )
+
+
+@router.post("/api/books/{book_id}/export")
+def export_selected_annotations(book_id: int, req: SelectedAnnotationsExportRequest):
+    requested_ids = req.annotation_ids
+    if any(not annot_id.strip() for annot_id in requested_ids):
+        raise HTTPException(status_code=422, detail="Annotation IDs must not be empty.")
+    if len(set(requested_ids)) != len(requested_ids):
+        raise HTTPException(status_code=422, detail="Annotation IDs must be unique.")
+
+    annotations = reader_service.list_annotations(book_id=book_id)
+    annotations_by_id = {str(annotation["id"]): annotation for annotation in annotations}
+    if any(annot_id not in annotations_by_id for annot_id in requested_ids):
+        raise HTTPException(status_code=404, detail="One or more selected annotations were not found for this book.")
+    selected_ids = set(requested_ids)
+    selected_annotations = [
+        annotation for annotation in annotations
+        if str(annotation["id"]) in selected_ids
+    ]
+
+    pdf_path_obj = calibre_service.get_pdf_path(book_id)
+    return _render_annotations_export(
+        book_id,
+        selected_annotations,
+        req.format,
+        req.group_by,
+        None,
+        req.stamp,
+        str(pdf_path_obj) if pdf_path_obj else None
     )
 
 # --- Customizable Highlight Colors ---

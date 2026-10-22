@@ -23,6 +23,7 @@ class ReaderModel {
     this.isSpacePanActive = false;
     this.detectedInputType = 'mouse';
     this.annotations = [];
+    this.selectedAnnotationIds = new Set();
     this.pageStrokes = new Map();
     this.activeHighlight = null;
     this.selectedRange = null;
@@ -79,6 +80,7 @@ class ReaderModel {
     this.drawWidth = 4;
     this.isSpacePanActive = false;
     this.annotations = [];
+    this.selectedAnnotationIds = new Set();
     this.pageStrokes.clear();
     this.activeHighlight = null;
     this.selectedRange = null;
@@ -257,6 +259,22 @@ class ReaderModel {
   // --- Annotation Data Operations ---
   setAnnotations(annotations) {
     this.annotations = Array.isArray(annotations) ? annotations : [];
+    const annotationIds = new Set(this.annotations.map(annotation => String(annotation.id)));
+    this.selectedAnnotationIds = new Set(
+      [...this.selectedAnnotationIds].filter(id => annotationIds.has(id))
+    );
+  }
+
+  setAnnotationExportSelected(annotationId, selected) {
+    const id = String(annotationId);
+    if (!this.annotations.some(annotation => String(annotation.id) === id)) return false;
+    if (selected) this.selectedAnnotationIds.add(id);
+    else this.selectedAnnotationIds.delete(id);
+    return true;
+  }
+
+  clearAnnotationExportSelection() {
+    this.selectedAnnotationIds.clear();
   }
 
   getPageAnnotations(pageNumber) {

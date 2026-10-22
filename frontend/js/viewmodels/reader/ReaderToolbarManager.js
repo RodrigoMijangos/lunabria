@@ -194,8 +194,47 @@ class ReaderToolbarManager {
       this.toggleDrawer(false);
       this.nav.setViewMode('notes');
     });
+    this.bindExportControls();
+  }
+
+  bindExportControls() {
     const exportBtn = document.getElementById('export-notes-btn');
-    const exportSelect = document.getElementById('export-format-select');
+    this.exportFormatSelect = document.getElementById('export-format-select');
+    this.exportScopeSelect = document.getElementById('export-scope-select');
+    this.exportSectionSelect = document.getElementById('export-section-select');
+    this.exportPageInput = document.getElementById('export-page-input');
+    this.exportStartPageInput = document.getElementById('export-start-page-input');
+    this.exportEndPageInput = document.getElementById('export-end-page-input');
+    this.exportStatus = document.getElementById('export-status');
+    this.exportSelectionCount = document.getElementById('export-selection-count');
+    this.exportBusy = false;
+    this.exportSectionsBookId = null;
+
+    document.getElementById('export-clear-selection-btn')?.addEventListener('click', () => {
+      this.model.clearAnnotationExportSelection?.();
+      this.drawer?.querySelectorAll('.annotation-export-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+      });
+      this.updateExportSelectionCount();
+    });
+
+    document.getElementById('annotations-list')?.addEventListener('change', event => {
+      const checkbox = event.target;
+      if (!checkbox?.classList?.contains('annotation-export-checkbox')) return;
+      const annotationId = checkbox.dataset.annotationId;
+      if (!annotationId || !this.model.setAnnotationExportSelected?.(annotationId, checkbox.checked)) return;
+      this.updateExportSelectionCount();
+    });
+
+    this.exportScopeSelect?.addEventListener('change', () => {
+      this.setExportStatus('');
+      this.updateExportScopeFields();
+      if (this.exportScopeSelect.value === 'section') this.loadExportSections();
+    });
+    for (const input of [this.exportSectionSelect, this.exportPageInput, this.exportStartPageInput, this.exportEndPageInput]) {
+      input?.addEventListener('input', () => this.updateExportButtonState());
+      input?.addEventListener('change', () => this.updateExportButtonState());
+    }
 
     const updateExportServerState = () => {
       const isUnavailable = window.serverConnectivity?.state === 'unavailable';
@@ -204,35 +243,248 @@ class ReaderToolbarManager {
           ? 'Export is unavailable because the Lunabria server cannot be reached'
           : 'Export annotations';
       }
-      if (exportSelect) {
-        exportSelect.title = isUnavailable
+      if (this.exportFormatSelect) {
+        this.exportFormatSelect.title = isUnavailable
           ? 'The Lunabria server cannot be reached'
           : 'Select export format';
       }
+      if (isUnavailable && !this.exportBusy) {
+        this.setExportStatus('Export requires a connection to the Lunabria server.');
+      } else if (this.exportStatus?.textContent === 'Export requires a connection to the Lunabria server.') {
+        this.setExportStatus('');
+      }
+      this.updateExportButtonState();
     };
 
     window.addEventListener('lunabria:server-connectivity-change', updateExportServerState);
     updateExportServerState();
 
-    exportBtn?.addEventListener('click', async () => {
-      const monitor = window.serverConnectivity;
+    exportBtn?.addEventListener('click', () => this.exportAnnotations());
+    this.updateExportScopeFields();
+    this.updateExportSelectionCount();
+  }
+
+  updateExportScopeFields() {
+    const scope = this.exportScopeSelect?.value || 'all';
+    const fields = {
+      section: document.getElementById('export-section-field'),
+      page: document.getElementById('export-page-field'),
+      range: document.getElementById('export-range-field'),
+      selected: document.getElementById('export-selection-field')
+    };
+    for (const [name, element] of Object.entries(fields)) {
+      if (element) element.hidden = scope !== name;
+    }
+
+    const currentPage = Number(this.model.currentPage) || 1;
+    const totalPages = Number(this.model.totalPages);
+    if (this.exportPageInput) {
+      this.exportPageInput.max = totalPages > 0 ? String(totalPages) : '';
+      if (!this.exportPageInput.value) this.exportPageInput.value = String(currentPage);
+    }
+    if (this.exportStartPageInput && !this.exportStartPageInput.value) {
+      this.exportStartPageInput.value = String(currentPage);
+    }
+    if (this.exportEndPageInput && !this.exportEndPageInput.value) {
+      this.exportEndPageInput.value = String(currentPage);
+    }
+    if (this.exportStartPageInput) this.exportStartPageInput.max = totalPages > 0 ? String(totalPages) : '';
+    if (this.exportEndPageInput) this.exportEndPageInput.max = totalPages > 0 ? String(totalPages) : '';
+
+    const exportLabel = document.getElementById('export-notes-label');
+    if (exportLabel) exportLabel.textContent = scope === 'selected' ? 'Export selected' : 'Export';
+    this.updateExportButtonState();
+  }
+
+  updateExportSelectionCount() {
+    const count = this.model.selectedAnnotationIds?.size || 0;
+    if (this.exportSelectionCount) {
+      this.exportSelectionCount.textContent = `${count} annotation${count === 1 ? '' : 's'} selected`;
+    }
+    const clearButton = document.getElementById('export-clear-selection-btn');
+    if (clearButton) clearButton.disabled = count === 0;
+    this.updateExportButtonState();
+  }
+
+  updateExportButtonState() {
+    const exportBtn = document.getElementById('export-notes-btn');
+    if (!exportBtn) return;
+    const unavailable = window.serverConnectivity?.state === 'unavailable';
+    const requiresSelection = this.exportScopeSelect?.value === 'selected';
+    const noSelection = (this.model.selectedAnnotationIds?.size || 0) === 0;
+    const requiresSection = this.exportScopeSelect?.value === 'section';
+    const noSection = !this.exportSectionSelect || this.exportSectionSelect.disabled || !this.exportSectionSelect.value;
+    exportBtn.disabled = this.exportBusy || unavailable ||
+      (requiresSelection && noSelection) || (requiresSection && noSection);
+  }
+
+  setExportStatus(message) {
+    if (this.exportStatus) this.exportStatus.textContent = message;
+  }
+
+  async loadExportSections() {
+    const bookId = Number(this.model.bookId);
+    if (!bookId || !this.exportSectionSelect || this.exportSectionsBookId === bookId) return;
+    this.exportSectionsBookId = bookId;
+    this.exportSectionSelect.disabled = true;
+    this.exportSectionSelect.replaceChildren();
+    const loadingOption = document.createElement('option');
+    loadingOption.value = '';
+    loadingOption.textContent = 'Loading chapters…';
+    this.exportSectionSelect.appendChild(loadingOption);
+    this.setExportStatus('');
+
+    try {
+      if (typeof api === 'undefined' || typeof api.getAnnotationExportSections !== 'function') {
+        throw new Error('Chapter export is not available.');
+      }
+      const result = await api.getAnnotationExportSections(bookId);
+      if (Number(this.model.bookId) !== bookId) return;
+
+      this.exportSectionSelect.replaceChildren();
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = 'Choose a chapter or section';
+      this.exportSectionSelect.appendChild(placeholder);
+      for (const section of result.sections) {
+        const option = document.createElement('option');
+        option.value = String(section.index);
+        option.textContent = `${section.title} (pages ${section.page_start}–${section.page_end})`;
+        this.exportSectionSelect.appendChild(option);
+      }
+      this.exportSectionSelect.disabled = result.sections.length === 0;
+      if (result.total_pages > 0) {
+        for (const input of [this.exportPageInput, this.exportStartPageInput, this.exportEndPageInput]) {
+          if (input) input.max = String(result.total_pages);
+        }
+      }
+      if (result.sections.length === 0) {
+        this.setExportStatus('No chapter list is available for this book. Choose a page or range instead.');
+      }
+    } catch (error) {
+      this.exportSectionSelect.replaceChildren();
+      const unavailableOption = document.createElement('option');
+      unavailableOption.value = '';
+      unavailableOption.textContent = 'Chapters unavailable';
+      this.exportSectionSelect.appendChild(unavailableOption);
+      this.exportSectionSelect.disabled = true;
+      this.setExportStatus(error.message || 'Could not load chapters. Choose a page or range instead.');
+    }
+    this.updateExportButtonState();
+  }
+
+  buildExportOptions() {
+    const formatValue = this.exportFormatSelect?.value || 'md_hierarchy';
+    let format = formatValue;
+    let groupBy = 'color';
+    if (formatValue === 'md_hierarchy') {
+      format = 'md';
+      groupBy = 'hierarchy';
+    } else if (formatValue === 'md_color') {
+      format = 'md';
+      groupBy = 'color';
+    }
+
+    const options = { format, group_by: groupBy, scope: this.exportScopeSelect?.value || 'all' };
+    const parsePage = (input, label) => {
+      const page = Number(input?.value);
+      const totalPages = Number(this.model.totalPages);
+      if (!Number.isInteger(page) || page < 1 || (totalPages > 0 && page > totalPages)) {
+        throw new Error(`${label} must be between 1 and ${totalPages > 0 ? totalPages : 'the last page'}.`);
+      }
+      return page;
+    };
+
+    if (options.scope === 'page') {
+      options.page = parsePage(this.exportPageInput, 'Page');
+    } else if (options.scope === 'range') {
+      options.start_page = parsePage(this.exportStartPageInput, 'Start page');
+      options.end_page = parsePage(this.exportEndPageInput, 'End page');
+      if (options.start_page > options.end_page) {
+        throw new Error('The start page must not be after the end page.');
+      }
+    } else if (options.scope === 'section') {
+      const sectionIndex = Number(this.exportSectionSelect?.value);
+      if (!Number.isInteger(sectionIndex) || sectionIndex < 0) {
+        throw new Error('Choose a chapter or section to export.');
+      }
+      options.section_index = sectionIndex;
+    } else if (options.scope === 'selected') {
+      options.annotation_ids = Array.from(this.model.selectedAnnotationIds || []);
+      if (options.annotation_ids.length === 0) {
+        throw new Error('Select at least one annotation to export.');
+      }
+    }
+    return options;
+  }
+
+  async ensureAnnotationsSynchronized() {
+    if (typeof localDB === 'undefined' || typeof localDB.getPendingOutboxOps !== 'function') return;
+    const bookId = Number(this.model.bookId);
+    const pendingForBook = async () => {
+      const ops = await localDB.getPendingOutboxOps();
+      if (!Array.isArray(ops)) throw new Error('Could not verify pending annotation changes.');
+      return ops.filter(op => Number(op.bookId) === bookId && op.type === 'annotation');
+    };
+
+    let pending = await pendingForBook();
+    if (!pending.length) return;
+    if (typeof localDB.processOutboxQueue !== 'function') {
+      throw new Error('Sync pending annotations before exporting.');
+    }
+    this.setExportStatus('Syncing pending annotations…');
+    await localDB.processOutboxQueue();
+    pending = await pendingForBook();
+    if (pending.length) {
+      throw new Error('Some annotations are still waiting to sync. Try exporting again after synchronization completes.');
+    }
+    await this.annotations?.refreshAnnotations?.();
+  }
+
+  downloadExport(result) {
+    if (!result?.blob || typeof URL.createObjectURL !== 'function') {
+      throw new Error('The export file could not be downloaded in this browser.');
+    }
+    const objectUrl = URL.createObjectURL(result.blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = result.filename;
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
+
+  async exportAnnotations() {
+    const monitor = window.serverConnectivity;
+    const exportBtn = document.getElementById('export-notes-btn');
+    this.exportBusy = true;
+    this.updateExportButtonState();
+    this.setExportStatus('Checking connection and pending changes…');
+    try {
       if (monitor?.checkServer && !(await monitor.checkServer())) {
-        alert('Export is unavailable because the Lunabria server cannot be reached.');
-        updateExportServerState();
-        return;
+        throw new Error('Export requires a connection to the Lunabria server.');
       }
-      const formatVal = exportSelect ? exportSelect.value : 'md_hierarchy';
-      let fmt = formatVal;
-      let groupBy = 'color';
-      if (formatVal === 'md_hierarchy') {
-        fmt = 'md';
-        groupBy = 'hierarchy';
-      } else if (formatVal === 'md_color') {
-        fmt = 'md';
-        groupBy = 'color';
+      await this.ensureAnnotationsSynchronized();
+      const options = this.buildExportOptions();
+      if (typeof api === 'undefined' || typeof api.exportAnnotations !== 'function') {
+        throw new Error('Annotation export is not available.');
       }
-      window.location.href = `/api/books/${this.model.bookId}/export?format=${fmt}&group_by=${groupBy}`;
-    });
+      this.setExportStatus('Preparing export…');
+      const result = await api.exportAnnotations(this.model.bookId, options);
+      this.downloadExport(result);
+      this.setExportStatus('Export downloaded.');
+    } catch (error) {
+      console.error('[ReaderToolbarManager] Annotation export failed:', error);
+      this.setExportStatus(error.message || 'Annotation export failed.');
+    } finally {
+      this.exportBusy = false;
+      this.updateExportButtonState();
+      if (exportBtn && window.serverConnectivity?.state === 'unavailable') {
+        exportBtn.title = 'Export is unavailable because the Lunabria server cannot be reached';
+      }
+    }
   }
 
   activateDrawerTab(name, focus = false) {

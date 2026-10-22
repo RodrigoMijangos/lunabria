@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -33,6 +34,7 @@ cs_module.calibre_service.library_path = _test_calibre_path
 cs_module.calibre_service.db_path = _test_calibre_path / "metadata.db"
 
 from app.database import get_db, init_db
+from app.routers import reader as reader_router
 from app.main import app
 from setup_test_library import main as setup_test_library
 
@@ -201,6 +203,106 @@ class TestLunabriaWorkflow(unittest.TestCase):
         self.assertIn("Core concept to remember", md_text)
         self.assertIn("Compare with Paxos", md_text)
         print("✓ test_05_annotations_and_markdown_export passed")
+
+    def test_annotation_export_page_range_section_and_exact_selection(self):
+        annotations = [
+            {"id": "first", "page": 1, "color": "yellow", "category": "Idea", "text": "Same quote"},
+            {"id": "second", "page": 2, "color": "green", "category": "Definition", "text": "Same quote"},
+            {"id": "third", "page": 3, "color": "blue", "category": "Reference", "text": "Another quote"},
+            {"id": "fourth", "page": 4, "color": "purple", "category": "Quote", "text": "Last quote"}
+        ]
+        sections = [
+            {"title": "Chapter One", "level": 1, "page_start": 1, "page_end": 2},
+            {"title": "Chapter Two", "level": 1, "page_start": 3, "page_end": 4}
+        ]
+
+        def render_json(model):
+            return json.dumps([annotation["id"] for annotation in model["annotations"]])
+
+        with (
+            patch.object(reader_router.reader_service, "list_annotations", return_value=annotations),
+            patch.object(reader_router.reader_service, "get_highlight_colors", return_value=[]),
+            patch.object(reader_router.calibre_service, "get_book", return_value={"id": 51, "title": "Export Test"}),
+            patch.object(reader_router.calibre_service, "get_pdf_path", return_value=None),
+            patch.object(reader_router.notes_export, "get_export_sections", return_value=(sections, 4)),
+            patch.object(
+                reader_router.notes_export,
+                "build_model",
+                side_effect=lambda **kwargs: {"annotations": kwargs["annotations"]}
+            ),
+            patch.object(reader_router.notes_export, "render_json", side_effect=render_json)
+        ):
+            page_response = self.client.get(
+                "/api/books/51/export",
+                params={"format": "json", "scope": "page", "page": 2}
+            )
+            self.assertEqual(page_response.status_code, 200)
+            self.assertEqual(json.loads(page_response.text), ["second"])
+
+            range_response = self.client.get(
+                "/api/books/51/export",
+                params={"format": "json", "scope": "range", "start_page": 2, "end_page": 3}
+            )
+            self.assertEqual(range_response.status_code, 200)
+            self.assertEqual(json.loads(range_response.text), ["second", "third"])
+
+            section_response = self.client.get(
+                "/api/books/51/export",
+                params={"format": "json", "scope": "section", "section_index": 1}
+            )
+            self.assertEqual(section_response.status_code, 200)
+            self.assertEqual(json.loads(section_response.text), ["third", "fourth"])
+
+            selected_response = self.client.post(
+                "/api/books/51/export",
+                json={"annotation_ids": ["third", "first"], "format": "json"}
+            )
+            self.assertEqual(selected_response.status_code, 200)
+            self.assertEqual(json.loads(selected_response.text), ["first", "third"])
+
+            missing_response = self.client.post(
+                "/api/books/51/export",
+                json={"annotation_ids": ["another-books-annotation"], "format": "json"}
+            )
+            self.assertEqual(missing_response.status_code, 404)
+
+            duplicate_response = self.client.post(
+                "/api/books/51/export",
+                json={"annotation_ids": ["first", "first"], "format": "json"}
+            )
+            self.assertEqual(duplicate_response.status_code, 422)
+
+            invalid_range_response = self.client.get(
+                "/api/books/51/export",
+                params={"scope": "range", "start_page": 3, "end_page": 2}
+            )
+            self.assertEqual(invalid_range_response.status_code, 422)
+
+            out_of_book_response = self.client.get(
+                "/api/books/51/export",
+                params={"scope": "page", "page": 5}
+            )
+            self.assertEqual(out_of_book_response.status_code, 422)
+
+    def test_annotation_export_sections_exposes_toc_ranges(self):
+        sections = [
+            {"title": "Chapter One", "level": 1, "page_start": 1, "page_end": 2},
+            {"title": "Section 1.1", "level": 2, "page_start": 2, "page_end": 3}
+        ]
+        with (
+            patch.object(reader_router.calibre_service, "get_pdf_path", return_value=None),
+            patch.object(reader_router.notes_export, "get_export_sections", return_value=(sections, 3))
+        ):
+            response = self.client.get("/api/books/51/export-sections")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "sections": [
+                {"index": 0, "title": "Chapter One", "level": 1, "page_start": 1, "page_end": 2},
+                {"index": 1, "title": "Section 1.1", "level": 2, "page_start": 2, "page_end": 3}
+            ],
+            "total_pages": 3
+        })
 
     def test_06_metadata_update(self):
         # Update metadata of book 2 including ISBN

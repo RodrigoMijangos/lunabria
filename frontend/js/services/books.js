@@ -65,7 +65,7 @@ const createBooksApiService = () => ({
   async uploadBookWithProgress(file, options = {}) {
     const formData = new FormData();
     formData.append('files', file, file.name);
-    if (options.autoFetchMetadata) formData.append('auto_fetch_metadata', 'true');
+    if (options.autoFetchMetadata !== undefined) formData.append('auto_fetch_metadata', options.autoFetchMetadata ? 'true' : 'false');
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();

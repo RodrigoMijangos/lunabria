@@ -269,6 +269,18 @@ class TestNotesExportDeterministic(unittest.TestCase):
         self.assertEqual(sec_by_title["Chapter 3 Summary"]["page_start"], 4)
         self.assertEqual(sec_by_title["Chapter 3 Summary"]["page_end"], 4)
 
+    def test_export_sections_helper_includes_toc_bounds_and_total_pages(self):
+        sections, total_pages = notes_export.get_export_sections(self.sample_pdf_with_toc, book_id=10)
+        by_title = {section["title"]: section for section in sections}
+
+        self.assertEqual(total_pages, 4)
+        self.assertEqual(by_title["Chapter 2 Deep Dive"]["page_start"], 2)
+        self.assertEqual(by_title["Chapter 2 Deep Dive"]["page_end"], 4)
+
+        empty_sections, unknown_total = notes_export.get_export_sections(None, book_id=10)
+        self.assertEqual(empty_sections, [])
+        self.assertIsNone(unknown_total)
+
     def test_ids_consistency_in_all_formats(self):
         palette = self.get_sample_palette()
         annots = self.get_fixture_annotations()

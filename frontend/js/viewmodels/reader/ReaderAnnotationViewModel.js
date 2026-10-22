@@ -531,6 +531,12 @@ class ReaderAnnotationViewModel {
     container.innerHTML = '';
 
     const annots = this.model.annotations;
+    const selectionCount = document.getElementById('export-selection-count');
+    if (selectionCount) {
+      const count = this.model.selectedAnnotationIds?.size || 0;
+      selectionCount.textContent = `${count} annotation${count === 1 ? '' : 's'} selected`;
+    }
+
     if (!annots.length) {
       container.innerHTML = `
         <div style="text-align: center; color: var(--text-secondary); padding: 32px 16px;">
@@ -542,7 +548,7 @@ class ReaderAnnotationViewModel {
       return;
     }
 
-    annots.forEach(annot => {
+    annots.forEach((annot, annotationIndex) => {
       const item = document.createElement('div');
       item.className = 'annotation-item';
       const colorMeta = this.model.getColorMetadata(annot.color);
@@ -552,6 +558,10 @@ class ReaderAnnotationViewModel {
         <div class="annotation-item-header">
           <span class="annotation-page">Page ${annot.page}</span>
           <div style="display:flex; gap:6px;">
+            <label class="annotation-export-select">
+              <input type="checkbox" class="annotation-export-checkbox">
+              <span>Include</span>
+            </label>
             <button type="button" class="btn btn-icon delete-annot-btn" title="Delete" aria-label="Delete annotation on page ${annot.page}" style="padding:2px 6px; font-size:0.8rem;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#trash"></use></svg></button>
           </div>
         </div>
@@ -559,8 +569,18 @@ class ReaderAnnotationViewModel {
         ${annot.comment ? `<div class="annotation-comment" style="margin-top:6px; font-size:0.82rem; color:var(--text-secondary); font-style:italic;"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#comment"></use></svg> ${annot.comment}</div>` : ''}
       `;
 
+      const exportCheckbox = item.querySelector('.annotation-export-checkbox');
+      if (exportCheckbox) {
+        exportCheckbox.checked = this.model.selectedAnnotationIds?.has(String(annot.id)) || false;
+        exportCheckbox.dataset.annotationId = String(annot.id);
+        exportCheckbox.setAttribute(
+          'aria-label',
+          `Include annotation ${annotationIndex + 1} on page ${annot.page} in export: ${String(annot.text || '').slice(0, 80)}`
+        );
+      }
+
       item.onclick = (e) => {
-        if (!e.target.closest('button') && this.onPageNeedsRefresh) {
+        if (!e.target.closest('button, label') && this.onPageNeedsRefresh) {
           this.onPageNeedsRefresh(annot.page);
         }
       };

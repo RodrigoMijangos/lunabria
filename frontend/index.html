@@ -20,7 +20,7 @@
 
   <!-- PDF.js official textLayer stylesheet -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/web/pdf_viewer.min.css">
-  <link rel="stylesheet" href="./css/style.css?v=1.0.14-reader-links">
+  <link rel="stylesheet" href="./css/style.css?v=1.0.15-annotation-export">
   <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.3">
   
   <!-- PDF.js library -->
@@ -522,17 +522,52 @@
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#desktop"></use></svg> <span>Open Full Annotations View</span>
           </button>
           <div class="drawer-export-controls">
-            <label for="export-format-select">Export:</label>
-            <select id="export-format-select">
-              <option value="md_hierarchy">Hierarchical Markdown</option>
-              <option value="md_color">Markdown by color</option>
-              <option value="json">JSON</option>
-              <option value="jsonl">JSONL</option>
-              <option value="yaml">YAML</option>
-              <option value="toml">TOML</option>
-            </select>
+            <div class="drawer-export-field">
+              <label for="export-format-select">Format</label>
+              <select id="export-format-select">
+                <option value="md_hierarchy">Hierarchical Markdown</option>
+                <option value="md_color">Markdown by color</option>
+                <option value="json">JSON</option>
+                <option value="jsonl">JSONL</option>
+                <option value="yaml">YAML</option>
+                <option value="toml">TOML</option>
+              </select>
+            </div>
+            <div class="drawer-export-field">
+              <label for="export-scope-select">Annotations to export</label>
+              <select id="export-scope-select">
+                <option value="all">All annotations</option>
+                <option value="section">Chapter or section</option>
+                <option value="page">One page</option>
+                <option value="range">Page range</option>
+                <option value="selected">Selected annotations</option>
+              </select>
+            </div>
+            <div id="export-section-field" class="drawer-export-scope-field" hidden>
+              <label for="export-section-select">Chapter or section</label>
+              <select id="export-section-select" disabled>
+                <option value="">Loading chapters…</option>
+              </select>
+            </div>
+            <div id="export-page-field" class="drawer-export-scope-field" hidden>
+              <label for="export-page-input">Page number</label>
+              <input id="export-page-input" type="number" min="1" step="1" inputmode="numeric">
+            </div>
+            <div id="export-range-field" class="drawer-export-scope-field export-page-range" hidden>
+              <label for="export-start-page-input">From page</label>
+              <input id="export-start-page-input" type="number" min="1" step="1" inputmode="numeric">
+              <label for="export-end-page-input">To page</label>
+              <input id="export-end-page-input" type="number" min="1" step="1" inputmode="numeric">
+            </div>
+            <div id="export-selection-field" class="drawer-export-scope-field" hidden>
+              <p id="export-selection-count" role="status" aria-live="polite">0 annotations selected</p>
+              <p>Select or clear individual annotations using the checkboxes in the notes list.</p>
+              <button id="export-clear-selection-btn" type="button" class="btn btn-secondary btn-sm">Clear selection</button>
+            </div>
+            <p id="export-status" class="drawer-export-status" role="status" aria-live="polite"></p>
             <button id="export-notes-btn" type="button" class="btn btn-sm btn-primary">
-              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg> Export
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg>
+              <span id="export-notes-label">Export</span>
             </button>
           </div>
         </div>
@@ -636,11 +671,11 @@
       <!-- Metadata Verification Toggle -->
       <div class="form-group" style="background-color: var(--bg-secondary); padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-color); margin-top: 16px;">
         <label style="display: flex; align-items: center; gap: 10px; font-size: 0.9rem; font-weight: 600; cursor: pointer;">
-          <input type="checkbox" id="upload-verify-toggle" style="width: 18px; height: 18px; accent-color: var(--accent-color);" />
+          <input type="checkbox" id="upload-verify-toggle" checked style="width: 18px; height: 18px; accent-color: var(--accent-color);" />
           <span>Verify and fetch metadata with Calibre (ISBN / Synopsis)</span>
         </label>
         <small style="display: block; color: var(--text-secondary); margin-top: 4px; margin-left: 28px; line-height: 1.4;">
-          If enabled, you can provide or review the ISBN so Calibre automatically downloads official title, author, and synopsis.
+          Automatic online search with priority cascade (Book ISBN &rarr; PDF Title &rarr; Filename) and safe fallback to original upload.
         </small>
       </div>
 
@@ -824,14 +859,14 @@
   <script src="./js/services/metadata.js?v=1.0.8"></script>
   <script src="./js/services/progress.js?v=1.0.8"></script>
   <script src="./js/services/layouts.js?v=1.0.8"></script>
-  <script src="./js/services/annotations.js?v=1.0.9"></script>
+  <script src="./js/services/annotations.js?v=1.1.0-annotation-export"></script>
   <script src="./js/services/colors.js?v=1.0.8"></script>
   <script src="./js/services/drawings.js?v=1.0.8"></script>
   <script src="./js/api.js?v=1.0.8"></script>
 
   <!-- MVVM Architecture: Models -->
   <script src="./js/models/ReaderNavigationMap.js?v=1.0.1-reader-jumps"></script>
-  <script src="./js/models/ReaderModel.js?v=1.3.1"></script>
+  <script src="./js/models/ReaderModel.js?v=1.3.2-annotation-export"></script>
   <script src="./js/models/LibraryModel.js?v=0.8.3-async-upload"></script>
 
   <!-- MVVM Architecture: Modular Reader Views -->
@@ -877,11 +912,11 @@
   <script src="./js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0"></script>
   <script src="./js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout"></script>
-  <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.2"></script>
+  <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.3-annotation-export"></script>
   <script src="./js/views/reader/LinkOverlayView.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references"></script>
   <script src="./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9"></script>
-  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.3-jump-return"></script>
+  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.4-annotation-export"></script>
   <script src="./js/services/reader/ReaderOfflineService.js?v=1.0.9"></script>
   <script src="./js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0"></script>
   <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.5-reader-jumps"></script>

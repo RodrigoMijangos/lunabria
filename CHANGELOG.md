@@ -11,6 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-22
+
+### Added
+- Book uploads now look up matching online metadata in the background, prioritizing ISBN, document title, and filename while preserving the uploaded details if no match is found.
+- Export notes by chapter, page or page range, or select individual annotations on desktop and mobile.
+
 ## [1.8.0] - 2026-10-18
 
 Interactive table of contents, in-text cross references and touch-optimized navigation.
@@ -510,7 +516,8 @@ Interactive table of contents, in-text cross references and touch-optimized navi
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.5.0...v1.6.0

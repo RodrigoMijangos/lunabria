@@ -136,11 +136,14 @@ class MetadataService:
                     "tags": [],
                     "comments": None,
                     "has_cover": False,
-                    "cover_data_base64": None
+                    "cover_data_base64": None,
+                    "matched": False,
                 }
 
             root = ET.fromstring(output_xml)
-            metadata_elem = root.find('{http://www.idpf.org/2007/opf}metadata') or root.find('metadata')
+            metadata_elem = root.find('{http://www.idpf.org/2007/opf}metadata')
+            if metadata_elem is None:
+                metadata_elem = root.find('metadata')
 
             parsed_title = None
             parsed_authors = []
@@ -188,7 +191,8 @@ class MetadataService:
                 "tags": parsed_tags,
                 "comments": parsed_comments,
                 "has_cover": has_cover,
-                "cover_data_base64": cover_b64
+                "cover_data_base64": cover_b64,
+                "matched": True,
             }
         except Exception as e:
             print(f"Warning in fetch_metadata: {e}")
@@ -200,7 +204,8 @@ class MetadataService:
                 "tags": [],
                 "comments": None,
                 "has_cover": False,
-                "cover_data_base64": None
+                "cover_data_base64": None,
+                "matched": False,
             }
         finally:
             if os.path.exists(cover_path):
@@ -208,5 +213,60 @@ class MetadataService:
                     os.remove(cover_path)
                 except OSError:
                     pass
+
+
+
+    @classmethod
+    def fetch_metadata_cascade(
+        cls,
+        candidate_isbns: Optional[List[str]] = None,
+        pdf_title: Optional[str] = None,
+        pdf_author: Optional[str] = None,
+        clean_title: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Executes online metadata search in cascade order:
+        1. Explicit/candidate ISBNs (up to 3 best candidates)
+        2. Book title extracted from PDF (and pdf_author if available)
+        3. Clean filename (clean_title)
+        If none match or an error occurs, returns matched: False with fallback values.
+        """
+        # 1. Try candidate ISBNs sequentially
+        if candidate_isbns:
+            for isbn in candidate_isbns[:3]:
+                if not isbn or not str(isbn).strip():
+                    continue
+                result = cls.fetch_online_metadata(isbn=str(isbn).strip())
+                if result.get("matched"):
+                    return result
+
+        # 2. Try book title from PDF
+        if pdf_title and pdf_title.strip():
+            result = cls.fetch_online_metadata(
+                title=pdf_title.strip(),
+                authors=pdf_author.strip() if pdf_author and pdf_author.strip() else None,
+            )
+            if result.get("matched"):
+                return result
+
+        # 3. Try filename clean title
+        if clean_title and clean_title.strip():
+            if not pdf_title or clean_title.strip().lower() != pdf_title.strip().lower():
+                result = cls.fetch_online_metadata(title=clean_title.strip())
+                if result.get("matched"):
+                    return result
+
+        # 4. Safe fallback: no match found
+        return {
+            "title": clean_title or pdf_title,
+            "authors": [pdf_author] if pdf_author else [],
+            "isbn": candidate_isbns[0] if candidate_isbns else None,
+            "publisher": None,
+            "tags": [],
+            "comments": None,
+            "has_cover": False,
+            "cover_data_base64": None,
+            "matched": False,
+        }
 
 metadata_service = MetadataService()

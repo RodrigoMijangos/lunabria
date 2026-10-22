@@ -145,6 +145,120 @@ class TestMetadataSources(unittest.TestCase):
         )
         self.assertNotIn("Goodreads", command)
 
+    def test_fetch_online_metadata_matched_flag_and_empty_handling(self):
+        with patch(
+            "app.services.metadata_service.subprocess.run",
+            return_value=SimpleNamespace(returncode=0, stdout=CALIBRE_HELP, stderr="")
+        ):
+            MetadataService.save_source_preferences(["Google", "Open Library"])
+
+        # Empty stdout -> matched: False
+        with patch(
+            "app.services.metadata_service.subprocess.run",
+            return_value=SimpleNamespace(returncode=0, stdout="", stderr="")
+        ):
+            res_empty = MetadataService.fetch_online_metadata(isbn="9780000000000")
+            self.assertFalse(res_empty["matched"])
+
+        # Valid OPF XML -> matched: True
+        valid_opf = """<?xml version='1.0' encoding='utf-8'?>
+        <package xmlns="http://www.idpf.org/2007/opf">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <dc:title>Test Title</dc:title>
+            <dc:creator>Test Author</dc:creator>
+          </metadata>
+        </package>"""
+        with patch(
+            "app.services.metadata_service.subprocess.run",
+            return_value=SimpleNamespace(returncode=0, stdout=valid_opf, stderr="")
+        ):
+            res_valid = MetadataService.fetch_online_metadata(isbn="9780000000000")
+            self.assertTrue(res_valid["matched"])
+            self.assertEqual(res_valid["title"], "Test Title")
+
+        # Exception -> matched: False
+        with patch(
+            "app.services.metadata_service.subprocess.run",
+            side_effect=RuntimeError("Calibre timeout")
+        ):
+            res_err = MetadataService.fetch_online_metadata(isbn="9780000000000")
+            self.assertFalse(res_err["matched"])
+
+    def test_fetch_metadata_cascade_order(self):
+        call_log = []
+
+        def mock_fetch(isbn=None, title=None, authors=None):
+            call_log.append({"isbn": isbn, "title": title, "authors": authors})
+            if isbn == "9780132350884":
+                return {"matched": True, "title": "Clean Code", "authors": ["Robert C. Martin"]}
+            if title == "Specific PDF Title":
+                return {"matched": True, "title": "Specific PDF Title Found", "authors": ["Author"]}
+            if title == "Clean File Name":
+                return {"matched": True, "title": "Clean File Name Found", "authors": ["Author"]}
+            return {"matched": False, "title": title, "authors": []}
+
+        with patch.object(MetadataService, "fetch_online_metadata", side_effect=mock_fetch):
+            # 1. First ISBN matches immediately
+            call_log.clear()
+            res1 = MetadataService.fetch_metadata_cascade(
+                candidate_isbns=["9780132350884", "9780306406157"],
+                pdf_title="Specific PDF Title",
+                clean_title="Clean File Name"
+            )
+            self.assertTrue(res1["matched"])
+            self.assertEqual(res1["title"], "Clean Code")
+            self.assertEqual(len(call_log), 1)
+            self.assertEqual(call_log[0]["isbn"], "9780132350884")
+
+            # 2. First ISBN fails, second ISBN matches
+            call_log.clear()
+            res2 = MetadataService.fetch_metadata_cascade(
+                candidate_isbns=["9780000000000", "9780132350884"],
+                pdf_title="Specific PDF Title",
+                clean_title="Clean File Name"
+            )
+            self.assertTrue(res2["matched"])
+            self.assertEqual(res2["title"], "Clean Code")
+            self.assertEqual(len(call_log), 2)
+            self.assertEqual(call_log[0]["isbn"], "9780000000000")
+            self.assertEqual(call_log[1]["isbn"], "9780132350884")
+
+            # 3. All ISBNs fail, PDF title matches
+            call_log.clear()
+            res3 = MetadataService.fetch_metadata_cascade(
+                candidate_isbns=["9780000000000"],
+                pdf_title="Specific PDF Title",
+                clean_title="Clean File Name"
+            )
+            self.assertTrue(res3["matched"])
+            self.assertEqual(res3["title"], "Specific PDF Title Found")
+            self.assertEqual(len(call_log), 2)
+            self.assertEqual(call_log[0]["isbn"], "9780000000000")
+            self.assertEqual(call_log[1]["title"], "Specific PDF Title")
+
+            # 4. ISBN and PDF title fail (or missing), clean_title matches
+            call_log.clear()
+            res4 = MetadataService.fetch_metadata_cascade(
+                candidate_isbns=[],
+                pdf_title="Unknown PDF Title",
+                clean_title="Clean File Name"
+            )
+            self.assertTrue(res4["matched"])
+            self.assertEqual(res4["title"], "Clean File Name Found")
+            self.assertEqual(len(call_log), 2)
+            self.assertEqual(call_log[0]["title"], "Unknown PDF Title")
+            self.assertEqual(call_log[1]["title"], "Clean File Name")
+
+            # 5. Nothing matches -> fallback matched: False
+            call_log.clear()
+            res5 = MetadataService.fetch_metadata_cascade(
+                candidate_isbns=["9780000000000"],
+                pdf_title="Unknown PDF Title",
+                clean_title="Unmatched File"
+            )
+            self.assertFalse(res5["matched"])
+            self.assertEqual(res5["title"], "Unmatched File")
+
 
 if __name__ == "__main__":
     unittest.main()

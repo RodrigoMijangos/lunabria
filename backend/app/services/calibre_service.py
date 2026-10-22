@@ -407,4 +407,19 @@ class CalibreService:
         """Uses MetadataService to scrape online metadata by ISBN or title/authors."""
         return metadata_service.fetch_online_metadata(isbn=isbn, title=title, authors=authors)
 
+    def fetch_metadata_cascade(
+        self,
+        candidate_isbns: Optional[List[str]] = None,
+        pdf_title: Optional[str] = None,
+        pdf_author: Optional[str] = None,
+        clean_title: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Executes metadata search in cascade order (ISBN -> PDF Title -> Clean Filename)."""
+        return metadata_service.fetch_metadata_cascade(
+            candidate_isbns=candidate_isbns,
+            pdf_title=pdf_title,
+            pdf_author=pdf_author,
+            clean_title=clean_title,
+        )
+
 calibre_service = CalibreService()

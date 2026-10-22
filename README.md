@@ -133,7 +133,7 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 - **Customizable Semantic Highlight Taxonomy:** Freely configure your own colors and semantic labels (e.g., *Key Idea*, *Definition*, *Question*, *Quote*).
 - **Freehand Stylus & Digital Inking:** Draw notes, margin diagrams, underlines, and freehand highlights directly on book pages with pressure dynamics, palm rejection, and dedicated hardware settings.
 - **Slide-Out Lateral Drawer:** Chronologically lists all highlights, annotations, and notes with interactive color filtering.
-- **Deterministic Multi-Format PKM Export:** Export annotations and highlights to **Hierarchical Markdown**, **Markdown grouped by color/page**, **JSON**, **JSONL**, **YAML**, and **TOML**, driven by PDF table of contents hierarchy ready for Obsidian, Logseq, or automated knowledge workflows.
+- **Deterministic Multi-Format PKM Export:** Export all annotations, a chapter/section, a page range, or individually selected annotations to **Hierarchical Markdown**, **Markdown grouped by color/page**, **JSON**, **JSONL**, **YAML**, and **TOML** from desktop or mobile.
 - **Dedicated Mobile & Touch Reader:** Tailored mobile reading interface featuring a compact single-row topbar, a collapsible Floating Action Button (FAB) for drawing and quick color selection, long-press text selection with a circular magnifying loupe, and a one-tap page stroke wipe button.
 - **Precision Zoom & Ergonomic Navigation:** Dedicated **Fit-to-Width** (`W`), **Fit-to-Page** (`H`), and **Actual Size (1:1 / 100%)** (`Ctrl+0`) modes. Smooth **Ctrl + Wheel** and continuous trackpad/touchscreen pinch-to-zoom with real-time GPU preview and dynamic velocity scaling across an expanded range from **25% to 500%**.
 - **Fault-Tolerant Rendering:** If a PDF page canvas render encounters an issue, a recoverable error card with an inline retry button displays instead of an unrecoverable blank page.
@@ -147,6 +147,7 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 
 ### 4. Book Ingestion & Calibre Metadata Management
 - **Asynchronous Book Ingestion:** Drag-and-drop or select files to upload with HTTP 202 background job processing, byte progress reporting, and non-blocking toast notifications.
+- **Automatic Metadata Priority Cascade:** Background ingestion searches online metadata using document ISBN, PDF title, then cleaned filename, while preserving uploaded details if no match is found.
 - **Calibre Metadata Editor:** Modify title, authors, tags, series, series index, and synopsis directly.
 - **Online Metadata Assistant:** Runs Calibre CLI (`fetch-ebook-metadata`) to scrape summaries and high-resolution book covers from Google Books, Open Library, Amazon, and Goodreads.
 - **Direct Library Integration:** Commits metadata updates safely to Calibre's `metadata.db` via `calibredb set_metadata`.
