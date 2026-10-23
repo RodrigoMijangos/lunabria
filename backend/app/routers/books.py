@@ -2,11 +2,12 @@ import asyncio
 import logging
 import shutil
 import unicodedata
+from collections.abc import Mapping
 from uuid import uuid4
 from pathlib import Path
 from typing import Optional, List, Literal
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Request
 
 from app.config import UPLOAD_DIR
 from app import database
@@ -37,6 +38,13 @@ def _public_upload_job(job):
         "created_at": job.get("created_at"),
         "updated_at": job.get("updated_at"),
     }
+
+
+def _auto_fetch_metadata_enabled(form_data: Mapping[str, object], parsed_value: Optional[bool]) -> bool:
+    if "auto_fetch_metadata" not in form_data or parsed_value is None:
+        return True
+    return parsed_value
+
 
 @router.get("", response_model=PaginatedBooksResponse)
 def list_books(
@@ -103,6 +111,7 @@ def get_book(book_id: int):
 
 @router.post("/upload", status_code=202)
 async def upload_books(
+    request: Request,
     files: List[UploadFile] = File(...),
     auto_fetch_metadata: Optional[bool] = Form(None),
     isbns: Optional[str] = Form(None),  # Comma-separated or JSON list of ISBNs matching files
@@ -112,7 +121,8 @@ async def upload_books(
     if not ingestion_queue.is_running:
         raise HTTPException(status_code=503, detail="Book ingestion worker is unavailable.")
 
-    metadata_fetch_enabled = True if auto_fetch_metadata is None else auto_fetch_metadata
+    form_data = await request.form()
+    metadata_fetch_enabled = _auto_fetch_metadata_enabled(form_data, auto_fetch_metadata)
     isbn_list = [value.strip() for value in (isbns or "").split(",") if value.strip()]
     prepared = []
     for index, upload_file in enumerate(files):

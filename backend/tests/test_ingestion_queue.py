@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app import database
-from app.routers.books import router
+from app.routers.books import _auto_fetch_metadata_enabled, router
 from app.services.ingestion_queue import IngestionQueue
 
 
@@ -134,6 +134,10 @@ class TestIngestionQueue(unittest.IsolatedAsyncioTestCase):
 
 
 class TestUploadEndpoint(unittest.TestCase):
+    def test_missing_metadata_option_uses_true_even_if_parsed_value_is_false(self):
+        self.assertTrue(_auto_fetch_metadata_enabled({}, False))
+        self.assertFalse(_auto_fetch_metadata_enabled({"auto_fetch_metadata": "false"}, False))
+
     def test_upload_returns_accepted_job_after_staging_and_exposes_status(self):
         class FakeQueue:
             is_running = True
