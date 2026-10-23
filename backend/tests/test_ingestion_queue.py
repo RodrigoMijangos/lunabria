@@ -187,7 +187,7 @@ class TestUploadEndpoint(unittest.TestCase):
                     self.assertEqual(status.json()["status"], "queued")
                     self.assertEqual(missing.status_code, 404)
 
-    def test_upload_defaults_auto_fetch_metadata_to_true(self):
+    def test_upload_metadata_fetch_defaults_true_and_explicit_false_is_preserved(self):
         class FakeQueue:
             is_running = True
 
@@ -220,6 +220,16 @@ class TestUploadEndpoint(unittest.TestCase):
                     result = response.json()
                     job = database.get_upload_job(result["job_id"])
                     self.assertEqual(job["auto_fetch_metadata"], 1)
+
+                    response = client.post(
+                        "/api/books/upload",
+                        data={"auto_fetch_metadata": "false"},
+                        files=[("files", ("manual.pdf", b"%PDF-1.7 sample", "application/pdf"))],
+                    )
+                    self.assertEqual(response.status_code, 202)
+                    result = response.json()
+                    job = database.get_upload_job(result["job_id"])
+                    self.assertEqual(job["auto_fetch_metadata"], 0)
 
     def test_upload_rejects_non_pdf_files(self):
         class FakeQueue:

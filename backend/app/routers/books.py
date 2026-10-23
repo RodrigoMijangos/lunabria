@@ -104,7 +104,7 @@ def get_book(book_id: int):
 @router.post("/upload", status_code=202)
 async def upload_books(
     files: List[UploadFile] = File(...),
-    auto_fetch_metadata: bool = Form(True),
+    auto_fetch_metadata: Optional[bool] = Form(None),
     isbns: Optional[str] = Form(None),  # Comma-separated or JSON list of ISBNs matching files
     allow_duplicate: bool = Form(False)
 ):
@@ -112,6 +112,7 @@ async def upload_books(
     if not ingestion_queue.is_running:
         raise HTTPException(status_code=503, detail="Book ingestion worker is unavailable.")
 
+    metadata_fetch_enabled = True if auto_fetch_metadata is None else auto_fetch_metadata
     isbn_list = [value.strip() for value in (isbns or "").split(",") if value.strip()]
     prepared = []
     for index, upload_file in enumerate(files):
@@ -131,7 +132,7 @@ async def upload_books(
             "job_id": job_id,
             "filename": filename,
             "staging_path": str(staged_path),
-            "auto_fetch_metadata": auto_fetch_metadata,
+            "auto_fetch_metadata": metadata_fetch_enabled,
             "isbn": isbn_list[index] if index < len(isbn_list) else None,
             "upload_file": upload_file,
         })

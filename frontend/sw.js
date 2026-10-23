@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.10.0';
+const CACHE_NAME = 'lunabria-v1.10.1';
 const COVER_CACHE_NAME = 'lunabria-covers-v1';
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   'https://cdn.jsdelivr.net',
