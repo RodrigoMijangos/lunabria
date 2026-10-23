@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.9.0';
+const CACHE_NAME = 'lunabria-v1.10.0';
 const COVER_CACHE_NAME = 'lunabria-covers-v1';
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   'https://cdn.jsdelivr.net',
@@ -16,12 +16,12 @@ const STATIC_ASSETS = [
   './icons/maskable-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
-  './css/style.css?v=1.0.15-annotation-export',
-  './css/mobile/mobile-reader.css?v=1.1.3',
+  './css/style.css?v=1.0.17',
+  './css/mobile/mobile-reader.css?v=1.1.4',
   './js/services/http.js?v=1.0.0',
   './js/services/connectivity.js?v=1.0.4',
   './js/db.js?v=1.4.5',
-  './js/services/books.js?v=1.0.11-async-upload',
+  './js/services/books.js?v=1.0.13-upload-ux',
   './js/services/virtual-libraries.js?v=1.0.8',
   './js/services/metadata.js?v=1.0.8',
   './js/services/progress.js?v=1.0.8',
@@ -31,7 +31,7 @@ const STATIC_ASSETS = [
   './js/services/drawings.js?v=1.0.8',
   './js/api.js?v=1.0.8',
   './js/models/ReaderNavigationMap.js?v=1.0.1-reader-jumps',
-  './js/models/ReaderModel.js?v=1.3.2-annotation-export',
+  './js/models/ReaderModel.js?v=1.3.3',
   './js/models/LibraryModel.js?v=0.8.3-async-upload',
   './js/views/reader/PDFPageView.js?v=0.6.2',
   './js/views/reader/TextLayerView.js?v=1.0.11-cross-references',
@@ -45,30 +45,30 @@ const STATIC_ASSETS = [
   './js/views/library/BookCardView.js?v=1.4.3',
   './js/views/library/RecentReadsView.js?v=0.9.3',
   './js/views/library/VirtualLibraryView.js?v=1.0.9',
-  './js/views/library/UploadModalView.js?v=1.0.10-async-upload',
+  './js/views/library/UploadModalView.js?v=1.0.13-upload-ux',
   './js/views/ui/ToastView.js?v=1.0.0',
   './js/views/LibraryViews.js?v=0.6.0',
   './js/views/library/CatalogView.js?v=1.0.8',
   './js/views/library/CatalogPaginationView.js?v=1.0.8',
   './js/views/library/CatalogSelectionView.js?v=1.0.8',
-  './js/viewmodels/library/BookUploadManager.js?v=1.0.10-async-upload',
+  './js/viewmodels/library/BookUploadManager.js?v=1.0.13-upload-ux',
   './js/viewmodels/library/BookMetadataManager.js?v=1.0.10',
-  './js/viewmodels/library/VirtualLibraryManager.js?v=0.8.1',
+  './js/viewmodels/library/VirtualLibraryManager.js?v=0.8.4-covers',
   './js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0',
   './js/viewmodels/library/SyncSettingsManager.js?v=1.4.0',
   './js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8',
-  './js/viewmodels/LibraryViewModel.js?v=1.4.12',
-  './js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.7',
+  './js/viewmodels/LibraryViewModel.js?v=1.4.14',
+  './js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.8',
   './js/views/reader/TableOfContentsView.js?v=1.0.0',
   './js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0',
   './js/services/reader/ReaderTextTargetGeometry.js?v=1.0.0',
   './js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.0',
   './js/viewmodels/reader/ReaderDrawingInteractionController.js?v=1.0.1',
-  './js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.0',
+  './js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.1',
   './js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0',
   './js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0',
   './js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout',
-  './js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.3-annotation-export',
+  './js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.4',
   './js/views/reader/LinkOverlayView.js?v=1.0.0',
   './js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references',
   './js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9',
@@ -81,8 +81,8 @@ const STATIC_ASSETS = [
   './js/mobile/MobileDrawingToolbarView.js?v=1.3.0',
   './js/mobile/MobileSelectionController.js?v=1.4.2',
   './js/mobile/MobilePWAInstaller.js?v=1.1.0',
-  './js/mobile/MobileReaderController.js?v=1.3.0',
-  './js/viewmodels/ReaderViewModel.js?v=1.4.5-jump-return',
+  './js/mobile/MobileReaderController.js?v=1.3.1',
+  './js/viewmodels/ReaderViewModel.js?v=1.4.6',
   './js/reader.js?v=0.6.0',
   './js/app.js?v=0.6.0',
   './css/themes.css',
@@ -168,15 +168,9 @@ self.addEventListener('fetch', (event) => {
   // For other API endpoints, verify connectivity with the actual request and fall back to offline 503.
   if (url.pathname.startsWith('/api/')) {
     if (event.request.method === 'POST' && url.pathname === '/api/books/upload') {
-      event.respondWith(
-        fetch(event.request).catch(() => {
-          return new Response(JSON.stringify({ offline: true, error: 'No network connection' }), {
-            status: 503,
-            statusText: 'Service Unavailable',
-            headers: { 'Content-Type': 'application/json' }
-          });
-        })
-      );
+      // Allow book uploads to bypass the Service Worker completely so that:
+      // 1. The browser streams the upload natively without SW buffering/throttling.
+      // 2. XMLHttpRequest.upload.onprogress emits native, fine-grained progress events (not stuck at 0%).
       return;
     }
 

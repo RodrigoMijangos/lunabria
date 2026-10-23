@@ -589,3 +589,10 @@ body.mobile-reader-active .pdf-viewport-container canvas {
 .drawer-drag-handle {
   display: none;
 }
+
+body.mobile-reader-active .pdf-viewport-container.dual-flow-mode {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+

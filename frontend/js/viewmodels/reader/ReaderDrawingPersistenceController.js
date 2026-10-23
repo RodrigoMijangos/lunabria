@@ -22,7 +22,7 @@ class ReaderDrawingPersistenceController {
   }
 
   getVisiblePageNumber() {
-    if (this.model.viewMode !== 'flow') {
+    if (this.model.viewMode !== 'flow' && this.model.viewMode !== 'dual-flow') {
       return this.model.currentPage || 1;
     }
     const wrappers = Array.from(this.viewportEl?.querySelectorAll ? this.viewportEl.querySelectorAll('.pdf-page-wrapper') : []);

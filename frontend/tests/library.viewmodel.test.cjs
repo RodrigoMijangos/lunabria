@@ -791,3 +791,36 @@ test('optional elements are tolerated without altering state defaults', () => {
   window.getComputedStyle = undefined;
   assert.equal(l.getCatalogGridColumnCount(), 4);
 });
+
+test('search clear button immediately clears search on pointerdown/mousedown and maintains has-query class', () => {
+  const { library: l, document } = setup();
+  const box = document.createElement('div');
+  box.classList.toggle('search-box', true);
+  const input = document.getElementById('search-input');
+  input.closest = (sel) => (sel === '.search-box' ? box : null);
+  const clearBtn = document.getElementById('search-clear-btn');
+
+  l.bindEvents();
+
+  input.value = 'microservices';
+  input.oninput({ target: input });
+
+  assert.equal(box.classList.contains('has-query'), true);
+  assert.equal(clearBtn.style.display, 'inline-flex');
+  assert.equal(l.model.searchQuery, 'microservices');
+
+  let prevented = false;
+  let stopped = false;
+  clearBtn.fire('pointerdown', {
+    preventDefault: () => { prevented = true; },
+    stopPropagation: () => { stopped = true; }
+  });
+
+  assert.equal(prevented, true);
+  assert.equal(stopped, true);
+  assert.equal(input.value, '');
+  assert.equal(box.classList.contains('has-query'), false);
+  assert.equal(clearBtn.style.display, 'none');
+  assert.equal(l.model.searchQuery, '');
+  assert.equal(document.activeElement, input);
+});

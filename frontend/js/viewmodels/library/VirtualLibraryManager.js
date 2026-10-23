@@ -5,7 +5,7 @@
 class VirtualLibraryManager {
   constructor(onLibrariesChanged) {
     this.onLibrariesChanged = onLibrariesChanged;
-    this.modal = document.getElementById('vl-modal');
+    this.modal = typeof document !== 'undefined' ? document.getElementById('vl-modal') : null;
     this.selectedBookIds = new Set();
     this.books = null;
     this.mode = 'query';
@@ -13,6 +13,7 @@ class VirtualLibraryManager {
     this.manualPage = 0;
     this.manualTotal = 0;
     this.manualRequestSequence = 0;
+    this.filterVirtualLibraryId = null;
   }
 
   async openVirtualLibraryModal(options = {}) {
@@ -28,11 +29,40 @@ class VirtualLibraryManager {
     const querySection = document.getElementById('vl-section-query');
     const manualSection = document.getElementById('vl-section-manual');
     const cancelBtn = document.getElementById('vl-cancel-btn');
+    const closeBtn = document.getElementById('vl-close-x-btn');
     const saveBtn = document.getElementById('vl-save-btn');
+    const selectAllBtn = document.getElementById('vl-select-all-btn');
+    const deselectAllBtn = document.getElementById('vl-deselect-all-btn');
+    const selectedBadge = document.getElementById('vl-selected-count-badge');
+    const collectionFilterHint = document.getElementById('vl-collection-filter-hint');
+    const collectionFilterCheckbox = document.getElementById('vl-filter-by-current-collection');
+    const currentCollectionLabel = document.getElementById('vl-current-collection-label');
+    const queryPreviewContainer = document.getElementById('vl-query-preview-container');
+    const queryPreviewCount = document.getElementById('vl-query-preview-count');
+    const queryPreviewList = document.getElementById('vl-query-preview-list');
 
     if (nameInput) nameInput.value = '';
-    if (queryInput) queryInput.value = '';
-    if (searchInput) searchInput.value = '';
+    if (queryInput) queryInput.value = options.activeCollectionQuery || options.searchQuery || '';
+    if (searchInput) searchInput.value = options.searchQuery || '';
+
+    if (options.searchQuery && nameInput && !nameInput.value) {
+      nameInput.placeholder = `E.g., ${options.searchQuery}`;
+    } else if (options.activeCollectionName && nameInput && !nameInput.value) {
+      nameInput.placeholder = `E.g., Copy of ${options.activeCollectionName}`;
+    }
+
+    if (options.activeVirtualLibraryId) {
+      this.filterVirtualLibraryId = options.activeVirtualLibraryId;
+      if (collectionFilterHint) collectionFilterHint.style.display = 'block';
+      if (currentCollectionLabel) {
+        currentCollectionLabel.textContent = `Filter within collection: "${options.activeCollectionName || 'Current'}"`;
+      }
+      if (collectionFilterCheckbox) collectionFilterCheckbox.checked = true;
+    } else {
+      this.filterVirtualLibraryId = null;
+      if (collectionFilterHint) collectionFilterHint.style.display = 'none';
+    }
+
     const preselectedBookIds = Array.isArray(options.selectedBookIds)
       ? options.selectedBookIds.map(Number).filter(Number.isFinite)
       : [];
@@ -43,6 +73,84 @@ class VirtualLibraryManager {
     this.manualRequestSequence++;
     this.mode = 'query';
     let searchTimeout = null;
+    let querySearchTimeout = null;
+
+    const updateSelectedCounter = () => {
+      const count = this.selectedBookIds.size;
+      if (selectedBadge) {
+        selectedBadge.textContent = `${count} selected`;
+      }
+      if (saveBtn && this.mode === 'manual') {
+        saveBtn.textContent = count > 0 ? `Create Virtual Library (${count})` : 'Create Virtual Library';
+      } else if (saveBtn) {
+        saveBtn.textContent = 'Create Virtual Library';
+      }
+    };
+    updateSelectedCounter();
+
+    const updateQueryPreview = async () => {
+      if (!queryPreviewList) return;
+      const calibreQuery = queryInput?.value.trim() || '';
+      if (!calibreQuery) {
+        if (queryPreviewContainer) queryPreviewContainer.style.display = 'none';
+        queryPreviewList.replaceChildren();
+        return;
+      }
+
+      if (queryPreviewContainer) queryPreviewContainer.style.display = 'block';
+      if (queryPreviewCount) queryPreviewCount.textContent = 'Checking matching books...';
+      queryPreviewList.textContent = 'Searching books matching expression...';
+
+      try {
+        const response = await api.getBooks(calibreQuery, null, { pageSize: 100 });
+        if (sequence !== this.openSequence) return;
+        const pageBooks = Array.isArray(response)
+          ? response
+          : (Array.isArray(response?.books) ? response.books : []);
+        const total = Array.isArray(response) ? pageBooks.length : (response?.total ?? pageBooks.length);
+
+        if (queryPreviewCount) {
+          queryPreviewCount.textContent = `Matching books (${total}):`;
+        }
+        queryPreviewList.replaceChildren();
+
+        if (!pageBooks.length) {
+          queryPreviewList.textContent = 'No books match this Calibre search expression.';
+          return;
+        }
+
+        pageBooks.forEach(book => {
+          const card = document.createElement('div');
+          card.className = 'vl-book-item vl-book-preview-item';
+
+          const coverWrap = document.createElement('div');
+          coverWrap.className = 'vl-book-cover-wrap';
+          const coverImg = document.createElement('img');
+          coverImg.className = 'vl-book-cover';
+          coverImg.alt = book.title || '';
+          coverImg.loading = 'lazy';
+          coverImg.src = book.cover_url || `/api/books/${book.id}/cover`;
+          coverImg.onerror = () => {
+            coverImg.onerror = null;
+            coverImg.src = typeof OFFLINE_FALLBACK_COVER !== 'undefined'
+              ? OFFLINE_FALLBACK_COVER
+              : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="100%" height="100%" fill="%232d3748"/><path d="M70 120h60M70 150h60" stroke="%23718096" stroke-width="6"/><circle cx="100" cy="80" r="18" fill="%23a0aec0"/></svg>';
+          };
+          coverWrap.appendChild(coverImg);
+
+          const title = document.createElement('span');
+          title.className = 'vl-book-title-author';
+          title.textContent = `${book.title} — ${book.authors || ''}`;
+
+          card.append(coverWrap, title);
+          queryPreviewList.appendChild(card);
+        });
+      } catch (err) {
+        if (sequence !== this.openSequence) return;
+        if (queryPreviewCount) queryPreviewCount.textContent = 'Matching books (0):';
+        queryPreviewList.textContent = 'Invalid Calibre search expression or no books match.';
+      }
+    };
 
     const setMode = (mode) => {
       this.mode = mode;
@@ -50,6 +158,10 @@ class VirtualLibraryManager {
       manualSection.style.display = mode === 'manual' ? '' : 'none';
       queryTab.classList.toggle('active', mode === 'query');
       manualTab.classList.toggle('active', mode === 'manual');
+      updateSelectedCounter();
+      if (mode === 'query' && queryInput?.value.trim()) {
+        updateQueryPreview();
+      }
     };
 
     const loadManualBooks = async ({ append = false, force = false } = {}) => {
@@ -62,15 +174,30 @@ class VirtualLibraryManager {
       const query = searchInput?.value.trim() || '';
       const page = append ? this.manualPage + 1 : 1;
       const requestSequence = ++this.manualRequestSequence;
+      const virtualLibraryId = (collectionFilterCheckbox?.checked && this.filterVirtualLibraryId)
+        ? this.filterVirtualLibraryId
+        : null;
+
+      const previousScrollTop = typeof manualList?.scrollTop === 'number' ? manualList.scrollTop : 0;
+
       if (!append) {
         this.books = [];
         this.manualPage = 0;
         this.manualTotal = 0;
+        if (manualList) manualList.textContent = 'Loading books...';
+      } else {
+        const loadMoreBtn = manualList?.querySelector?.('button') ||
+          (Array.isArray(manualList?.children)
+            ? manualList.children.find(c => c.textContent?.includes?.('Load more'))
+            : null);
+        if (loadMoreBtn) {
+          loadMoreBtn.disabled = true;
+          loadMoreBtn.textContent = 'Loading more books...';
+        }
       }
-      if (manualList) manualList.textContent = append ? 'Loading more books...' : 'Loading books...';
 
       try {
-        const response = await api.getBooks(null, null, {
+        const response = await api.getBooks(null, virtualLibraryId, {
           query,
           page,
           pageSize: 24,
@@ -85,30 +212,92 @@ class VirtualLibraryManager {
         const total = Array.isArray(response) ? pageBooks.length : Number(response?.total);
         this.manualTotal = Number.isFinite(total) ? total : this.books.length;
         this.renderManualBooks(manualList, query, () => loadManualBooks({ append: true }));
+        if (append && manualList && previousScrollTop > 0) {
+          manualList.scrollTop = previousScrollTop;
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => {
+              manualList.scrollTop = previousScrollTop;
+            });
+          }
+        }
+        updateSelectedCounter();
       } catch (error) {
         if (sequence !== this.openSequence || requestSequence !== this.manualRequestSequence) return;
-        this.books = [];
-        if (manualList) manualList.textContent = 'Could not load book catalog.';
+        if (!append) {
+          this.books = [];
+          if (manualList) manualList.textContent = 'Could not load book catalog.';
+        } else {
+          const loadMoreBtn = manualList?.querySelector?.('button') ||
+            (Array.isArray(manualList?.children)
+              ? manualList.children.find(c => c.textContent?.includes?.('Loading more'))
+              : null);
+          if (loadMoreBtn) {
+            loadMoreBtn.disabled = false;
+            loadMoreBtn.textContent = 'Load more books';
+          }
+        }
       }
     };
 
-    const initialMode = preselectedBookIds.length ? 'manual' : 'query';
+    const initialMode = preselectedBookIds.length ? 'manual' : (options.activeVirtualLibraryId ? 'manual' : 'query');
     if (queryTab && manualTab && querySection && manualSection) {
       queryTab.onclick = () => setMode('query');
       manualTab.onclick = () => loadManualBooks();
       setMode(initialMode);
     }
     if (cancelBtn) cancelBtn.onclick = () => ModalView.close(this.modal);
+    if (closeBtn) closeBtn.onclick = () => ModalView.close(this.modal);
+
+    if (this.modal && typeof this.modal.addEventListener === 'function') {
+      this.modal.addEventListener('click', event => {
+        if (event.target === this.modal) ModalView.close(this.modal);
+      });
+    }
 
     if (manualList) {
       manualList.onchange = (event) => {
-        const checkbox = event.target.closest('input[data-book-id]');
+        const checkbox = event.target.dataset?.bookId ? event.target : event.target.closest?.('input[data-book-id]');
         if (!checkbox) return;
         const id = Number(checkbox.dataset.bookId);
-        if (checkbox.checked) this.selectedBookIds.add(id);
+        const isChecked = checkbox.checked;
+        if (isChecked) this.selectedBookIds.add(id);
         else this.selectedBookIds.delete(id);
+        const itemLabel = checkbox.closest?.('.vl-book-item');
+        if (itemLabel?.classList) {
+          itemLabel.classList.toggle('is-selected', isChecked);
+        }
+        updateSelectedCounter();
       };
     }
+
+    if (selectAllBtn) {
+      selectAllBtn.onclick = () => {
+        if (!Array.isArray(this.books)) return;
+        this.books.forEach(b => this.selectedBookIds.add(Number(b.id)));
+        this.renderManualBooks(manualList, searchInput?.value || '', () => loadManualBooks({ append: true }));
+        updateSelectedCounter();
+      };
+    }
+
+    if (deselectAllBtn) {
+      deselectAllBtn.onclick = () => {
+        if (!Array.isArray(this.books)) return;
+        this.books.forEach(b => this.selectedBookIds.delete(Number(b.id)));
+        this.renderManualBooks(manualList, searchInput?.value || '', () => loadManualBooks({ append: true }));
+        updateSelectedCounter();
+      };
+    }
+
+    if (collectionFilterCheckbox) {
+      collectionFilterCheckbox.onchange = () => {
+        this.manualRequestSequence++;
+        this.books = null;
+        this.manualPage = 0;
+        this.manualTotal = 0;
+        loadManualBooks({ force: true });
+      };
+    }
+
     if (searchInput) {
       searchInput.oninput = () => {
         if (searchTimeout !== null) window.clearTimeout(searchTimeout);
@@ -121,6 +310,13 @@ class VirtualLibraryManager {
           searchTimeout = null;
           return loadManualBooks({ force: true });
         }, 250);
+      };
+    }
+
+    if (queryInput) {
+      queryInput.oninput = () => {
+        if (querySearchTimeout !== null) window.clearTimeout(querySearchTimeout);
+        querySearchTimeout = window.setTimeout(updateQueryPreview, 250);
       };
     }
 
@@ -161,10 +357,12 @@ class VirtualLibraryManager {
 
     ModalView.open(this.modal);
     if (initialMode === 'manual') loadManualBooks();
+    else if (queryInput?.value.trim()) updateQueryPreview();
   }
 
   renderManualBooks(container, query = '', onLoadMore = null) {
     if (!container || !Array.isArray(this.books)) return;
+    const previousScrollTop = typeof container.scrollTop === 'number' ? container.scrollTop : 0;
     const normalizedQuery = query.toLowerCase().trim();
     const books = this.books.filter(book => {
       const tags = Array.isArray(book.tags) ? book.tags.join(' ') : (book.tags || '');
@@ -179,15 +377,36 @@ class VirtualLibraryManager {
     }
 
     books.forEach(book => {
+      const isSelected = this.selectedBookIds.has(Number(book.id));
       const label = document.createElement('label');
-      label.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border-color);cursor:pointer;';
+      label.className = `vl-book-item${isSelected ? ' is-selected' : ''}`;
+      label.dataset.bookId = String(book.id);
+
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.dataset.bookId = book.id;
-      checkbox.checked = this.selectedBookIds.has(Number(book.id));
+      checkbox.checked = isSelected;
+
       const description = document.createElement('span');
-      description.textContent = `${book.title} — ${book.authors}`;
-      label.append(checkbox, description);
+      description.className = 'vl-book-title-author';
+      description.textContent = `${book.title} — ${book.authors || ''}`;
+
+      const coverWrap = document.createElement('div');
+      coverWrap.className = 'vl-book-cover-wrap';
+      const coverImg = document.createElement('img');
+      coverImg.className = 'vl-book-cover';
+      coverImg.alt = book.title || '';
+      coverImg.loading = 'lazy';
+      coverImg.src = book.cover_url || `/api/books/${book.id}/cover`;
+      coverImg.onerror = () => {
+        coverImg.onerror = null;
+        coverImg.src = typeof OFFLINE_FALLBACK_COVER !== 'undefined'
+          ? OFFLINE_FALLBACK_COVER
+          : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="100%" height="100%" fill="%232d3748"/><path d="M70 120h60M70 150h60" stroke="%23718096" stroke-width="6"/><circle cx="100" cy="80" r="18" fill="%23a0aec0"/></svg>';
+      };
+      coverWrap.appendChild(coverImg);
+
+      label.append(checkbox, description, coverWrap);
       container.appendChild(label);
     });
 
@@ -198,6 +417,15 @@ class VirtualLibraryManager {
       loadMoreButton.textContent = 'Load more books';
       loadMoreButton.onclick = onLoadMore;
       container.appendChild(loadMoreButton);
+    }
+
+    if (previousScrollTop > 0) {
+      container.scrollTop = previousScrollTop;
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => {
+          container.scrollTop = previousScrollTop;
+        });
+      }
     }
   }
 }

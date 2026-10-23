@@ -28,7 +28,7 @@ class ReaderNavigationViewModel {
   }
 
   nextPage() {
-    if (this.model.viewMode === 'flow') {
+    if (this.model.viewMode === 'flow' || this.model.viewMode === 'dual-flow') {
       this.bodyEl.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' });
     } else if (this.model.viewMode === 'dual') {
       this.goToPage(this.model.getNextDualPageNumber());
@@ -38,7 +38,7 @@ class ReaderNavigationViewModel {
   }
 
   prevPage() {
-    if (this.model.viewMode === 'flow') {
+    if (this.model.viewMode === 'flow' || this.model.viewMode === 'dual-flow') {
       this.bodyEl.scrollBy({ top: -window.innerHeight * 0.85, behavior: 'smooth' });
     } else if (this.model.viewMode === 'dual') {
       this.goToPage(this.model.getPrevDualPageNumber());
@@ -75,6 +75,7 @@ class ReaderNavigationViewModel {
 
     this.viewportEl.classList.toggle('flow-mode', this.model.viewMode === 'flow');
     this.viewportEl.classList.toggle('dual-mode', this.model.viewMode === 'dual');
+    this.viewportEl.classList.toggle('dual-flow-mode', this.model.viewMode === 'dual-flow');
     this.viewportEl.classList.toggle('notes-mode', this.model.viewMode === 'notes');
   }
 
@@ -84,7 +85,7 @@ class ReaderNavigationViewModel {
       const page = await this.model.pdfDoc.getPage(pageNumber || 1);
       const unscaledViewport = page.getViewport({ scale: 1.0 });
       const availableWidth = Math.max(300, (this.bodyEl?.clientWidth || window.innerWidth) * 0.90);
-      const targetWidth = this.model.viewMode === 'dual' ? (availableWidth - 24) / 2 : availableWidth;
+      const targetWidth = this.model.viewMode === 'dual-flow' ? availableWidth / 2 : (this.model.viewMode === 'dual' ? (availableWidth - 24) / 2 : availableWidth);
       const calculated = targetWidth / unscaledViewport.width;
       return Math.max(0.25, Math.min(5.0, Math.round(calculated * 100) / 100));
     } catch (e) {
@@ -99,7 +100,7 @@ class ReaderNavigationViewModel {
       const unscaledViewport = page.getViewport({ scale: 1.0 });
       const availableWidth = Math.max(300, (this.bodyEl?.clientWidth || window.innerWidth) * 0.90);
       const availableHeight = Math.max(300, (this.bodyEl?.clientHeight || window.innerHeight) - 180);
-      const targetWidth = this.model.viewMode === 'dual' ? (availableWidth - 24) / 2 : availableWidth;
+      const targetWidth = this.model.viewMode === 'dual-flow' ? availableWidth / 2 : (this.model.viewMode === 'dual' ? (availableWidth - 24) / 2 : availableWidth);
       const scaleW = targetWidth / unscaledViewport.width;
       const scaleH = availableHeight / unscaledViewport.height;
       const calculated = Math.min(scaleW, scaleH);

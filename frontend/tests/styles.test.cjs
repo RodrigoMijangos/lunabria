@@ -7,16 +7,16 @@ const test = require('node:test');
 const cssDirectory = path.join(__dirname, '..', 'css');
 // Locked fingerprint includes the reader TOC and internal-link styling (UTF-8, LF).
 const extractedSheetsFixture = {
-  sha256: '29e1c01a247bcfdcbb0aec51c575764778b9199f656b711c866bb772b5423d12',
-  bytes: 74732,
-  lines: 3605,
+  sha256: 'd2479c6a2c7c63dde73200e263127629914be43a6b6e7e5e35c496f5d5b25ee8',
+  bytes: 76042,
+  lines: 3616,
 };
 const sheets = [
   ['themes.css', 74],
   ['base-navbar.css', 245],
   ['library-catalog.css', 433],
   ['library-cards.css', 268],
-  ['reader-pages.css', 688],
+  ['reader-pages.css', 699],
   ['drawing.css', 300],
   ['reader-selection-drawer.css', 562],
   ['modals.css', 372],

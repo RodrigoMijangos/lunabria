@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import sqlite3
 import subprocess
@@ -128,6 +129,50 @@ class CalibreService:
                     "cover_url": f"/api/books/{book_id}/cover" if has_cover else None
                 })
             return books
+        finally:
+            conn.close()
+
+
+    def find_duplicate_by_isbn(self, isbn: str, format_name: str = "PDF") -> Optional[Dict[str, Any]]:
+        """
+        Finds an existing book in Calibre with the same canonical ISBN and format.
+        If the ISBN matches but the book does not have format_name, it is NOT considered a duplicate.
+        """
+        if not isbn:
+            return None
+        from app.services.pdf_metadata_extractor import normalize_isbn
+        canonical_isbn = normalize_isbn(isbn) or re.sub(r"[^0-9Xx]", "", isbn).upper()
+        if not canonical_isbn:
+            return None
+
+        norm_format = format_name.strip().upper()
+        conn = self.get_db_connection()
+        if not conn:
+            return None
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT b.id, b.title,
+                       (SELECT group_concat(d.format, ',') FROM data d WHERE d.book = b.id) as formats,
+                       i.val as isbn
+                FROM identifiers i
+                JOIN books b ON i.book = b.id
+                WHERE LOWER(i.type) = 'isbn'
+            """)
+            rows = cursor.fetchall()
+            for row in rows:
+                existing_raw = row["isbn"] or ""
+                existing_canonical = normalize_isbn(existing_raw) or re.sub(r"[^0-9Xx]", "", existing_raw).upper()
+                if existing_canonical == canonical_isbn:
+                    book_formats = [f.strip().upper() for f in (row["formats"] or "").split(",") if f.strip()]
+                    if norm_format in book_formats:
+                        return {
+                            "id": row["id"],
+                            "title": row["title"] or "Untitled",
+                            "isbn": row["isbn"],
+                            "formats": book_formats,
+                        }
+            return None
         finally:
             conn.close()
 

@@ -53,6 +53,9 @@ class MobileReaderController {
     document.body.classList.toggle('mobile-reader-active', shouldBeActive);
 
     if (shouldBeActive) {
+      if (this.model.viewMode === 'dual-flow') {
+        this.reader.nav.setViewMode('flow');
+      }
       this.drawingFAB?.render();
       this.mobileHUD?.render();
     } else {
@@ -64,6 +67,10 @@ class MobileReaderController {
 
   onBookOpened() {
     if (!this.device.isMobileReaderActive()) return;
+
+    if (this.model.viewMode === 'dual-flow') {
+      this.reader.nav.setViewMode('flow');
+    }
 
     // Document requirement: Drawing mode activated by default, and always in move/pan mode by default
     if (!this.model.isDrawMode) {

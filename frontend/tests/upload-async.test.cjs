@@ -171,3 +171,67 @@ test('upload manager limits transfers to two and closing the modal does not canc
   assert.equal(manager.isUploading, false);
   assert.deepEqual(queue.map(item => item.status), ['queued', 'queued', 'queued']);
 });
+
+test('UploadModalView renders progress bar track and updateItemProgress mutates existing row', () => {
+  class FakeNode {
+    constructor(tag) {
+      this.tagName = tag;
+      this.children = [];
+      this.dataset = {};
+      this.style = {};
+      this.className = '';
+      this.textContent = '';
+    }
+    appendChild(child) { this.children.push(child); return child; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = [...children]; }
+    setAttribute(name, value) { this[name] = value; }
+    querySelector(selector) {
+      if (selector.startsWith('[data-queue-id=')) {
+        const id = selector.match(/data-queue-id="([^"]+)"/)?.[1];
+        return this.children.find(child => child.dataset?.queueId === id) || null;
+      }
+      const findClass = (node, className) => {
+        if (node.className?.includes(className)) return node;
+        for (const c of node.children || []) {
+          const found = findClass(c, className);
+          if (found) return found;
+        }
+        return null;
+      };
+      if (selector === '.upload-queue-label') return findClass(this, 'upload-queue-label');
+      if (selector === '.upload-queue-progress-fill') return findClass(this, 'upload-queue-progress-fill');
+      return null;
+    }
+  }
+
+  const context = vm.createContext({
+    document: {
+      createElement: tag => new FakeNode(tag),
+      createElementNS: (_ns, tag) => new FakeNode(tag)
+    },
+    LibraryModel: { formatFileSize: size => `${size} B` },
+    window: {}
+  });
+
+  vm.runInContext(read('js/views/library/UploadModalView.js'), context);
+  const View = vm.runInContext('UploadModalView', context);
+
+  const container = new FakeNode('div');
+  const queue = [{ id: 'q-1', name: 'guide.pdf', size: 1024, status: 'uploading', progress: 15 }];
+  View.renderQueue(container, queue);
+
+  assert.equal(container.children.length, 1);
+  const row = container.children[0];
+  assert.equal(row.dataset.queueId, 'q-1');
+  const label = row.querySelector('.upload-queue-label');
+  assert.equal(label.textContent, 'Uploading 15%');
+  const fill = row.querySelector('.upload-queue-progress-fill');
+  assert.equal(fill.style.width, '15%');
+
+  queue[0].progress = 60;
+  const updated = View.updateItemProgress(container, queue[0]);
+  assert.equal(updated, true);
+  assert.equal(label.textContent, 'Uploading 60%');
+  assert.equal(fill.style.width, '60%');
+});

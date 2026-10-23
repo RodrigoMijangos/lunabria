@@ -279,7 +279,7 @@ class ReaderViewModel {
   async renderCurrentViewMode(pageNumber, focalPoint = null) {
     if (this.model.viewMode === 'notes') {
       this.notes.renderNotesMode();
-    } else if (this.model.viewMode === 'flow') {
+    } else if (this.model.viewMode === 'flow' || this.model.viewMode === 'dual-flow') {
       await this.renderer.renderFlowMode((p) => {
         if (p === this.model.currentPage) return;
         this.model.setCurrentPage(p);

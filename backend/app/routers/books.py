@@ -11,6 +11,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from app.config import UPLOAD_DIR
 from app import database
 from app.services.calibre_service import calibre_service
+from app.services.pdf_metadata_extractor import extract_pdf_metadata, extract_candidate_isbns_from_text
 from app.services.ingestion_queue import ingestion_queue
 from app.services.library_service import library_service
 from app.services.reader_service import reader_service
@@ -104,7 +105,8 @@ def get_book(book_id: int):
 async def upload_books(
     files: List[UploadFile] = File(...),
     auto_fetch_metadata: bool = Form(True),
-    isbns: Optional[str] = Form(None)  # Comma-separated or JSON list of ISBNs matching files
+    isbns: Optional[str] = Form(None),  # Comma-separated or JSON list of ISBNs matching files
+    allow_duplicate: bool = Form(False)
 ):
     """Stage PDF uploads and enqueue them for background Calibre ingestion."""
     if not ingestion_queue.is_running:
@@ -149,12 +151,59 @@ async def upload_books(
                 job["upload_file"].file,
                 staged_path,
             )
+
+        if not allow_duplicate:
+            for job in prepared:
+                staged_path = Path(job["staging_path"])
+                candidate_isbns = []
+                if job.get("isbn"):
+                    candidate_isbns.append(job.get("isbn"))
+
+                for can, _ in extract_candidate_isbns_from_text(job.get("filename") or ""):
+                    if can not in candidate_isbns:
+                        candidate_isbns.append(can)
+
+                try:
+                    extracted = extract_pdf_metadata(staged_path, max_isbn_candidates=5)
+                    for can in extracted.get("isbns", []):
+                        if can not in candidate_isbns:
+                            candidate_isbns.append(can)
+                except Exception:
+                    pass
+
+                duplicate = None
+                matched_isbn = None
+                for candidate in candidate_isbns:
+                    duplicate = calibre_service.find_duplicate_by_isbn(candidate, format_name="PDF")
+                    if duplicate:
+                        matched_isbn = duplicate.get("isbn") or candidate
+                        break
+
+                if duplicate:
+                    for p in staged_paths:
+                        try:
+                            p.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "code": "DUPLICATE_ISBN_FORMAT",
+                            "isbn": matched_isbn,
+                            "format": "PDF",
+                            "existing_title": duplicate.get("title"),
+                            "existing_id": duplicate.get("id"),
+                            "message": f"A book with ISBN {matched_isbn} in PDF format already exists: '{duplicate.get('title')}'.",
+                        },
+                    )
         await asyncio.to_thread(
             database.create_upload_jobs,
             job_records,
         )
         records_created = True
         await ingestion_queue.enqueue_many(job_records)
+    except HTTPException:
+        raise
     except Exception as error:
         for staged_path in staged_paths:
             try:

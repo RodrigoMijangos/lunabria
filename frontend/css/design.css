@@ -715,3 +715,393 @@
   width: 14px;
   height: 14px;
 }
+
+.upload-queue-progress-track {
+  width: 100%;
+  height: 4px;
+  background-color: var(--border-color);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.upload-queue-progress-fill {
+  height: 100%;
+  background-color: var(--accent-color);
+  border-radius: 999px;
+  transition: width 0.15s ease;
+}
+
+.upload-queue-progress-fill.is-indeterminate {
+  width: 40%;
+  animation: upload-indeterminate-bar 1.5s infinite ease-in-out;
+}
+
+.upload-background-dock {
+  position: fixed;
+  bottom: max(20px, env(safe-area-inset-bottom, 20px));
+  right: max(20px, env(safe-area-inset-right, 20px));
+  z-index: 9500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 280px;
+  max-width: 360px;
+  padding: 12px 14px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.upload-background-dock:hover {
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+}
+
+.upload-dock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.upload-dock-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.upload-dock-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-dock-dismiss-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.upload-dock-dismiss-btn:hover {
+  color: var(--text-primary);
+}
+
+.upload-dock-progress-track {
+  width: 100%;
+  height: 4px;
+  background-color: var(--border-color);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.upload-dock-progress-fill {
+  height: 100%;
+  background-color: var(--accent-color);
+  border-radius: 999px;
+  transition: width 0.15s ease;
+}
+
+.upload-dock-progress-fill.is-indeterminate {
+  width: 40%;
+  animation: upload-indeterminate-bar 1.5s infinite ease-in-out;
+}
+
+.upload-btn-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  background-color: var(--accent-color);
+  border-radius: 999px;
+  line-height: 1;
+}
+
+.upload-bg-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-right: auto;
+  align-self: center;
+  line-height: 1.3;
+}
+
+@keyframes upload-indeterminate-bar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(150%); }
+  100% { transform: translateX(300%); }
+}
+
+/* ================= Modal: Virtual Library Book Covers Grid ================= */
+#vl-modal .modal-dialog {
+  max-width: 680px;
+}
+
+#vl-manual-list,
+#vl-query-preview-list {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) !important;
+  gap: 12px !important;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px !important;
+  background-color: var(--bg-surface-secondary, rgba(0, 0, 0, 0.15));
+}
+
+.vl-book-item {
+  position: relative;
+  display: flex !important;
+  flex-direction: column !important;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color) !important;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0 !important;
+  user-select: none;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.vl-book-item:hover {
+  border-color: var(--accent-color) !important;
+  transform: translateY(-2px);
+}
+
+.vl-book-item.is-selected {
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 0 2px var(--accent-color), 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.vl-book-item input[type="checkbox"] {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 4;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+  margin: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.vl-book-cover-wrap {
+  width: 100%;
+  aspect-ratio: 1 / 1.45;
+  background-color: var(--bg-secondary);
+  overflow: hidden;
+  order: 1;
+  position: relative;
+}
+
+.vl-book-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.vl-book-item:hover .vl-book-cover {
+  transform: scale(1.03);
+}
+
+.vl-book-title-author {
+  order: 2;
+  padding: 6px 8px 8px;
+  font-size: 0.74rem !important;
+  line-height: 1.3;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.vl-book-preview-item {
+  cursor: default;
+}
+
+.vl-book-preview-item:hover {
+  transform: none;
+  border-color: var(--border-color) !important;
+}
+
+#vl-manual-list .btn {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* ================= Reader Header: Desktop Centered Title ================= */
+@media (min-width: 901px) {
+  .reader-title-bar {
+    position: absolute;
+    left: 50%;
+    top: 8px;
+    height: 34px;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    max-width: min(560px, calc(100% - 240px));
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  .hud-right-controls {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}
+
+/* ================= Search Bar Stabilization ================= */
+.search-box.has-query {
+  max-width: 420px;
+}
+/* ================= Modal: Modern Upload UI Refinements (Option 1) ================= */
+.upload-modal-dialog {
+  max-width: 580px;
+  max-height: min(90vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.upload-unified-dropzone {
+  position: relative;
+  background-color: var(--bg-surface);
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  user-select: none;
+}
+
+.upload-unified-dropzone:hover,
+.upload-unified-dropzone.drag-active {
+  border-color: var(--accent-color);
+  background-color: var(--accent-light, rgba(var(--ui-accent-rgb, 168, 82, 34), 0.05));
+  box-shadow: 0 0 0 3px rgba(var(--brand-accent-rgb, 168, 82, 34), 0.12);
+}
+
+.upload-dropzone-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.upload-dropzone-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(var(--ui-accent-rgb, 168, 82, 34), 0.12);
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.upload-dropzone-icon .ui-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.upload-dropzone-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.upload-dropzone-title {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.upload-dropzone-sub {
+  margin: 3px 0 0;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+}
+
+.upload-dropzone-browse-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.upload-dropzone-browse-btn .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.upload-queue-item {
+  display: flex;
+  flex-direction: column;
+  padding: 9px 12px;
+  gap: 6px;
+}
+
+.upload-queue-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.upload-queue-item-skipped {
+  opacity: 0.75;
+}
+
+.upload-queue-item-skipped .upload-queue-label {
+  color: #eab308;
+}
+
+@media (max-width: 540px) {
+  .upload-dropzone-content {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .upload-dropzone-browse-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

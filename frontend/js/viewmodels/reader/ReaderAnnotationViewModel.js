@@ -117,7 +117,8 @@ class ReaderAnnotationViewModel {
 
     this.renderDrawerAnnotations();
     const refreshed = this.refreshPageHighlights(pageNumber);
-    if (!refreshed && this.model.viewMode !== 'flow' && this.onPageNeedsRefresh) {
+    const isFlow = this.model.viewMode === 'flow' || this.model.viewMode === 'dual-flow';
+    if (!refreshed && !isFlow && this.onPageNeedsRefresh) {
       this.onPageNeedsRefresh(pageNumber);
     }
     if (options.showQuickPalette) {

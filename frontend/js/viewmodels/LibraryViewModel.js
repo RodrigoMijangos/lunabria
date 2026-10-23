@@ -639,7 +639,16 @@ class LibraryViewModel {
   openUploadModal() { this.uploadManager.openUploadModal(); }
   closeUploadModal() { this.uploadManager.closeUploadModal(); }
   openEditModal(book) { this.metadataManager.openEditModal(book); }
-  openVirtualLibraryModal() { this.vlManager.openVirtualLibraryModal(); }
+  openVirtualLibraryModal() {
+    const activeCollection = this.model.getActiveVirtualLibrary();
+    this.vlManager.openVirtualLibraryModal({
+      searchQuery: this.model.searchQuery || '',
+      activeVirtualLibraryId: this.model.activeVirtualLibraryId || null,
+      activeCollectionName: activeCollection?.name || '',
+      activeCollectionType: activeCollection?.type || '',
+      activeCollectionQuery: activeCollection?.query || ''
+    });
+  }
 
   bindEvents() {
     document.getElementById('theme-select')?.addEventListener('change', (e) => {
@@ -709,22 +718,47 @@ class LibraryViewModel {
     });
     const searchInput = document.getElementById('search-input');
     const searchClear = document.getElementById('search-clear-btn');
+    const searchBox = searchInput?.closest ? searchInput.closest('.search-box') : null;
+
+    const updateSearchClearVisibility = (val) => {
+      const hasVal = Boolean(val && String(val).length > 0);
+      if (searchClear) searchClear.style.display = hasVal ? 'inline-flex' : 'none';
+      if (searchBox?.classList) searchBox.classList.toggle('has-query', hasVal);
+    };
+
     if (searchInput) {
+      if (searchInput.value) {
+        updateSearchClearVisibility(searchInput.value);
+      }
       searchInput.oninput = (e) => {
         const val = e.target.value;
-        if (searchClear) searchClear.style.display = val ? 'inline-flex' : 'none';
+        updateSearchClearVisibility(val);
         this.filterBooks(val);
       };
     }
     if (searchClear) {
-      searchClear.onclick = () => {
+      const clearSearch = (e) => {
+        if (e && typeof e.preventDefault === 'function') {
+          e.preventDefault();
+        }
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation();
+        }
         if (searchInput) {
           searchInput.value = '';
-          searchClear.style.display = 'none';
+          updateSearchClearVisibility('');
           this.filterBooks('');
-          searchInput.focus();
+          if (typeof searchInput.focus === 'function') {
+            searchInput.focus();
+          }
         }
       };
+
+      if (typeof searchClear.addEventListener === 'function') {
+        searchClear.addEventListener('pointerdown', clearSearch);
+        searchClear.addEventListener('mousedown', clearSearch);
+      }
+      searchClear.onclick = clearSearch;
     }
     document.getElementById('new-vl-btn')?.addEventListener('click', () => this.openVirtualLibraryModal());
     document.getElementById('upload-btn')?.addEventListener('click', () => this.openUploadModal());

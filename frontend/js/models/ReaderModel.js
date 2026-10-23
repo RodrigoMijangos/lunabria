@@ -139,7 +139,7 @@ class ReaderModel {
   // --- View Mode State ---
   normalizeViewMode(mode) {
     const normalized = mode === 'single' ? 'paginated' : mode;
-    const validModes = ['paginated', 'flow', 'dual', 'notes'];
+    const validModes = ['paginated', 'flow', 'dual', 'dual-flow', 'notes'];
     return validModes.includes(normalized) ? normalized : 'paginated';
   }
 

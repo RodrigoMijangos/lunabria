@@ -392,5 +392,116 @@ class TestProcessUploadJobCascade(unittest.TestCase):
             mock_update.assert_not_called()
 
 
+class TestDuplicateIsbnUpload(unittest.TestCase):
+    def test_upload_rejects_duplicate_isbn_with_same_pdf_format_when_not_allowed(self):
+        class FakeQueue:
+            is_running = True
+            async def enqueue_many(self, jobs): pass
+
+        with tempfile.TemporaryDirectory(prefix="lunabria-dup-reject-") as temp_dir:
+            root = Path(temp_dir)
+            staging_root = root / "uploads"
+            database_path = root / "app_state.db"
+            queue = FakeQueue()
+
+            app = FastAPI()
+            app.include_router(router)
+
+            duplicate_result = {
+                "id": 88,
+                "title": "Clean Code",
+                "isbn": "9780132350884",
+                "formats": ["PDF"]
+            }
+
+            with (
+                patch("app.database.APP_STATE_DB_PATH", str(database_path)),
+                patch("app.routers.books.UPLOAD_DIR", staging_root),
+                patch("app.routers.books.ingestion_queue", queue),
+                patch("app.routers.books.calibre_service.find_duplicate_by_isbn", return_value=duplicate_result),
+            ):
+                database.init_db()
+                with TestClient(app) as client:
+                    response = client.post(
+                    "/api/books/upload",
+                    data={"isbns": "9780132350884", "allow_duplicate": "false"},
+                    files=[("files", ("duplicate.pdf", b"%PDF-1.7 mock", "application/pdf"))]
+                )
+                self.assertEqual(response.status_code, 409)
+                data = response.json()
+                self.assertEqual(data["detail"]["code"], "DUPLICATE_ISBN_FORMAT")
+                self.assertEqual(data["detail"]["isbn"], "9780132350884")
+                self.assertEqual(data["detail"]["format"], "PDF")
+                self.assertEqual(data["detail"]["existing_title"], "Clean Code")
+
+    def test_upload_allows_duplicate_isbn_when_allow_duplicate_is_true(self):
+        class FakeQueue:
+            is_running = True
+            async def enqueue_many(self, jobs): pass
+
+        with tempfile.TemporaryDirectory(prefix="lunabria-dup-allow-") as temp_dir:
+            root = Path(temp_dir)
+            staging_root = root / "uploads"
+            database_path = root / "app_state.db"
+            queue = FakeQueue()
+
+            app = FastAPI()
+            app.include_router(router)
+
+            duplicate_result = {
+                "id": 88,
+                "title": "Clean Code",
+                "isbn": "9780132350884",
+                "formats": ["PDF"]
+            }
+
+            with (
+                patch("app.database.APP_STATE_DB_PATH", str(database_path)),
+                patch("app.routers.books.UPLOAD_DIR", staging_root),
+                patch("app.routers.books.ingestion_queue", queue),
+                patch("app.routers.books.calibre_service.find_duplicate_by_isbn", return_value=duplicate_result),
+            ):
+                database.init_db()
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/books/upload",
+                        data={"isbns": "9780132350884", "allow_duplicate": "true"},
+                    files=[("files", ("duplicate.pdf", b"%PDF-1.7 mock", "application/pdf"))]
+                )
+                self.assertEqual(response.status_code, 202)
+                self.assertEqual(response.json()["status"], "queued")
+
+    def test_upload_allows_same_isbn_with_different_format_without_prompt(self):
+        class FakeQueue:
+            is_running = True
+            async def enqueue_many(self, jobs): pass
+
+        with tempfile.TemporaryDirectory(prefix="lunabria-dup-diff-format-") as temp_dir:
+            root = Path(temp_dir)
+            staging_root = root / "uploads"
+            database_path = root / "app_state.db"
+            queue = FakeQueue()
+
+            app = FastAPI()
+            app.include_router(router)
+
+            with (
+                patch("app.database.APP_STATE_DB_PATH", str(database_path)),
+                patch("app.routers.books.UPLOAD_DIR", staging_root),
+                patch("app.routers.books.ingestion_queue", queue),
+                patch("app.routers.books.calibre_service.find_duplicate_by_isbn", return_value=None),
+            ):
+                database.init_db()
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/books/upload",
+                        data={"isbns": "9780132350884", "allow_duplicate": "false"},
+                    files=[("files", ("epub-twin.pdf", b"%PDF-1.7 mock", "application/pdf"))]
+                )
+                self.assertEqual(response.status_code, 202)
+                self.assertEqual(response.json()["status"], "queued")
+
+
+
 if __name__ == "__main__":
     unittest.main()

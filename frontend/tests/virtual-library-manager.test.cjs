@@ -14,6 +14,7 @@ class FakeElement {
     this.style = {};
     this.classList = { toggle() {} };
     this._textContent = '';
+    this.scrollTop = 0;
   }
 
   set textContent(value) {
@@ -98,10 +99,12 @@ test('manual virtual-library selection fetches pages and searches on the server'
   const manualList = env.document.getElementById('vl-manual-list');
   let loadMore = manualList.children.find(child => child.textContent === 'Load more books');
   assert.ok(loadMore);
+  manualList.scrollTop = 150;
   await loadMore.onclick();
   assert.deepEqual(plain(requests[1][2]), { query: '', page: 2, pageSize: 24, sort: 'title' });
   assert.equal(manualList.children.filter(child => child.tagName === 'label').length, 25);
   assert.equal(manualList.children.some(child => child.textContent === 'Load more books'), false);
+  assert.equal(manualList.scrollTop, 150);
 
   const searchInput = env.document.getElementById('vl-manual-search');
   searchInput.value = 'Neural';
@@ -110,4 +113,46 @@ test('manual virtual-library selection fetches pages and searches on the server'
   assert.deepEqual(plain(requests[2][2]), { query: 'Neural', page: 1, pageSize: 24, sort: 'title' });
   assert.equal(manualList.children.filter(child => child.tagName === 'label').length, 1);
   assert.equal(manualList.children[0].children[1].textContent, 'Neural Book — Researcher');
+});
+
+test('virtual-library modal renders book covers, select-all, and previews Mode A query expressions', async () => {
+  const requests = [];
+  const sampleBooks = [
+    { id: 10, title: 'Systems Engineering', authors: 'Alice' },
+    { id: 11, title: 'Database Internals', authors: 'Bob' }
+  ];
+  const env = createEnvironment(async (...args) => {
+    requests.push(args);
+    return { books: sampleBooks, total: 2, page: 1, page_size: 24 };
+  });
+  const manager = new env.VirtualLibraryManager();
+
+  await manager.openVirtualLibraryModal({
+    searchQuery: 'Database',
+    activeVirtualLibraryId: 4,
+    activeCollectionName: 'Core Engineering'
+  });
+
+  const queryInput = env.document.getElementById('vl-query-input');
+  assert.equal(queryInput.value, 'Database');
+
+  const searchInput = env.document.getElementById('vl-manual-search');
+  assert.equal(searchInput.value, 'Database');
+
+  const manualList = env.document.getElementById('vl-manual-list');
+  assert.equal(manualList.children.filter(child => child.tagName === 'label').length, 1);
+
+  const firstCard = manualList.children[0];
+  assert.equal(firstCard.children[0].tagName, 'input');
+  assert.equal(firstCard.children[1].textContent, 'Database Internals — Bob');
+  assert.equal(firstCard.children[2].children[0].src, '/api/books/11/cover');
+
+  // Test Select All / Deselect All
+  const selectAllBtn = env.document.getElementById('vl-select-all-btn');
+  const deselectAllBtn = env.document.getElementById('vl-deselect-all-btn');
+  selectAllBtn.onclick();
+  assert.equal(manager.selectedBookIds.has(11), true);
+
+  deselectAllBtn.onclick();
+  assert.equal(manager.selectedBookIds.has(11), false);
 });

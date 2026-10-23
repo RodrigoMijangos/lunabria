@@ -66,6 +66,7 @@ const createBooksApiService = () => ({
     const formData = new FormData();
     formData.append('files', file, file.name);
     if (options.autoFetchMetadata !== undefined) formData.append('auto_fetch_metadata', options.autoFetchMetadata ? 'true' : 'false');
+    if (options.allowDuplicate !== undefined) formData.append('allow_duplicate', options.allowDuplicate ? 'true' : 'false');
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -87,7 +88,13 @@ const createBooksApiService = () => ({
           resolve(result);
           return;
         }
-        reject(new Error(result.detail || 'Error uploading book'));
+        const message = typeof result.detail === 'string'
+          ? result.detail
+          : (result.detail?.message || 'Error uploading book');
+        const error = new Error(message);
+        error.status = xhr.status;
+        error.detail = result.detail;
+        reject(error);
       };
       xhr.onerror = () => reject(new Error('Network error while uploading book'));
       xhr.ontimeout = () => reject(new Error('Upload timed out'));

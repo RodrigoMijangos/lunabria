@@ -163,11 +163,10 @@ test('SW allows slower API responses while keeping longer transfer timeout', asy
   assert.deepEqual(delays, [10000, 60000]);
 });
 
-test('SW does not apply an API timeout to book upload requests', async () => {
+test('SW does not apply an API timeout to book upload requests and leaves transfer native', async () => {
   const delays = [];
-  const response = { status: 202 };
   const { listeners } = createWorkerWorld({
-    fetch: async () => response,
+    fetch: async () => ({ status: 202 }),
     setTimeout: (_callback, delay) => {
       delays.push(delay);
       return delays.length;
@@ -179,7 +178,7 @@ test('SW does not apply an API timeout to book upload requests', async () => {
     respondWith: promise => { responsePromise = promise; }
   });
 
-  assert.equal(await responsePromise, response);
+  assert.equal(responsePromise, null);
   assert.deepEqual(delays, []);
 });
 

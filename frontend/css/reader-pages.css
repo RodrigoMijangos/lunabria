@@ -343,6 +343,17 @@
   max-width: 100%;
 }
 
+.pdf-viewport-container.dual-flow-mode {
+  display: grid; grid-template-columns: repeat(2, max-content);
+  justify-content: center; align-items: start;
+  gap: 8px 0; max-width: 100%;
+}
+.pdf-viewport-container.dual-flow-mode .pdf-page-wrapper { margin-bottom: 0; box-shadow: 0 8px 8px -2px rgba(0, 0, 0, 0.12); }
+.pdf-viewport-container.dual-flow-mode .pdf-page-wrapper:nth-child(odd) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.pdf-viewport-container.dual-flow-mode .pdf-page-wrapper:nth-child(even) { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 1px solid rgba(0, 0, 0, 0.08); }
+[data-theme="dark"] .pdf-viewport-container.dual-flow-mode .pdf-page-wrapper, [data-theme="amoled"] .pdf-viewport-container.dual-flow-mode .pdf-page-wrapper { box-shadow: 0 8px 8px -2px rgba(0, 0, 0, 0.5); }
+[data-theme="dark"] .pdf-viewport-container.dual-flow-mode .pdf-page-wrapper:nth-child(even), [data-theme="amoled"] .pdf-viewport-container.dual-flow-mode .pdf-page-wrapper:nth-child(even) { border-left-color: rgba(255, 255, 255, 0.12); }
+
 .pdf-viewport-container.flow-mode {
   flex-direction: column;
   align-items: center;
@@ -374,7 +385,7 @@
 }
 
 /* Subtle continuous stream page indicator badge */
-.pdf-viewport-container.flow-mode .pdf-page-wrapper::after {
+.pdf-viewport-container.flow-mode .pdf-page-wrapper::after, .pdf-viewport-container.dual-flow-mode .pdf-page-wrapper::after {
   content: "Page " attr(data-page);
   position: absolute;
   bottom: 8px;
@@ -410,8 +421,8 @@
   border-bottom: none;
 }
 
-[data-theme="dark"] .pdf-viewport-container.flow-mode .pdf-page-wrapper::after,
-[data-theme="amoled"] .pdf-viewport-container.flow-mode .pdf-page-wrapper::after {
+[data-theme="dark"] .pdf-viewport-container.flow-mode .pdf-page-wrapper::after, [data-theme="dark"] .pdf-viewport-container.dual-flow-mode .pdf-page-wrapper::after,
+[data-theme="amoled"] .pdf-viewport-container.flow-mode .pdf-page-wrapper::after, [data-theme="amoled"] .pdf-viewport-container.dual-flow-mode .pdf-page-wrapper::after {
   color: rgba(255, 255, 255, 0.45);
   background: rgba(30, 41, 59, 0.88);
   border-color: rgba(255, 255, 255, 0.12);

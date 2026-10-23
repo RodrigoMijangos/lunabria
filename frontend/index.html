@@ -20,8 +20,8 @@
 
   <!-- PDF.js official textLayer stylesheet -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/web/pdf_viewer.min.css">
-  <link rel="stylesheet" href="./css/style.css?v=1.0.15-annotation-export">
-  <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.3">
+  <link rel="stylesheet" href="./css/style.css?v=1.0.17">
+  <link rel="stylesheet" href="./css/mobile/mobile-reader.css?v=1.1.4">
   
   <!-- PDF.js library -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.mjs" type="module"></script>
@@ -246,6 +246,7 @@
           <option value="single">Single Page</option>
           <option value="dual">Two Pages</option>
           <option value="flow">Continuous Flow</option>
+          <option value="dual-flow">Two Pages Flow</option>
           <option value="notes">Annotations Only</option>
         </select>
         <button id="reader-draw-toggle-btn" class="hud-btn hud-btn-outline" title="Drawing Mode / Smart Pen (Shortcut: P or D)"><svg class="drawing-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg><span class="reader-draw-toggle-label">Draw</span></button>
@@ -582,12 +583,15 @@
 
   <!-- ================= MODAL: VIRTUAL LIBRARY (2 MODES) ================= -->
   <div id="vl-modal" class="modal-overlay">
-    <div class="modal-dialog">
+    <div class="modal-dialog vl-modal-dialog">
       <div class="modal-header">
-        <h3>New Virtual Library</h3>
+        <h3 style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#folder"></use></svg> New Virtual Library
+        </h3>
+        <button id="vl-close-x-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
       </div>
       <div class="form-group">
-        <label class="form-label">Collection Name:</label>
+        <label class="form-label" for="vl-name-input">Collection Name:</label>
         <input type="text" id="vl-name-input" class="input-custom" placeholder="E.g., University, Distributed Systems, etc." style="width: 100%;" />
       </div>
 
@@ -599,21 +603,40 @@
       <!-- Mode A: Calibre Query / Regex -->
       <div id="vl-section-query">
         <div class="form-group">
-          <label class="form-label">Calibre Search Expression or Regular Expression:</label>
+          <label class="form-label" for="vl-query-input">Calibre Search Expression or Regular Expression:</label>
           <input type="text" id="vl-query-input" class="input-custom" placeholder='E.g., tags:"=Systems" or not format:epub' style="width: 100%;" />
           <small style="color: var(--text-secondary); display: block; margin-top: 4px;">Use any valid Calibre search expression (tags, authors, or regex).</small>
+        </div>
+        <div id="vl-query-preview-container" style="display: none; margin-top: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong id="vl-query-preview-count" style="font-size: 0.88rem; color: var(--text-primary);">Matching books (0):</strong>
+          </div>
+          <div id="vl-query-preview-list" class="vl-books-grid" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px;"></div>
         </div>
       </div>
 
       <!-- Mode B: Manual Selection via Checkboxes -->
       <div id="vl-section-manual" style="display: none;">
         <div class="form-group">
-          <label class="form-label">Search and select books for this library:</label>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+            <label class="form-label" for="vl-manual-search" style="margin-bottom: 0;">Search and select books for this library:</label>
+            <div id="vl-manual-actions" style="display: flex; gap: 8px; align-items: center;">
+              <span id="vl-selected-count-badge" style="font-size: 0.78rem; color: var(--accent-color); font-weight: 600;">0 selected</span>
+              <button id="vl-select-all-btn" type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 2px 8px;">Select All</button>
+              <button id="vl-deselect-all-btn" type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 2px 8px;">Deselect All</button>
+            </div>
+          </div>
           <div class="manual-library-search-wrap">
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg>
             <input type="text" id="vl-manual-search" class="input-custom" placeholder="Filter list by title or author..." style="width: 100%; margin-bottom: 8px;" />
           </div>
-          <div id="vl-manual-list" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px;"></div>
+          <div id="vl-collection-filter-hint" class="vl-collection-filter-hint" style="display: none; margin-bottom: 8px; font-size: 0.8rem; color: var(--text-secondary); background: var(--bg-secondary); padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+              <input type="checkbox" id="vl-filter-by-current-collection" checked style="accent-color: var(--accent-color);" />
+              <span id="vl-current-collection-label">Filter within current collection</span>
+            </label>
+          </div>
+          <div id="vl-manual-list" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px;"></div>
         </div>
       </div>
 
@@ -634,28 +657,21 @@
         <button id="upload-close-x-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
       </div>
 
-      <!-- 2 Options: Drag & Drop + Modern Browse -->
-      <div class="upload-options-grid">
-        <!-- Option 1: Drag & Drop Area -->
-        <div id="upload-dropzone" class="upload-option-card dropzone-card" title="Click or drag files here">
-          <div class="upload-option-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#download"></use></svg></div>
-          <div class="upload-option-title">Drag and Drop</div>
-          <p class="upload-option-desc">Drag your PDF books directly from your computer's file explorer and drop them here.</p>
-          <div class="dropzone-hint">
-            <span class="pulse-dot"></span> Drop PDF files here
+      <!-- Unified Hybrid Dropzone (Option 1) -->
+      <div id="upload-dropzone" class="upload-unified-dropzone" title="Drag and drop or click to browse">
+        <input type="file" id="upload-file-input" class="visually-hidden-file-input" multiple accept=".pdf" />
+        <div class="upload-dropzone-content">
+          <div class="upload-dropzone-icon" aria-hidden="true">
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#upload"></use></svg>
           </div>
-        </div>
-
-        <!-- Option 2: Enhanced Browse -->
-        <div class="upload-option-card browse-card">
-          <div class="upload-option-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#folder"></use></svg></div>
-          <div class="upload-option-title">Browse on Computer</div>
-          <p class="upload-option-desc">Select one or multiple PDF files from your system folders.</p>
-          <button id="upload-browse-btn" type="button" class="btn btn-primary browse-trigger-btn">
-            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg> Browse Files
+          <div class="upload-dropzone-text">
+            <p class="upload-dropzone-title">Drag &amp; drop PDF files here</p>
+            <p class="upload-dropzone-sub">or browse files from your computer (batch upload supported)</p>
+          </div>
+          <button id="upload-browse-btn" type="button" class="btn btn-secondary upload-dropzone-browse-btn">
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg>
+            <span>Browse Files</span>
           </button>
-          <input type="file" id="upload-file-input" class="visually-hidden-file-input" multiple accept=".pdf" />
-          <span class="upload-format-hint">Formats: .PDF (Batch upload supported)</span>
         </div>
       </div>
 
@@ -679,7 +695,8 @@
         </small>
       </div>
 
-      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+      <div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 20px;">
+        <small id="upload-bg-hint" class="upload-bg-hint" style="display: none;">Uploads continue in the background if you close this dialog.</small>
         <button id="upload-cancel-btn" type="button" class="btn">Cancel</button>
         <button id="upload-send-btn" type="button" class="btn btn-primary" disabled>Start Import</button>
       </div>
@@ -854,7 +871,7 @@
   <script src="./js/services/http.js?v=1.0.0"></script>
   <script src="./js/services/connectivity.js?v=1.0.4"></script>
   <script src="./js/db.js?v=1.4.5"></script>
-  <script src="./js/services/books.js?v=1.0.11-async-upload"></script>
+  <script src="./js/services/books.js?v=1.0.13-upload-ux"></script>
   <script src="./js/services/virtual-libraries.js?v=1.0.8"></script>
   <script src="./js/services/metadata.js?v=1.0.8"></script>
   <script src="./js/services/progress.js?v=1.0.8"></script>
@@ -866,7 +883,7 @@
 
   <!-- MVVM Architecture: Models -->
   <script src="./js/models/ReaderNavigationMap.js?v=1.0.1-reader-jumps"></script>
-  <script src="./js/models/ReaderModel.js?v=1.3.2-annotation-export"></script>
+  <script src="./js/models/ReaderModel.js?v=1.3.3"></script>
   <script src="./js/models/LibraryModel.js?v=0.8.3-async-upload"></script>
 
   <!-- MVVM Architecture: Modular Reader Views -->
@@ -884,7 +901,7 @@
   <script src="./js/views/library/BookCardView.js?v=1.4.3"></script>
   <script src="./js/views/library/RecentReadsView.js?v=0.9.3"></script>
   <script src="./js/views/library/VirtualLibraryView.js?v=1.0.9"></script>
-  <script src="./js/views/library/UploadModalView.js?v=1.0.10-async-upload"></script>
+  <script src="./js/views/library/UploadModalView.js?v=1.0.13-upload-ux"></script>
   <script src="./js/views/ui/ToastView.js?v=1.0.0"></script>
   <script src="./js/views/LibraryViews.js?v=0.6.0"></script>
   <script src="./js/views/library/CatalogView.js?v=1.0.8"></script>
@@ -893,26 +910,26 @@
 
   <!-- MVVM Architecture: Modular Library ViewModels -->
   <script src="./js/mobile/MobilePWAInstaller.js?v=1.1.0"></script>
-  <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.10-async-upload"></script>
+  <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.13-upload-ux"></script>
   <script src="./js/viewmodels/library/BookMetadataManager.js?v=1.0.10"></script>
-  <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.1"></script>
+  <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.4-covers"></script>
   <script src="./js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/SyncSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8"></script>
-  <script src="./js/viewmodels/LibraryViewModel.js?v=1.4.12"></script>
+  <script src="./js/viewmodels/LibraryViewModel.js?v=1.4.14"></script>
 
   <!-- MVVM Architecture: Modular Reader ViewModels -->
-  <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.7"></script>
+  <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.8"></script>
   <script src="./js/views/reader/TableOfContentsView.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0"></script>
   <script src="./js/services/reader/ReaderTextTargetGeometry.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.0"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingInteractionController.js?v=1.0.1"></script>
-  <script src="./js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.0"></script>
+  <script src="./js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.1"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0"></script>
   <script src="./js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout"></script>
-  <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.3-annotation-export"></script>
+  <script src="./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.4"></script>
   <script src="./js/views/reader/LinkOverlayView.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references"></script>
   <script src="./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9"></script>
@@ -924,8 +941,8 @@
   <script src="./js/mobile/MobileHUDView.js?v=1.1.2"></script>
   <script src="./js/mobile/MobileDrawingToolbarView.js?v=1.3.0"></script>
   <script src="./js/mobile/MobileSelectionController.js?v=1.4.2"></script>
-  <script src="./js/mobile/MobileReaderController.js?v=1.3.0"></script>
-  <script src="./js/viewmodels/ReaderViewModel.js?v=1.4.5-jump-return"></script>
+  <script src="./js/mobile/MobileReaderController.js?v=1.3.1"></script>
+  <script src="./js/viewmodels/ReaderViewModel.js?v=1.4.6"></script>
 
   <!-- MVVM Architecture: Facades & Singletons -->
   <script src="./js/reader.js?v=0.6.0"></script>

@@ -118,7 +118,7 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 ### 1. Library Control Center (Home)
 - **"Continue Reading" Carousel:** Instantly resume your **10 most recently read books** with real-time progress bars, completion percentage, and current page.
 - **Adaptive Paginated Catalog:** Dynamic grid view that scales gracefully with your viewport width, supporting custom page sizes, responsive column layouts, and local cover caching.
-- **Virtual Library Switcher:** Filter your book collection on the fly without duplicating files on disk (Query/Regex mode or manual book selection).
+- **Virtual Library Switcher:** Filter your book collection without duplicating files, with cover cards, live Calibre query previews, preselected search/collection matches, and quick select/deselect controls.
 - **Batch Book Management:** Select multiple books from search results or the catalog to group them into manual virtual collections.
 - **Real-Time Live Search:** Instant keyword filtering across titles, authors, and Calibre tags.
 - **Local Cover Caching & Vector Fallback:** Book covers viewed in the library are cached locally in IndexedDB for instant retrieval and offline reuse; books without an embedded cover fall back seamlessly to an offline vector cover.
@@ -129,7 +129,7 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 ### 2. Reading Workstation & Digital Inking
 - **Universal Sub-Glyph Text Selection:** Initiate selections smoothly from page margins, paragraph padding, or between lines with edge-to-edge word expansion on double-click drag and collision-avoiding floating HUD placement.
 - **Contextual Floating Menu:** Select text to reveal quick action controls: highlight color palette, notes, and clipboard copy.
-- **Reader Navigation:** Browse a book's table of contents, follow internal PDF links and matching chapter or section references in the text, then return to your previous reading position.
+- **Reader Navigation:** Browse a book's table of contents, choose continuous one-page or two-page reading in the desktop browser, follow internal PDF links and matching chapter or section references, then return to your previous reading position.
 - **Customizable Semantic Highlight Taxonomy:** Freely configure your own colors and semantic labels (e.g., *Key Idea*, *Definition*, *Question*, *Quote*).
 - **Freehand Stylus & Digital Inking:** Draw notes, margin diagrams, underlines, and freehand highlights directly on book pages with pressure dynamics, palm rejection, and dedicated hardware settings.
 - **Slide-Out Lateral Drawer:** Chronologically lists all highlights, annotations, and notes with interactive color filtering.
@@ -146,7 +146,8 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 - **In-App Update Notification:** In-app banner alerts readers whenever an updated version of the application is available for one-click reload.
 
 ### 4. Book Ingestion & Calibre Metadata Management
-- **Asynchronous Book Ingestion:** Drag-and-drop or select files to upload with HTTP 202 background job processing, byte progress reporting, and non-blocking toast notifications.
+- **Asynchronous Book Ingestion:** Import books through a compact dropzone; uploads and Calibre processing continue in the background with live progress in a dock while you browse, search, or read.
+- **Duplicate ISBN Protection:** Get a confirmation before adding a book with an existing ISBN and format; different formats remain allowed.
 - **Automatic Metadata Priority Cascade:** Background ingestion searches online metadata using document ISBN, PDF title, then cleaned filename, while preserving uploaded details if no match is found.
 - **Calibre Metadata Editor:** Modify title, authors, tags, series, series index, and synopsis directly.
 - **Online Metadata Assistant:** Runs Calibre CLI (`fetch-ebook-metadata`) to scrape summaries and high-resolution book covers from Google Books, Open Library, Amazon, and Goodreads.
