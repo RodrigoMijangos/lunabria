@@ -157,10 +157,19 @@ class LibraryModel {
 
   // --- Upload Queue State ---
   addFilesToUploadQueue(files) {
-    const fileArray = Array.from(files);
+    const fileArray = Array.from(files || []);
+    const accepted = [];
+    const rejected = [];
+
     fileArray.forEach(file => {
-      this.uploadQueue.push({
-        id: `${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      const name = (file?.name || '').trim();
+      const isPdf = name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) {
+        rejected.push(file);
+        return;
+      }
+      const item = {
+        id: `${Date.now()}_${Math.random().toString(36).substr(2, 6)}_${Math.random().toString(36).substr(2, 4)}`,
         file: file,
         name: file.name,
         size: file.size,
@@ -168,8 +177,13 @@ class LibraryModel {
         progress: 0,
         jobId: null,
         error: null
-      });
+      };
+      this.uploadQueue.push(item);
+      accepted.push(item);
     });
+
+    this.uploadQueue.accepted = accepted;
+    this.uploadQueue.rejected = rejected;
     return this.uploadQueue;
   }
 

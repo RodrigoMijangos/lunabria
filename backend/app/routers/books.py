@@ -46,6 +46,51 @@ def _auto_fetch_metadata_enabled(form_data: Mapping[str, object], parsed_value: 
     return parsed_value
 
 
+def _check_duplicate_isbn(prepared: list, staged_paths: list) -> Optional[dict]:
+    """Inspects staged uploads for duplicate ISBNs already present in Calibre in PDF format."""
+    for job in prepared:
+        staged_path = Path(job["staging_path"])
+        candidate_isbns = []
+        if job.get("isbn"):
+            candidate_isbns.append(job.get("isbn"))
+
+        for can, _ in extract_candidate_isbns_from_text(job.get("filename") or ""):
+            if can not in candidate_isbns:
+                candidate_isbns.append(can)
+
+        try:
+            extracted = extract_pdf_metadata(staged_path, max_isbn_candidates=5)
+            for can in extracted.get("isbns", []):
+                if can not in candidate_isbns:
+                    candidate_isbns.append(can)
+        except Exception:
+            pass
+
+        duplicate = None
+        matched_isbn = None
+        for candidate in candidate_isbns:
+            duplicate = calibre_service.find_duplicate_by_isbn(candidate, format_name="PDF")
+            if duplicate:
+                matched_isbn = duplicate.get("isbn") or candidate
+                break
+
+        if duplicate:
+            for p in staged_paths:
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            return {
+                "code": "DUPLICATE_ISBN_FORMAT",
+                "isbn": matched_isbn,
+                "format": "PDF",
+                "existing_title": duplicate.get("title"),
+                "existing_id": duplicate.get("id"),
+                "message": f"A book with ISBN {matched_isbn} in PDF format already exists: '{duplicate.get('title')}'.",
+            }
+    return None
+
+
 @router.get("", response_model=PaginatedBooksResponse)
 def list_books(
     search: Optional[str] = Query(None, description="Calibre search query"),
@@ -164,49 +209,10 @@ async def upload_books(
             )
 
         if not allow_duplicate:
-            for job in prepared:
-                staged_path = Path(job["staging_path"])
-                candidate_isbns = []
-                if job.get("isbn"):
-                    candidate_isbns.append(job.get("isbn"))
+            duplicate_error = await asyncio.to_thread(_check_duplicate_isbn, prepared, staged_paths)
+            if duplicate_error:
+                raise HTTPException(status_code=409, detail=duplicate_error)
 
-                for can, _ in extract_candidate_isbns_from_text(job.get("filename") or ""):
-                    if can not in candidate_isbns:
-                        candidate_isbns.append(can)
-
-                try:
-                    extracted = extract_pdf_metadata(staged_path, max_isbn_candidates=5)
-                    for can in extracted.get("isbns", []):
-                        if can not in candidate_isbns:
-                            candidate_isbns.append(can)
-                except Exception:
-                    pass
-
-                duplicate = None
-                matched_isbn = None
-                for candidate in candidate_isbns:
-                    duplicate = calibre_service.find_duplicate_by_isbn(candidate, format_name="PDF")
-                    if duplicate:
-                        matched_isbn = duplicate.get("isbn") or candidate
-                        break
-
-                if duplicate:
-                    for p in staged_paths:
-                        try:
-                            p.unlink(missing_ok=True)
-                        except OSError:
-                            pass
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "code": "DUPLICATE_ISBN_FORMAT",
-                            "isbn": matched_isbn,
-                            "format": "PDF",
-                            "existing_title": duplicate.get("title"),
-                            "existing_id": duplicate.get("id"),
-                            "message": f"A book with ISBN {matched_isbn} in PDF format already exists: '{duplicate.get('title')}'.",
-                        },
-                    )
         await asyncio.to_thread(
             database.create_upload_jobs,
             job_records,

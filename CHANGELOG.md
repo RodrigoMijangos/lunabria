@@ -11,6 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.10.2] - 2026-10-23
+
+### Fixed
+- Dropping unsupported files into the upload area is now caught immediately, and queued uploads can be removed or cancelled at any time without locking the interface.
+- Upload progress clearly shows when a file is being staged on the server instead of stalling at 100%.
+- Upload queue distinguishes sent payloads awaiting server acceptance from active transfers, releasing transfer slots immediately for subsequent files, automatically retrying interrupted transfers, and attributing reverse proxy buffering errors clearly.
+
 ## [1.10.1] - 2026-10-23
 
 ### Fixed
@@ -536,7 +543,8 @@ Mobile PWA, responsive reader and offline capabilities.
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.1...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.2...HEAD
+[1.10.2]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.1...v1.10.2
 [1.10.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.8.0...v1.9.0

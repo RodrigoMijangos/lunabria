@@ -9,6 +9,7 @@ class BookUploadManager {
     this.isUploading = false;
     this.modal = typeof document !== 'undefined' ? document.getElementById('upload-modal') : null;
     this.activeJobs = new Map();
+    this.activeUploadXhrs = new Map();
     this.jobPollTimer = null;
     this.maxConcurrentUploads = 2;
     this.jobPollIntervalMs = 2000;
@@ -32,7 +33,6 @@ class BookUploadManager {
 
     if (dropzone && fileInput) {
       dropzone.onclick = event => {
-        if (this.isUploading) return;
         if (event.target.closest && event.target.closest('#upload-browse-btn')) return;
         fileInput.click();
       };
@@ -41,7 +41,8 @@ class BookUploadManager {
     if (fileInput) {
       fileInput.onchange = event => {
         if (event.target.files?.length) {
-          this.model.addFilesToUploadQueue(event.target.files);
+          const res = this.model.addFilesToUploadQueue(event.target.files);
+          this.handleAddedFilesResult(res);
           event.target.value = '';
           this.renderUploadQueue();
         }
@@ -64,9 +65,9 @@ class BookUploadManager {
       });
 
       dropzone.addEventListener('drop', event => {
-        if (this.isUploading) return;
         if (event.dataTransfer?.files?.length) {
-          this.model.addFilesToUploadQueue(event.dataTransfer.files);
+          const res = this.model.addFilesToUploadQueue(event.dataTransfer.files);
+          this.handleAddedFilesResult(res);
           this.renderUploadQueue();
         }
       });
@@ -100,7 +101,11 @@ class BookUploadManager {
 
     if (clearAllBtn) {
       clearAllBtn.onclick = () => {
-        if (!this.isUploading && !this.hasQueuedJobs()) {
+        if (this.isUploading) {
+          this.cancelAllUploads();
+          return;
+        }
+        if (!this.hasQueuedJobs()) {
           this.model.clearUploadQueue();
           this.renderUploadQueue();
         }
@@ -112,9 +117,52 @@ class BookUploadManager {
     this.updateBackgroundIndicator();
   }
 
+  handleAddedFilesResult(result) {
+    const rejected = result?.rejected || [];
+    const accepted = result?.accepted || [];
+    if (rejected.length > 0) {
+      if (accepted.length === 0) {
+        if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
+          ToastView.show('Solo se admiten libros en formato PDF (.pdf).', 'error');
+        }
+      } else {
+        if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
+          ToastView.show(`Se omitieron ${rejected.length} archivo(s) no compatibles: solo se admiten archivos .pdf`, 'warning');
+        }
+      }
+    }
+  }
+
+  cancelAllUploads() {
+    for (const [, xhr] of this.activeUploadXhrs.entries()) {
+      try {
+        xhr.abort();
+      } catch (_) {}
+    }
+    this.activeUploadXhrs.clear();
+
+    const queue = this.model?.uploadQueue || [];
+    for (const item of queue) {
+      if (['uploading', 'sent', 'pending'].includes(item.status)) {
+        item.status = 'cancelled';
+      }
+    }
+
+    if (this.model) {
+      this.model.uploadQueue = queue.filter(item => ['queued', 'processing', 'done'].includes(item.status));
+    }
+
+    this.isUploading = false;
+    if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
+      ToastView.show('Subidas canceladas', 'info');
+    }
+    this.renderUploadQueue();
+    this.updateBackgroundIndicator();
+  }
+
   hasQueuedJobs() {
     return (this.model?.uploadQueue || []).some(item =>
-      ['uploading', 'queued', 'processing'].includes(item.status)
+      ['uploading', 'sent', 'queued', 'processing'].includes(item.status)
     );
   }
 
@@ -155,9 +203,19 @@ class BookUploadManager {
 
     if (queueContainer) queueContainer.style.display = queue.length ? 'block' : 'none';
     if (queueCount) queueCount.textContent = `Queued files (${queue.length}):`;
-    if (clearAllBtn) clearAllBtn.disabled = this.isUploading || hasActiveItems;
-    if (fileInput) fileInput.disabled = this.isUploading;
-    if (browseBtn) browseBtn.disabled = this.isUploading;
+    if (clearAllBtn) {
+      if (this.isUploading) {
+        clearAllBtn.disabled = false;
+        clearAllBtn.textContent = 'Cancel all';
+        clearAllBtn.title = 'Cancel active and pending uploads';
+      } else {
+        clearAllBtn.disabled = hasActiveItems || queue.length === 0;
+        clearAllBtn.textContent = 'Clear list';
+        clearAllBtn.title = 'Clear queue list';
+      }
+    }
+    if (fileInput) fileInput.disabled = false;
+    if (browseBtn) browseBtn.disabled = false;
     if (cancelBtn) {
       cancelBtn.textContent = this.isUploading || hasActiveItems ? 'Continue in background' : 'Cancel';
       cancelBtn.title = this.isUploading || hasActiveItems ? 'Close dialog and continue upload in background' : 'Cancel';
@@ -171,11 +229,32 @@ class BookUploadManager {
 
     if (typeof UploadModalView !== 'undefined' && typeof UploadModalView.renderQueue === 'function') {
       UploadModalView.renderQueue(queueList, queue, (id) => {
-        if (this.isUploading) return;
         const item = queue.find(entry => entry.id === id);
-        if (!item || !['pending', 'error', 'skipped'].includes(item.status)) return;
-        this.model.removeUploadItem(id);
-        this.renderUploadQueue();
+        if (!item) return;
+
+        if (item.status === 'uploading' || item.status === 'sent') {
+          const xhr = this.activeUploadXhrs.get(id);
+          if (xhr) {
+            try {
+              xhr.abort();
+            } catch (_) {}
+          }
+          this.activeUploadXhrs.delete(id);
+          item.status = 'cancelled';
+          this.model.removeUploadItem(id);
+          if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
+            ToastView.show(`Subida cancelada: ${item.name}`, 'info');
+          }
+          this.renderUploadQueue();
+          this.updateBackgroundIndicator();
+          return;
+        }
+
+        if (['pending', 'error', 'skipped'].includes(item.status)) {
+          this.model.removeUploadItem(id);
+          this.renderUploadQueue();
+          this.updateBackgroundIndicator();
+        }
       });
     }
 
@@ -196,14 +275,27 @@ class BookUploadManager {
     if (!items.length || this.isUploading) return;
 
     this.isUploading = true;
+    for (const item of items) {
+      if (item.status === 'error') {
+        item.status = 'pending';
+        item.progress = 0;
+        item.error = null;
+        item.retried = false;
+      }
+    }
     this.renderUploadQueue();
     this.updateBackgroundIndicator();
     const autoFetchMetadata = Boolean(document.getElementById('upload-verify-toggle')?.checked);
-    let nextItemIndex = 0;
 
-    const uploadNext = async () => {
-      while (nextItemIndex < items.length) {
-        const item = items[nextItemIndex++];
+    let activeTransfers = 0;
+    const activeTasks = new Set();
+
+    const pump = () => {
+      while (activeTransfers < this.maxConcurrentUploads) {
+        const item = (this.model?.uploadQueue || []).find(entry => entry.status === 'pending');
+        if (!item) break;
+
+        activeTransfers++;
         item.status = 'uploading';
         item.progress = 0;
         item.jobId = null;
@@ -211,72 +303,142 @@ class BookUploadManager {
         this.renderUploadQueue();
         this.updateBackgroundIndicator();
 
-        try {
-          const response = await api.uploadBookWithProgress(item.file, {
-            autoFetchMetadata,
-            allowDuplicate: Boolean(item.allowDuplicate),
-            onProgress: progress => {
-              item.progress = progress;
-              const queueList = document.getElementById('upload-queue-list');
-              const updated = typeof UploadModalView?.updateItemProgress === 'function'
-                ? UploadModalView.updateItemProgress(queueList, item)
-                : false;
-              if (!updated) this.renderUploadQueue();
-              this.updateBackgroundIndicator();
+        let transferSlotFreed = false;
+        const freeTransferSlot = () => {
+          if (!transferSlotFreed) {
+            transferSlotFreed = true;
+            activeTransfers = Math.max(0, activeTransfers - 1);
+            pump();
+          }
+        };
+
+        const task = (async () => {
+          try {
+            const response = await api.uploadBookWithProgress(item.file, {
+              autoFetchMetadata,
+              allowDuplicate: Boolean(item.allowDuplicate),
+              onXhrCreated: xhr => {
+                this.activeUploadXhrs.set(item.id, xhr);
+              },
+              onProgress: progress => {
+                if (item.status === 'cancelled') return;
+                item.progress = progress;
+                if (progress >= 100 && item.status === 'uploading') {
+                  item.status = 'sent';
+                  freeTransferSlot();
+                }
+                const queueList = document.getElementById('upload-queue-list');
+                const updated = typeof UploadModalView?.updateItemProgress === 'function'
+                  ? UploadModalView.updateItemProgress(queueList, item)
+                  : false;
+                if (!updated) this.renderUploadQueue();
+                this.updateBackgroundIndicator();
+              },
+              onSent: () => {
+                if (item.status === 'cancelled') return;
+                item.status = 'sent';
+                item.progress = 100;
+                freeTransferSlot();
+                const queueList = document.getElementById('upload-queue-list');
+                const updated = typeof UploadModalView?.updateItemProgress === 'function'
+                  ? UploadModalView.updateItemProgress(queueList, item)
+                  : false;
+                if (!updated) this.renderUploadQueue();
+                this.updateBackgroundIndicator();
+              }
+            });
+
+            this.activeUploadXhrs.delete(item.id);
+            freeTransferSlot();
+
+            const job = Array.isArray(response.jobs) ? response.jobs[0] : null;
+            const jobId = response.job_id || job?.job_id;
+            if (!jobId) throw new Error('Server did not return an upload job ID');
+
+            item.jobId = jobId;
+            item.status = job?.status === 'processing' ? 'processing' : 'queued';
+            item.progress = 100;
+            this.activeJobs.set(jobId, { item, filename: item.name });
+            this.scheduleJobPolling();
+            this.renderUploadQueue();
+            this.updateBackgroundIndicator();
+          } catch (error) {
+            this.activeUploadXhrs.delete(item.id);
+            freeTransferSlot();
+
+            if (error?.message === 'Upload was cancelled' || item.status === 'cancelled') {
+              return;
             }
-          });
-          const job = Array.isArray(response.jobs) ? response.jobs[0] : null;
-          const jobId = response.job_id || job?.job_id;
-          if (!jobId) throw new Error('Server did not return an upload job ID');
 
-          item.jobId = jobId;
-          item.status = job?.status === 'processing' ? 'processing' : 'queued';
-          item.progress = 100;
-          this.activeJobs.set(jobId, { item, filename: item.name });
-          this.scheduleJobPolling();
-          this.renderUploadQueue();
-          this.updateBackgroundIndicator();
-        } catch (error) {
-          const detail = error?.detail;
-          if (detail && detail.code === 'DUPLICATE_ISBN_FORMAT') {
-            const confirmMsg = `Ya existe un libro con el mismo ISBN (${detail.isbn}) y formato (${detail.format}):\n«${detail.existing_title}»\n\n¿Deseas añadirlo de todas maneras?`;
-            const allow = (typeof window !== 'undefined' && typeof window.confirm === 'function')
-              ? window.confirm(confirmMsg)
-              : false;
+            const detail = error?.detail;
+            if (detail && detail.code === 'DUPLICATE_ISBN_FORMAT') {
+              const confirmMsg = `Ya existe un libro con el mismo ISBN (${detail.isbn}) y formato (${detail.format}):\n«${detail.existing_title}»\n\n¿Deseas añadirlo de todas maneras?`;
+              const allow = (typeof window !== 'undefined' && typeof window.confirm === 'function')
+                ? window.confirm(confirmMsg)
+                : false;
 
-            if (allow) {
-              item.allowDuplicate = true;
-              item.status = 'uploading';
+              if (allow) {
+                item.allowDuplicate = true;
+                item.status = 'pending';
+                item.progress = 0;
+                item.error = null;
+                pump();
+                return;
+              } else {
+                item.status = 'skipped';
+                item.error = 'Omitido: ISBN y formato duplicados';
+                if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
+                  ToastView.show(`Se omitió ${item.name} por duplicado de ISBN`, 'warning');
+                }
+                this.renderUploadQueue();
+                this.updateBackgroundIndicator();
+                return;
+              }
+            }
+
+            const isRetryable = !item.retried && !item.allowDuplicate && error?.status !== 413;
+            if (isRetryable) {
+              item.retried = true;
+              item.status = 'pending';
               item.progress = 0;
               item.error = null;
-              nextItemIndex--;
-              continue;
-            } else {
-              item.status = 'skipped';
-              item.error = 'Omitido: ISBN y formato duplicados';
               if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
-                ToastView.show(`Se omitió ${item.name} por duplicado de ISBN`, 'warning');
+                ToastView.show(`Reintentando "${item.name}" tras fallo de transferencia o proxy...`, 'warning');
               }
               this.renderUploadQueue();
               this.updateBackgroundIndicator();
-              continue;
+              pump();
+              return;
             }
-          }
 
-          item.status = 'error';
-          item.error = error.message || 'Upload failed';
-          if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
-            ToastView.show(`Could not upload ${item.name}: ${item.error}`, 'error');
+            item.status = 'error';
+            item.error = error.message || 'Upload failed';
+            if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
+              ToastView.show(`Could not upload ${item.name}: ${item.error}`, 'error');
+            }
+            this.renderUploadQueue();
+            this.updateBackgroundIndicator();
           }
-          this.renderUploadQueue();
-          this.updateBackgroundIndicator();
-        }
+        })();
+
+        activeTasks.add(task);
+        task.finally(() => {
+          activeTasks.delete(task);
+          pump();
+        });
       }
     };
 
     try {
-      const workerCount = Math.min(this.maxConcurrentUploads, items.length);
-      await Promise.all(Array.from({ length: workerCount }, () => uploadNext()));
+      pump();
+      while (activeTasks.size > 0 || (this.model?.uploadQueue || []).some(entry => entry.status === 'pending')) {
+        if (activeTasks.size === 0) {
+          pump();
+          if (activeTasks.size === 0) break;
+        }
+        await Promise.race(Array.from(activeTasks));
+      }
+
       const acceptedCount = items.filter(item => ['queued', 'processing', 'done'].includes(item.status)).length;
       if (acceptedCount) {
         if (typeof ToastView !== 'undefined' && typeof ToastView.show === 'function') {
@@ -284,6 +446,7 @@ class BookUploadManager {
         }
       }
     } finally {
+      this.activeUploadXhrs.clear();
       this.isUploading = false;
       this.renderUploadQueue();
       this.updateBackgroundIndicator();
@@ -378,7 +541,7 @@ class BookUploadManager {
       setTimeout(() => {
         this.justCompletedTimestamp = null;
         this.updateBackgroundIndicator();
-      }, 3500);
+      }, 5000);
     }
 
     this.renderUploadQueue();
@@ -402,7 +565,7 @@ class BookUploadManager {
     }
 
     const queue = this.model?.uploadQueue || [];
-    const uploadingItems = queue.filter(item => item.status === 'uploading');
+    const uploadingItems = queue.filter(item => ['uploading', 'sent'].includes(item.status));
     const processingItems = queue.filter(item => ['queued', 'processing'].includes(item.status));
     const isModalOpen = Boolean(this.modal?.classList?.contains?.('open'));
     const hasActiveBackground = uploadingItems.length > 0 || processingItems.length > 0 || this.activeJobs.size > 0;
@@ -450,9 +613,17 @@ class BookUploadManager {
     if (uploadingItems.length > 0) {
       const activeItem = uploadingItems[0];
       percent = activeItem.progress || 0;
-      titleText = uploadingItems.length === 1
-        ? `Uploading: ${activeItem.name} (${percent}%)`
-        : `Uploading ${uploadingItems.length} books (${percent}%)`;
+      const isStaging = percent >= 100 || activeItem.status === 'sent';
+      if (isStaging) {
+        titleText = uploadingItems.length === 1
+          ? `Staging: ${activeItem.name}...`
+          : `Staging ${uploadingItems.length} books on server...`;
+        isProcessing = true;
+      } else {
+        titleText = uploadingItems.length === 1
+          ? `Uploading: ${activeItem.name} (${percent}%)`
+          : `Uploading ${uploadingItems.length} books (${percent}%)`;
+      }
     } else if (processingItems.length > 0 || this.activeJobs.size > 0) {
       const count = Math.max(processingItems.length, this.activeJobs.size);
       titleText = count === 1
