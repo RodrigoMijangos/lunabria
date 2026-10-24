@@ -207,8 +207,31 @@ class ReaderToolbarManager {
     this.exportEndPageInput = document.getElementById('export-end-page-input');
     this.exportStatus = document.getElementById('export-status');
     this.exportSelectionCount = document.getElementById('export-selection-count');
+    this.exportSectionTrigger = document.getElementById('export-section-trigger');
+    this.exportSectionMenu = document.getElementById('export-section-menu');
+    this.exportSectionPicker = document.getElementById('export-section-picker');
     this.exportBusy = false;
     this.exportSectionsBookId = null;
+
+    this.exportSectionTrigger?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isExpanded = this.exportSectionTrigger.getAttribute('aria-expanded') === 'true';
+      this.toggleExportSectionMenu(!isExpanded);
+    });
+
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      document.addEventListener('click', (e) => {
+        if (!this.exportSectionPicker?.contains(e.target)) {
+          this.toggleExportSectionMenu(false);
+        }
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.exportSectionPicker?.classList?.contains('is-open')) {
+          this.toggleExportSectionMenu(false);
+          this.exportSectionTrigger?.focus();
+        }
+      });
+    }
 
     document.getElementById('export-clear-selection-btn')?.addEventListener('click', () => {
       this.model.clearAnnotationExportSelection?.();
@@ -232,8 +255,14 @@ class ReaderToolbarManager {
       if (this.exportScopeSelect.value === 'section') this.loadExportSections();
     });
     for (const input of [this.exportSectionSelect, this.exportPageInput, this.exportStartPageInput, this.exportEndPageInput]) {
-      input?.addEventListener('input', () => this.updateExportButtonState());
-      input?.addEventListener('change', () => this.updateExportButtonState());
+      input?.addEventListener('input', () => {
+        this.updateExportButtonState();
+        if (input === this.exportSectionSelect) this.updateExportSectionBadge();
+      });
+      input?.addEventListener('change', () => {
+        this.updateExportButtonState();
+        if (input === this.exportSectionSelect) this.updateExportSectionBadge();
+      });
     }
 
     const updateExportServerState = () => {
@@ -274,6 +303,12 @@ class ReaderToolbarManager {
     };
     for (const [name, element] of Object.entries(fields)) {
       if (element) element.hidden = scope !== name;
+    }
+    if (scope !== 'section') {
+      const badge = document.getElementById('export-section-badge');
+      if (badge) badge.hidden = true;
+    } else {
+      this.updateExportSectionBadge();
     }
 
     const currentPage = Number(this.model.currentPage) || 1;
@@ -322,12 +357,21 @@ class ReaderToolbarManager {
     if (this.exportStatus) this.exportStatus.textContent = message;
   }
 
+  toggleExportSectionMenu(open) {
+    if (!this.exportSectionMenu || !this.exportSectionTrigger) return;
+    this.exportSectionMenu.hidden = !open;
+    this.exportSectionTrigger.setAttribute('aria-expanded', String(open));
+    this.exportSectionPicker?.classList?.toggle?.('is-open', open);
+  }
+
   async loadExportSections() {
     const bookId = Number(this.model.bookId);
     if (!bookId || !this.exportSectionSelect || this.exportSectionsBookId === bookId) return;
     this.exportSectionsBookId = bookId;
     this.exportSectionSelect.disabled = true;
+    if (this.exportSectionTrigger) this.exportSectionTrigger.disabled = true;
     this.exportSectionSelect.replaceChildren();
+    if (this.exportSectionMenu) this.exportSectionMenu.replaceChildren();
     const loadingOption = document.createElement('option');
     loadingOption.value = '';
     loadingOption.textContent = 'Loading chapters…';
@@ -341,36 +385,171 @@ class ReaderToolbarManager {
       const result = await api.getAnnotationExportSections(bookId);
       if (Number(this.model.bookId) !== bookId) return;
 
+      this.exportSections = Array.isArray(result?.sections) ? result.sections : [];
       this.exportSectionSelect.replaceChildren();
+      if (this.exportSectionMenu) this.exportSectionMenu.replaceChildren();
+
       const placeholder = document.createElement('option');
       placeholder.value = '';
       placeholder.textContent = 'Choose a chapter or section';
       this.exportSectionSelect.appendChild(placeholder);
-      for (const section of result.sections) {
+
+      const minLevel = this.exportSections.reduce((min, s) => {
+        const lvl = Number.isInteger(s.level) ? s.level : 1;
+        return lvl < min ? lvl : min;
+      }, Infinity);
+      const baseLevel = Number.isFinite(minLevel) ? minLevel : 1;
+
+      for (const section of this.exportSections) {
+        const rawLevel = Number.isInteger(section.level) ? section.level : baseLevel;
+        const level = Math.max(0, rawLevel - baseLevel);
         const option = document.createElement('option');
         option.value = String(section.index);
-        option.textContent = `${section.title} (pages ${section.page_start}–${section.page_end})`;
+        option.setAttribute('data-level', String(level));
+
+        const pageLabel = `(pages ${section.page_start}–${section.page_end})`;
+        let indentPrefix = '';
+        if (level === 0) {
+          indentPrefix = '';
+        } else if (level === 1) {
+          indentPrefix = '    - ';
+        } else if (level === 2) {
+          indentPrefix = '        • ';
+        } else {
+          indentPrefix = '  '.repeat(level + 1) + '– ';
+        }
+
+        option.textContent = `${indentPrefix}${section.title} ${pageLabel}`;
         this.exportSectionSelect.appendChild(option);
+
+        if (this.exportSectionMenu) {
+          const itemBtn = document.createElement('button');
+          itemBtn.type = 'button';
+          const clampedLevel = Math.min(level, 5);
+          itemBtn.className = `export-section-item export-section-level-${clampedLevel} ${level === 0 ? 'is-chapter' : (level === 1 ? 'is-section' : 'is-subsection')}`;
+          itemBtn.setAttribute('data-index', String(section.index));
+          itemBtn.style.paddingLeft = `${10 + clampedLevel * 14}px`;
+
+          const iconSymbol = level === 0 ? 'book-open' : (level === 1 ? 'toc' : 'page');
+          itemBtn.innerHTML = `
+            <span class="export-section-item-content">
+              <svg class="ui-icon export-section-item-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#${iconSymbol}"></use></svg>
+              <span class="export-section-item-title">${section.title}</span>
+            </span>
+            <span class="export-section-item-badge">pp. ${section.page_start}–${section.page_end}</span>
+          `;
+
+          itemBtn.addEventListener('click', () => {
+            if (this.exportSectionSelect) {
+              this.exportSectionSelect.value = String(section.index);
+              this.exportSectionSelect.dispatchEvent(new Event('change', { bubbles: true }));
+              this.exportSectionSelect.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            this.toggleExportSectionMenu(false);
+            this.exportSectionTrigger?.focus();
+          });
+
+          this.exportSectionMenu.appendChild(itemBtn);
+        }
       }
-      this.exportSectionSelect.disabled = result.sections.length === 0;
+
+      const hasSections = this.exportSections.length > 0;
+      this.exportSectionSelect.disabled = !hasSections;
+      if (this.exportSectionTrigger) this.exportSectionTrigger.disabled = !hasSections;
+
       if (result.total_pages > 0) {
         for (const input of [this.exportPageInput, this.exportStartPageInput, this.exportEndPageInput]) {
           if (input) input.max = String(result.total_pages);
         }
       }
-      if (result.sections.length === 0) {
+      if (!hasSections) {
         this.setExportStatus('No chapter list is available for this book. Choose a page or range instead.');
       }
+      this.updateExportSectionBadge();
     } catch (error) {
+      this.exportSections = [];
       this.exportSectionSelect.replaceChildren();
+      if (this.exportSectionMenu) this.exportSectionMenu.replaceChildren();
       const unavailableOption = document.createElement('option');
       unavailableOption.value = '';
       unavailableOption.textContent = 'Chapters unavailable';
       this.exportSectionSelect.appendChild(unavailableOption);
       this.exportSectionSelect.disabled = true;
+      if (this.exportSectionTrigger) this.exportSectionTrigger.disabled = true;
       this.setExportStatus(error.message || 'Could not load chapters. Choose a page or range instead.');
+      this.updateExportSectionBadge();
     }
     this.updateExportButtonState();
+  }
+
+  updateExportSectionBadge() {
+    const badge = document.getElementById('export-section-badge');
+    const triggerText = document.getElementById('export-section-trigger-text');
+    const triggerIcon = this.exportSectionTrigger?.querySelector('.export-section-trigger-icon');
+
+    const selectedIndex = this.exportSectionSelect?.value;
+    if (!selectedIndex || !Array.isArray(this.exportSections) || this.exportSections.length === 0) {
+      if (badge) {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.className = 'export-section-badge';
+      }
+      if (triggerText) triggerText.textContent = 'Choose a chapter or section';
+      if (triggerIcon) triggerIcon.innerHTML = '<use href="./icons.svg#book-open"></use>';
+      if (this.exportSectionMenu) {
+        this.exportSectionMenu.querySelectorAll('.export-section-item').forEach(item => {
+          item.classList.remove('is-selected');
+        });
+      }
+      return;
+    }
+
+    const section = this.exportSections.find(s => String(s.index) === String(selectedIndex));
+    if (!section) {
+      if (badge) {
+        badge.hidden = true;
+        badge.textContent = '';
+        badge.className = 'export-section-badge';
+      }
+      if (triggerText) triggerText.textContent = 'Choose a chapter or section';
+      return;
+    }
+
+    const minLevel = this.exportSections.reduce((min, s) => {
+      const lvl = Number.isInteger(s.level) ? s.level : 1;
+      return lvl < min ? lvl : min;
+    }, Infinity);
+    const baseLevel = Number.isFinite(minLevel) ? minLevel : 1;
+    const rawLevel = Number.isInteger(section.level) ? section.level : baseLevel;
+    const level = Math.max(0, rawLevel - baseLevel);
+
+    const iconSymbol = level === 0 ? 'book-open' : (level === 1 ? 'toc' : 'page');
+    const typeLabel = level === 0 ? 'Chapter' : (level === 1 ? 'Section' : 'Subsection');
+
+    if (triggerText) {
+      triggerText.textContent = `${section.title} (pp. ${section.page_start}–${section.page_end})`;
+    }
+    if (triggerIcon) {
+      triggerIcon.innerHTML = `<use href="./icons.svg#${iconSymbol}"></use>`;
+    }
+
+    if (this.exportSectionMenu) {
+      this.exportSectionMenu.querySelectorAll('.export-section-item').forEach(item => {
+        const isSelected = item.getAttribute('data-index') === String(section.index);
+        item.classList.toggle('is-selected', isSelected);
+      });
+    }
+
+    if (badge) {
+      badge.hidden = false;
+      badge.className = `export-section-badge ${level === 0 ? 'is-chapter' : (level === 1 ? 'is-section' : 'is-subsection')}`;
+      badge.innerHTML = `
+        <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#${iconSymbol}"></use></svg>
+        <span class="export-badge-tag">${typeLabel}:</span>
+        <span class="export-badge-title">${section.title}</span>
+        <span class="export-badge-pages">Pages ${section.page_start}–${section.page_end}</span>
+      `;
+    }
   }
 
   buildExportOptions() {

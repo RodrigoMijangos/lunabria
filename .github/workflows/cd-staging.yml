@@ -50,7 +50,9 @@ jobs:
           tar --exclude='./.git' \
               --exclude='./backend/.venv' \
               --exclude='./backend/__pycache__' \
-              -czvf staging-dist/lunabria-staging-bundle.tar.gz .
+              --exclude='./staging-dist' \
+              -czvf /tmp/lunabria-staging-bundle.tar.gz .
+          mv /tmp/lunabria-staging-bundle.tar.gz staging-dist/lunabria-staging-bundle.tar.gz
           ls -lh staging-dist/lunabria-staging-bundle.tar.gz
 
       - name: Upload Staging Artifact

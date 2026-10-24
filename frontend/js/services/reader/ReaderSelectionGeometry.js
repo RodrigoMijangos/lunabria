@@ -1,5 +1,30 @@
 /** Numeric selection geometry only: no DOM, reader state, persistence or scheduling. */
 class ReaderSelectionGeometry {
+  /**
+   * Vertical padding/slack in PDF points applied to line selection bounds.
+   * Default is 1.2 to preserve backward-compatible selection padding in line rect fixtures
+   * and avoid clipping ascenders/descenders in selection calculations.
+   */
+  static VERTICAL_SELECTION_SLACK_PT = 1.2;
+
+  /**
+   * Computes the vertical bounds (y0, y1) for a line selection in PDF points,
+   * applying the configured vertical slack.
+   *
+   * @param {number} top - Top coordinate of the typographic line in PDF points.
+   * @param {number} bottom - Bottom coordinate of the typographic line in PDF points.
+   * @param {number} [slackPt=ReaderSelectionGeometry.VERTICAL_SELECTION_SLACK_PT] - Optional vertical padding in PDF points.
+   * @returns {{ y0: number, y1: number }} Vertical bounds clamped to >= 0.
+   */
+  static calculateLineVerticalBounds(top, bottom, slackPt = ReaderSelectionGeometry.VERTICAL_SELECTION_SLACK_PT) {
+    const y0 = Math.max(0, top - slackPt);
+    const y1 = bottom + slackPt;
+    return {
+      y0: Math.round(y0 * 100) / 100,
+      y1: Math.round(y1 * 100) / 100
+    };
+  }
+
   static lineMatchScore(cr, sr, midY) {
     const vOverlap = Math.min(cr.bottom, sr.bottom) - Math.max(cr.top, sr.top);
     const vMatch = vOverlap > 0 || (midY >= sr.top - 6 && midY <= sr.bottom + 6);
@@ -20,14 +45,14 @@ class ReaderSelectionGeometry {
 
       const x0 = Math.max(lineX0, Math.min(lineX1, selLeft));
       const x1 = Math.min(lineX1, Math.max(lineX0, selRight));
-      const y0 = Math.max(0, lineY0 - 1.2);
-      const y1 = lineY1 + 1.2;
+
+      const vBounds = ReaderSelectionGeometry.calculateLineVerticalBounds(lineY0, lineY1);
 
       return {
         x0: Math.round(x0 * 100) / 100,
-        y0: Math.round(y0 * 100) / 100,
+        y0: vBounds.y0,
         x1: Math.round(x1 * 100) / 100,
-        y1: Math.round(y1 * 100) / 100
+        y1: vBounds.y1
       };
     } else {
       const x0 = (cr.left - pageRect.left) / currentScale;
@@ -69,11 +94,13 @@ class ReaderSelectionGeometry {
     const x1 = wx0 + width * f1;
     if (!(x1 > x0)) return null;
 
+    const vBounds = ReaderSelectionGeometry.calculateLineVerticalBounds(top, bottom);
+
     return {
       x0: Math.round(x0 * 100) / 100,
-      y0: Math.round(Math.max(0, top - 1.2) * 100) / 100,
+      y0: vBounds.y0,
       x1: Math.round(x1 * 100) / 100,
-      y1: Math.round((bottom + 1.2) * 100) / 100
+      y1: vBounds.y1
     };
   }
 
@@ -102,4 +129,8 @@ class ReaderSelectionGeometry {
     const opensBelow = bounds.top < paletteBounds.height + 16;
     return { left, top: opensBelow ? bounds.bottom : bounds.top - 8, opensBelow };
   }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { ReaderSelectionGeometry };
 }

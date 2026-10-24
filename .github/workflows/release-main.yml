@@ -50,7 +50,9 @@ jobs:
           tar --exclude='./.git' \
               --exclude='./backend/.venv' \
               --exclude='./backend/__pycache__' \
-              -czvf release-dist/lunabria-production-release.tar.gz .
+              --exclude='./release-dist' \
+              -czvf /tmp/lunabria-production-release.tar.gz .
+          mv /tmp/lunabria-production-release.tar.gz release-dist/lunabria-production-release.tar.gz
           ls -lh release-dist/lunabria-production-release.tar.gz
 
       - name: Upload Production Artifact

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lunabria-v1.10.2';
+const CACHE_NAME = 'lunabria-v1.11.0';
 const COVER_CACHE_NAME = 'lunabria-covers-v1';
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   'https://cdn.jsdelivr.net',
@@ -16,7 +16,7 @@ const STATIC_ASSETS = [
   './icons/maskable-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
-  './css/style.css?v=1.0.17',
+  './css/style.css?v=1.0.18',
   './css/mobile/mobile-reader.css?v=1.1.4',
   './js/services/http.js?v=1.0.0',
   './js/services/connectivity.js?v=1.0.4',
@@ -35,7 +35,7 @@ const STATIC_ASSETS = [
   './js/models/LibraryModel.js?v=0.8.4-upload-resilience',
   './js/views/reader/PDFPageView.js?v=0.6.2',
   './js/views/reader/TextLayerView.js?v=1.0.11-cross-references',
-  './js/views/reader/HighlightOverlayView.js?v=1.3.0',
+  './js/views/reader/HighlightOverlayView.js?v=1.4.0',
   './js/views/reader/DrawingCanvasView.js?v=0.6.0',
   './js/views/reader/ReaderHUDView.js?v=0.6.22-jump-breadcrumb',
   './js/views/reader/ReaderSelectionLoupeView.js?v=0.6.8',
@@ -59,7 +59,7 @@ const STATIC_ASSETS = [
   './js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8',
   './js/viewmodels/LibraryViewModel.js?v=1.4.14',
   './js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.8',
-  './js/views/reader/TableOfContentsView.js?v=1.0.0',
+  './js/views/reader/TableOfContentsView.js?v=1.1.0',
   './js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0',
   './js/services/reader/ReaderTextTargetGeometry.js?v=1.0.0',
   './js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.0',
@@ -67,12 +67,12 @@ const STATIC_ASSETS = [
   './js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.1',
   './js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0',
   './js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0',
-  './js/services/reader/ReaderSelectionGeometry.js?v=1.0.10-selection-layout',
+  './js/services/reader/ReaderSelectionGeometry.js?v=1.1.0',
   './js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.4',
   './js/views/reader/LinkOverlayView.js?v=1.0.0',
   './js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references',
   './js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9',
-  './js/viewmodels/reader/ReaderToolbarManager.js?v=1.3.4-annotation-export',
+  './js/viewmodels/reader/ReaderToolbarManager.js?v=1.4.0',
   './js/services/reader/ReaderOfflineService.js?v=1.0.9',
   './js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0',
   './js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.5-reader-jumps',

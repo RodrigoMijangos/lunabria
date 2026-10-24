@@ -259,3 +259,9 @@ test('mobile-reader.css defines column layout fallback for dual-flow-mode', () =
   const css = fs.readFileSync(path.join(frontendDir, 'css/mobile/mobile-reader.css'), 'utf8');
   assert.match(css, /body\.mobile-reader-active\s+\.pdf-viewport-container\.dual-flow-mode\s*\{[^}]*flex-direction:\s*column\s*!important/);
 });
+
+test('design.css defines viewport zoom and lateral scroll safeguards for dual-flow-mode and dual-mode', () => {
+  const css = fs.readFileSync(path.join(frontendDir, 'css/design.css'), 'utf8');
+  assert.match(css, /\.pdf-viewport-container\.dual-flow-mode,\s*\.pdf-viewport-container\.dual-mode\s*\{[^}]*width:\s*max-content/);
+  assert.match(css, /\.pdf-viewport-container\.dual-flow-mode,\s*\.pdf-viewport-container\.dual-mode\s*\{[^}]*max-width:\s*none/);
+});

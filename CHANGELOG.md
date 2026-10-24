@@ -11,6 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-24
+
+### Added
+- Visual hierarchy and distinctive styling for chapters, sections, and subsections in the table of contents and in the notes export chapter selector.
+
+### Changed
+- Slimmer highlight rendering vertically centered across text lines.
+
+### Fixed
+- Zooming in during continuous two-page reading no longer restricts lateral scrolling or traps the view in the center of the spread.
+
 ## [1.10.2] - 2026-10-23
 
 ### Fixed
@@ -543,7 +554,8 @@ Mobile PWA, responsive reader and offline capabilities.
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.2...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.2...v1.11.0
 [1.10.2]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.1...v1.10.2
 [1.10.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.9.0...v1.10.0

@@ -111,9 +111,14 @@ class TableOfContentsView {
       const currentLabel = document.createElement('span');
       const pageLabel = document.createElement('span');
 
+      const clampedLevel = Math.min(level, 5);
+      item.className = `toc-item toc-item-level-${clampedLevel}`;
+      item.setAttribute('data-level', String(level));
+
       button.type = 'button';
-      button.classList.add('toc-entry');
-      button.style.paddingInlineStart = `${12 + Math.min(level, 5) * 12}px`;
+      button.classList.add('toc-entry', `toc-level-${clampedLevel}`);
+      button.setAttribute('data-level', String(level));
+      button.style.paddingInlineStart = `${12 + clampedLevel * 12}px`;
       button.setAttribute('aria-label', page === null
         ? `${title}, page unavailable`
         : `Go to ${title}, page ${page}`);
