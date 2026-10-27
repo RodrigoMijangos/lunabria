@@ -88,6 +88,7 @@ function setup({ missing = [], localDB: localDb, fetch: fetchImpl } = {}) {
     async getRecents() { calls.push(['recents']); return []; },
     async getVirtualLibraries() { calls.push(['libraries']); return []; },
     async addBooksToVirtualLibrary(id, ids) { calls.push(['add', id, [...ids]]); },
+    async removeBooksFromVirtualLibrary(id, ids) { calls.push(['remove', id, [...ids]]); },
     async deleteVirtualLibrary(id) { calls.push(['delete', id]); }
   };
   const context = vm.createContext({
@@ -140,6 +141,7 @@ test('preserves the public facade and initial state', () => {
   const methods = ['init', 'initServiceWorker', 'applyTheme', 'loadHome', 'loadVirtualLibraries', 'loadBookGrid',
     'renderBooks', 'getCatalogGridColumnCount', 'syncCatalogPageSizeOptions', 'syncCatalogSelectionLibraryOptions',
     'syncCatalogSelectionControls', 'setBookSelectionMode', 'setBookSelected', 'addSelectedBooksToLibrary',
+    'removeSelectedBooksFromLibrary',
     'createLibraryFromSelection', 'onVirtualLibrariesChanged', 'syncCatalogControls', 'getCatalogPageItems',
     'updateCatalogPagination', 'submitCatalogPageInput', 'syncSearchPresentation', 'updateBooksCountBadge',
     'renderRecents', 'filterBooks', 'updateActiveCollectionChip', 'deleteVirtualLibrary', 'selectVirtualLibrary',
@@ -823,4 +825,29 @@ test('search clear button immediately clears search on pointerdown/mousedown and
   assert.equal(clearBtn.style.display, 'none');
   assert.equal(l.model.searchQuery, '');
   assert.equal(document.activeElement, input);
+});
+
+test('removing selection from active collection delegates to removeBooksFromVirtualLibrary and reloads catalog', async () => {
+  const { library: l, api } = setup();
+  let removedCall = null;
+  api.removeBooksFromVirtualLibrary = async (id, ids) => {
+    removedCall = [id, [...ids]];
+  };
+  l.model.virtualLibraries = [{ id: 3, type: 'manual', name: 'My Reading List', book_ids: [4, 7] }];
+  l.model.activeVirtualLibraryId = 3;
+  l.selectionMode = true;
+  l.selectedBookIds.add(4);
+  let librariesReloaded = false;
+  let gridReloaded = false;
+  l.loadVirtualLibraries = async () => { librariesReloaded = true; };
+  l.loadBookGrid = async () => { gridReloaded = true; };
+
+  await l.removeSelectedBooksFromLibrary();
+
+  assert.deepEqual(removedCall, [3, [4]]);
+  assert.equal(l.selectionMode, false);
+  assert.equal(l.selectedBookIds.size, 0);
+  assert.equal(librariesReloaded, true);
+  assert.equal(gridReloaded, true);
+  assert.equal(l.catalogSelectionStatus.textContent, 'Removed 1 book from «My Reading List».');
 });

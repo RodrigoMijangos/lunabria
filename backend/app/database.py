@@ -50,10 +50,15 @@ def init_db():
                 type TEXT NOT NULL DEFAULT 'query',
                 query TEXT DEFAULT '',
                 book_ids TEXT DEFAULT '[]',
+                excluded_book_ids TEXT DEFAULT '[]',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        try:
+            cursor.execute("ALTER TABLE virtual_libraries ADD COLUMN excluded_book_ids TEXT DEFAULT '[]'")
+        except sqlite3.OperationalError:
+            pass
         
         # 2. Reading Progress table (Tracks recent books and page position)
         cursor.execute("""

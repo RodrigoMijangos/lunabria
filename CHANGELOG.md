@@ -11,6 +11,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-27
+
+### Added
+- Universal symbol query engine supporting logical operators (+, comma, -) and exact quote matching across search and collections.
+- Optional and collapsible visual query builder with tactile operator chips and live Calibre expression preview.
+- Interactive query token pills with removable badges that dynamically synchronize with search rules.
+- Hybrid collections combining automatic search rules with manual book additions and explicit book exclusions.
+- Dedicated collection management dialog to rename virtual libraries and manage collection membership.
+- Quick edit button directly on collection chips in the library catalog.
+- Remove selected books from the active manual collection directly from the batch selection toolbar.
+- Expanded collection creation and management dialogs to 860px max-width with larger book covers and preview grid.
+
+### Fixed
+- The mobile reader now opens directly in its mobile layout instead of briefly showing the desktop view.
+
 ## [1.11.0] - 2026-10-24
 
 ### Added
@@ -554,7 +569,8 @@ Mobile PWA, responsive reader and offline capabilities.
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.2...v1.11.0
 [1.10.2]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.1...v1.10.2
 [1.10.1]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.0...v1.10.1

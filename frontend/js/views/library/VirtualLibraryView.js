@@ -18,7 +18,7 @@ const VirtualLibraryView = {
     });
   },
 
-  renderCollectionChips(chipContainer, libraries, activeId, onSelect, onDelete) {
+  renderCollectionChips(chipContainer, libraries, activeId, onSelect, onDelete, onEdit) {
     if (!chipContainer) return;
     chipContainer.replaceChildren();
 
@@ -57,6 +57,15 @@ const VirtualLibraryView = {
 
       button.onclick = () => onSelect?.(library.id);
       group.appendChild(button);
+
+      const editButton = document.createElement('button');
+      editButton.type = 'button';
+      editButton.className = 'collection-chip-edit';
+      editButton.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#pen"></use></svg>';
+      editButton.title = `Manage collection ${library.name}`;
+      editButton.setAttribute('aria-label', `Manage collection ${library.name}`);
+      editButton.onclick = () => onEdit?.(library);
+      group.appendChild(editButton);
 
       const deleteButton = document.createElement('button');
       deleteButton.type = 'button';

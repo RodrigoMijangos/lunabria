@@ -13,6 +13,7 @@ class MobileReaderController {
     this.mobileHUD = null;
     this.selectionController = null;
     this.isInitialized = false;
+    this.pendingViewModeBeforeOpen = null;
 
     this.bindEnvironment();
   }
@@ -45,6 +46,18 @@ class MobileReaderController {
     this.syncMobileState();
   }
 
+  prepareForBookOpen() {
+    this.restorePendingViewMode();
+
+    const isMobile = this.device.isMobileReaderActive();
+    document.body.classList.toggle('mobile-reader-active', isMobile);
+    if (!isMobile || this.model.viewMode !== 'dual-flow') return;
+
+    this.pendingViewModeBeforeOpen = this.model.viewMode;
+    this.model.setViewMode('flow', { persist: false });
+    this.reader.nav.syncViewModeUI();
+  }
+
   syncMobileState() {
     const isMobile = this.device.isMobileReaderActive();
     const isReaderOpen = !this.reader?.container || this.reader.container.style.display !== 'none';
@@ -66,7 +79,18 @@ class MobileReaderController {
   }
 
   onBookOpened() {
-    if (!this.device.isMobileReaderActive()) return;
+    const isMobile = this.device.isMobileReaderActive();
+    if (this.pendingViewModeBeforeOpen !== null) {
+      if (isMobile) {
+        this.model.setViewMode(this.model.viewMode);
+      } else {
+        this.model.setViewMode(this.pendingViewModeBeforeOpen, { persist: false });
+        this.reader.nav.setViewMode(this.pendingViewModeBeforeOpen);
+      }
+      this.pendingViewModeBeforeOpen = null;
+    }
+
+    if (!isMobile) return;
 
     if (this.model.viewMode === 'dual-flow') {
       this.reader.nav.setViewMode('flow');
@@ -82,7 +106,15 @@ class MobileReaderController {
   }
 
   onBookClosed() {
+    this.restorePendingViewMode();
     this.syncMobileState();
+  }
+
+  restorePendingViewMode() {
+    if (this.pendingViewModeBeforeOpen === null) return;
+    this.model.setViewMode(this.pendingViewModeBeforeOpen, { persist: false });
+    this.reader.nav.syncViewModeUI();
+    this.pendingViewModeBeforeOpen = null;
   }
 
   requestFullscreenIfMobile() {

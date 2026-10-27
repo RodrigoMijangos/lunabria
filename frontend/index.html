@@ -45,7 +45,7 @@
     <!-- Center Search Bar -->
     <div class="search-box">
       <span class="search-icon"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg></span>
-      <input type="text" id="search-input" class="search-input" placeholder="Search by title, author, or tags..." autocomplete="off" />
+      <input type="text" id="search-input" class="search-input" placeholder="Search by title, author, publisher, or tags..." autocomplete="off" />
       <button id="search-clear-btn" class="search-clear-btn" style="display: none;" title="Clear search" aria-label="Clear search"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
     </div>
 
@@ -139,6 +139,7 @@
             </label>
             <button id="catalog-selection-add-btn" type="button" class="btn btn-primary" disabled>Add selected</button>
             <button id="catalog-selection-create-btn" type="button" class="btn" disabled>Create library</button>
+            <button id="catalog-selection-remove-btn" type="button" class="btn btn-danger" hidden disabled>Remove from collection</button>
             <small class="catalog-selection-hint">Manual libraries only; search-based libraries update automatically.</small>
           </div>
           <small id="catalog-selection-status" role="status"></small>
@@ -614,9 +615,76 @@
       <!-- Mode A: Calibre Query / Regex -->
       <div id="vl-section-query">
         <div class="form-group">
-          <label class="form-label" for="vl-query-input">Calibre Search Expression or Regular Expression:</label>
-          <input type="text" id="vl-query-input" class="input-custom" placeholder='E.g., tags:"=Systems" or not format:epub' style="width: 100%;" />
-          <small style="color: var(--text-secondary); display: block; margin-top: 4px;">Use any valid Calibre search expression (tags, authors, or regex).</small>
+          <div class="vl-query-header-row">
+            <label class="form-label" for="vl-query-input" style="margin-bottom: 0;">Search Rule (Symbols or Calibre Expression):</label>
+            <button id="vl-builder-toggle-btn" type="button" class="btn btn-secondary vl-builder-toggle-btn" aria-expanded="false" title="Show or hide visual query builder">
+              <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#settings"></use></svg>
+              <span>Query Builder</span>
+            </button>
+          </div>
+          <div class="vl-query-input-wrap">
+            <input type="text" id="vl-query-input" class="input-custom vl-query-input-field" placeholder='E.g., tags: "Física", "Química" + format: epub - author: Curie' />
+            <button id="vl-query-clear-btn" type="button" class="btn btn-secondary vl-query-clear-button" title="Clear query">Clear</button>
+          </div>
+
+          <!-- Active Query Token Pills Container -->
+          <div id="vl-query-tokens" class="vl-query-tokens" aria-live="polite"></div>
+
+          <!-- Modern Query Builder Card -->
+          <div id="vl-query-builder" class="vl-query-builder-card" hidden style="display: none;">
+            <div class="vl-builder-header">
+              <span class="vl-builder-title">Query Builder</span>
+              <span id="vl-compiled-preview" class="vl-builder-compiled-preview" title="Compiled Calibre syntax"></span>
+                <button id="vl-builder-close-btn" type="button" class="btn btn-icon vl-builder-close-btn" title="Hide Query Builder" aria-label="Hide Query Builder">
+                  <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg>
+                </button>
+            </div>
+
+            <!-- Term Input Row -->
+            <div class="vl-builder-term-row">
+              <select id="vl-builder-field" class="input-custom vl-builder-select">
+                <option value="tags:">Tag (tags:)</option>
+                <option value="author:">Author (author:)</option>
+                <option value="publisher:">Publisher / Editorial (publisher:)</option>
+                <option value="format:">Format (format:)</option>
+                <option value="title:">Title (title:)</option>
+                <option value="series:">Series (series:)</option>
+              </select>
+
+              <input type="text" id="vl-builder-value" class="input-custom vl-builder-input" placeholder="Value (e.g. EPUB, Science)..." />
+
+              <label class="vl-builder-checkbox-label">
+                <input type="checkbox" id="vl-builder-exact" checked class="vl-builder-checkbox" />
+                <span>Exact ("")</span>
+              </label>
+
+              <button id="vl-builder-add-btn" type="button" class="btn btn-primary vl-builder-add-button">+ Add Term</button>
+            </div>
+
+            <!-- Modern Operators & Quick Filter Chips -->
+            <div class="vl-chips-row">
+              <div class="vl-chips-group">
+                <span class="vl-chips-label">Operators</span>
+                <div class="vl-chips-list">
+                  <button type="button" class="vl-chip vl-chip-operator vl-chip-and vl-helper-btn" data-insert=" + " title="Require both terms (AND)">
+                    <span class="vl-chip-symbol">+</span>
+                    <span class="vl-chip-text">AND</span>
+                  </button>
+                  <button type="button" class="vl-chip vl-chip-operator vl-chip-or vl-helper-btn" data-insert=", " title="Either term matches (OR)">
+                    <span class="vl-chip-symbol">,</span>
+                    <span class="vl-chip-text">OR</span>
+                  </button>
+                  <button type="button" class="vl-chip vl-chip-operator vl-chip-not vl-helper-btn" data-insert=" - " title="Exclude terms (NOT)">
+                    <span class="vl-chip-symbol">-</span>
+                    <span class="vl-chip-text">NOT</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <small style="color: var(--text-secondary); display: block; margin-top: 4px;">Supports <code>+</code> (AND), <code>,</code> (OR), <code>-</code> (NOT) and <code>"value"</code> for exact matches.</small>
         </div>
         <div id="vl-query-preview-container" style="display: none; margin-top: 14px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -654,6 +722,61 @@
       <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
         <button id="vl-cancel-btn" class="btn">Cancel</button>
         <button id="vl-save-btn" class="btn btn-primary">Create Virtual Library</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: MANAGE VIRTUAL LIBRARY ================= -->
+  <div id="vl-manage-modal" class="modal-overlay">
+    <div class="modal-dialog vl-modal-dialog">
+      <div class="modal-header">
+        <h3 id="vl-manage-title" style="font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#folder"></use></svg> Manage Collection
+        </h3>
+        <button id="vl-manage-close-x-btn" class="btn btn-icon" title="Close" aria-label="Close"><svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#close"></use></svg></button>
+      </div>
+
+      <!-- Rename Section -->
+      <div class="form-group">
+        <label class="form-label" for="vl-manage-name-input">Collection Name:</label>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="vl-manage-name-input" class="input-custom" placeholder="Collection name" style="flex: 1;" />
+          <button id="vl-manage-rename-btn" type="button" class="btn btn-primary">Rename</button>
+        </div>
+        <small id="vl-manage-rename-status" role="status" style="display: block; margin-top: 4px; font-size: 0.82rem; min-height: 1.2em;"></small>
+      </div>
+
+      <!-- Mode A: Query Details -->
+      <div id="vl-manage-query-section" style="display: none;">
+        <div class="form-group">
+          <label class="form-label">Calibre Search Expression:</label>
+          <div id="vl-manage-query-text" style="padding: 10px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); font-family: monospace; font-size: 0.88rem; word-break: break-all;"></div>
+          <small style="color: var(--text-secondary); display: block; margin-top: 4px;">Search-based collections update automatically based on Calibre matching rules.</small>
+        </div>
+      </div>
+
+      <!-- Mode B: Member Books & Selective Removal -->
+      <div id="vl-manage-books-section" style="display: none;">
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">Collection Books (<span id="vl-manage-books-count">0</span>):</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span id="vl-manage-selected-count" style="font-size: 0.78rem; color: var(--accent-color); font-weight: 600;">0 selected</span>
+              <button id="vl-manage-select-all-btn" type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 2px 8px;">Select All</button>
+              <button id="vl-manage-deselect-all-btn" type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 2px 8px;">Deselect All</button>
+              <button id="vl-manage-remove-selected-btn" type="button" class="btn btn-danger" style="font-size: 0.75rem; padding: 2px 8px;" disabled>Remove selected</button>
+            </div>
+          </div>
+          <div class="manual-library-search-wrap">
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg>
+            <input type="text" id="vl-manage-search-input" class="input-custom" placeholder="Filter collection books by title or author..." style="width: 100%; margin-bottom: 8px;" />
+          </div>
+          <div id="vl-manage-books-list" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px;"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button id="vl-manage-done-btn" class="btn btn-secondary">Done</button>
       </div>
     </div>
   </div>
@@ -884,6 +1007,7 @@
   <script src="./js/db.js?v=1.4.5"></script>
   <script src="./js/services/books.js?v=1.0.15-proxy-buffering-resilience"></script>
   <script src="./js/services/virtual-libraries.js?v=1.0.8"></script>
+  <script src="./js/services/LunabriaQueryCompiler.js?v=1.1.0-chips"></script>
   <script src="./js/services/metadata.js?v=1.0.8"></script>
   <script src="./js/services/progress.js?v=1.0.8"></script>
   <script src="./js/services/layouts.js?v=1.0.8"></script>
@@ -894,8 +1018,8 @@
 
   <!-- MVVM Architecture: Models -->
   <script src="./js/models/ReaderNavigationMap.js?v=1.0.1-reader-jumps"></script>
-  <script src="./js/models/ReaderModel.js?v=1.3.3"></script>
-  <script src="./js/models/LibraryModel.js?v=0.8.4-upload-resilience"></script>
+  <script src="./js/models/ReaderModel.js?v=1.3.4-mobile-first-paint"></script>
+  <script src="./js/models/LibraryModel.js?v=0.8.5-publisher-search"></script>
 
   <!-- MVVM Architecture: Modular Reader Views -->
   <script src="./js/views/reader/PDFPageView.js?v=0.6.2"></script>
@@ -923,7 +1047,7 @@
   <script src="./js/mobile/MobilePWAInstaller.js?v=1.1.0"></script>
   <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.15-proxy-buffering-resilience"></script>
   <script src="./js/viewmodels/library/BookMetadataManager.js?v=1.0.10"></script>
-  <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.4-covers"></script>
+  <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.5-query-chips"></script>
   <script src="./js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/SyncSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8"></script>
@@ -947,12 +1071,12 @@
   <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.4.0"></script>
   <script src="./js/services/reader/ReaderOfflineService.js?v=1.0.9"></script>
   <script src="./js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0"></script>
-  <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.5-reader-jumps"></script>
+  <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.6-mobile-first-paint"></script>
   <script src="./js/mobile/DeviceEnvironment.js?v=1.1.1"></script>
   <script src="./js/mobile/MobileHUDView.js?v=1.1.2"></script>
   <script src="./js/mobile/MobileDrawingToolbarView.js?v=1.3.0"></script>
   <script src="./js/mobile/MobileSelectionController.js?v=1.4.2"></script>
-  <script src="./js/mobile/MobileReaderController.js?v=1.3.1"></script>
+  <script src="./js/mobile/MobileReaderController.js?v=1.3.2-mobile-first-paint"></script>
   <script src="./js/viewmodels/ReaderViewModel.js?v=1.4.6"></script>
 
   <!-- MVVM Architecture: Facades & Singletons -->

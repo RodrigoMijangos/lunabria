@@ -15,7 +15,13 @@ class FakeElement {
     this.classList = { toggle() {} };
     this._textContent = '';
     this.scrollTop = 0;
+    this.attributes = new Map();
   }
+
+  setAttribute(name, val) { this.attributes.set(name, String(val)); }
+  removeAttribute(name) { this.attributes.delete(name); }
+  hasAttribute(name) { return this.attributes.has(name); }
+  querySelector() { return null; }
 
   set textContent(value) {
     this._textContent = value;
@@ -40,7 +46,7 @@ class FakeElement {
   }
 }
 
-function createEnvironment(getBooks) {
+function createEnvironment(getBooks, apiOverrides = {}) {
   const elements = new Map();
   const document = {
     getElementById(id) {
@@ -59,10 +65,15 @@ function createEnvironment(getBooks) {
   const context = vm.createContext({
     document,
     window,
-    api: { getBooks },
+    api: { getBooks, ...apiOverrides },
     ModalView: { open() {}, close() {} },
     alert() {}
   });
+  vm.runInContext(
+    fs.readFileSync(path.join(__dirname, '../js/services/LunabriaQueryCompiler.js'), 'utf8'),
+    context,
+    { filename: 'LunabriaQueryCompiler.js' }
+  );
   vm.runInContext(
     fs.readFileSync(path.join(__dirname, '../js/viewmodels/library/VirtualLibraryManager.js'), 'utf8'),
     context,
@@ -155,4 +166,172 @@ test('virtual-library modal renders book covers, select-all, and previews Mode A
 
   deselectAllBtn.onclick();
   assert.equal(manager.selectedBookIds.has(11), false);
+});
+
+test('openManageModal allows renaming manual or query collections', async () => {
+  let updatedPayload = null;
+  let notifiedLibrary = null;
+  const env = createEnvironment(async () => [], {
+    updateVirtualLibrary: async (id, data) => {
+      updatedPayload = { id, data };
+      return { id, name: data.name, type: 'manual', book_ids: [1, 2] };
+    },
+    getVirtualLibraryBooks: async () => [
+      { id: 1, title: 'Book 1', authors: 'Author 1' },
+      { id: 2, title: 'Book 2', authors: 'Author 2' }
+    ]
+  });
+  const manager = new env.VirtualLibraryManager(lib => { notifiedLibrary = lib; });
+  const library = { id: 5, name: 'Old Collection', type: 'manual', book_ids: [1, 2] };
+
+  await manager.openManageModal(library);
+
+  const nameInput = env.document.getElementById('vl-manage-name-input');
+  assert.equal(nameInput.value, 'Old Collection');
+
+  const renameBtn = env.document.getElementById('vl-manage-rename-btn');
+  nameInput.value = 'New Collection Name';
+  await renameBtn.onclick();
+
+  assert.deepEqual(plain(updatedPayload), { id: 5, data: { name: 'New Collection Name' } });
+  assert.equal(library.name, 'New Collection Name');
+  assert.equal(notifiedLibrary?.name, 'New Collection Name');
+});
+
+test('openManageModal renders member books and allows selective removal', async () => {
+  let removedPayload = null;
+  let notifiedLibrary = null;
+  const env = createEnvironment(async () => [], {
+    getVirtualLibraryBooks: async () => [
+      { id: 10, title: 'Networks', authors: 'Tanenbaum' },
+      { id: 20, title: 'Clean Code', authors: 'Martin' }
+    ],
+    removeBooksFromVirtualLibrary: async (id, bookIds) => {
+      removedPayload = { id, bookIds };
+      return { id, name: 'My List', type: 'manual', book_ids: [20] };
+    }
+  });
+  const manager = new env.VirtualLibraryManager(lib => { notifiedLibrary = lib; });
+  const library = { id: 8, name: 'My List', type: 'manual', book_ids: [10, 20] };
+
+  await manager.openManageModal(library);
+
+  const booksList = env.document.getElementById('vl-manage-books-list');
+  assert.equal(booksList.children.filter(c => c.tagName === 'label').length, 2);
+
+  const booksCount = env.document.getElementById('vl-manage-books-count');
+  assert.equal(booksCount.textContent, '2');
+
+  // Select all
+  const selectAllBtn = env.document.getElementById('vl-manage-select-all-btn');
+  selectAllBtn.onclick();
+  assert.equal(manager.manageSelectedBookIds.has(10), true);
+  assert.equal(manager.manageSelectedBookIds.has(20), true);
+
+  // Deselect all
+  const deselectAllBtn = env.document.getElementById('vl-manage-deselect-all-btn');
+  deselectAllBtn.onclick();
+  assert.equal(manager.manageSelectedBookIds.size, 0);
+
+  // Select only book 10
+  manager.manageSelectedBookIds.add(10);
+  const removeBtn = env.document.getElementById('vl-manage-remove-selected-btn');
+  await removeBtn.onclick();
+
+  assert.deepEqual(plain(removedPayload), { id: 8, bookIds: [10] });
+  assert.deepEqual(library.book_ids, [20]);
+  assert.equal(booksList.children.filter(c => c.tagName === 'label').length, 1);
+  assert.equal(notifiedLibrary?.id, 8);
+});
+
+test('openManageModal shows query info for query collections', async () => {
+  const env = createEnvironment(async () => []);
+  const manager = new env.VirtualLibraryManager();
+  const library = { id: 9, name: 'Sci-Fi', type: 'query', query: 'tags:=Science Fiction' };
+
+  await manager.openManageModal(library);
+
+  const querySection = env.document.getElementById('vl-manage-query-section');
+  const booksSection = env.document.getElementById('vl-manage-books-section');
+  const queryText = env.document.getElementById('vl-manage-query-text');
+
+  assert.equal(querySection.style.display, '');
+  assert.equal(booksSection.style.display, 'none');
+  assert.equal(queryText.textContent, 'tags:=Science Fiction');
+});
+
+test('virtual-library modal renders interactive query token pills with removable badges', async () => {
+  const requests = [];
+  const env = createEnvironment(async (...args) => {
+    requests.push(args);
+    return { books: [], total: 0, page: 1, page_size: 24 };
+  });
+  const manager = new env.VirtualLibraryManager();
+
+  await manager.openVirtualLibraryModal({
+    searchQuery: 'tags: "Physics" + format: epub - author: Curie'
+  });
+
+  const tokensContainer = env.document.getElementById('vl-query-tokens');
+  assert.equal(tokensContainer.children.length, 3);
+
+  // Check first token: tags: "Physics"
+  const firstToken = tokensContainer.children[0];
+  assert.equal(firstToken.className, 'vl-token-pill');
+  assert.equal(firstToken.children[0].textContent, 'tags:');
+  assert.equal(firstToken.children[1].textContent, '"Physics"');
+
+  // Check second token: + format: epub
+  const secondToken = tokensContainer.children[1];
+  assert.equal(secondToken.children[0].textContent, 'AND');
+  assert.equal(secondToken.children[1].textContent, 'format:');
+  assert.equal(secondToken.children[2].textContent, 'epub');
+
+  // Check third token: - author: Curie (negated)
+  const thirdToken = tokensContainer.children[2];
+  assert.equal(thirdToken.className, 'vl-token-pill is-negated');
+  assert.equal(thirdToken.children[0].textContent, 'NOT');
+  assert.equal(thirdToken.children[1].textContent, 'author:');
+  assert.equal(thirdToken.children[2].textContent, 'Curie');
+
+  // Remove the second token (format: epub)
+  const removeBtn = secondToken.children[3];
+  assert.equal(removeBtn.textContent, '�');
+  removeBtn.onclick();
+
+  const queryInput = env.document.getElementById('vl-query-input');
+  assert.equal(queryInput.value, 'tags: "Physics" - author: Curie');
+  assert.equal(tokensContainer.children.length, 2);
+});
+
+test('virtual-library modal makes query builder card optional and toggleable', async () => {
+  const env = createEnvironment(async () => ({ books: [], total: 0 }));
+  const manager = new env.VirtualLibraryManager();
+
+  await manager.openVirtualLibraryModal();
+
+  const queryBuilderCard = env.document.getElementById('vl-query-builder');
+  const toggleBtn = env.document.getElementById('vl-builder-toggle-btn');
+  const closeBtn = env.document.getElementById('vl-builder-close-btn');
+
+  // By default, query builder is hidden/optional
+  assert.equal(queryBuilderCard.hasAttribute('hidden'), true);
+  assert.equal(queryBuilderCard.style.display, 'none');
+
+  // Clicking toggle button expands query builder
+  toggleBtn.onclick();
+  assert.equal(queryBuilderCard.hasAttribute('hidden'), false);
+  assert.equal(queryBuilderCard.style.display, '');
+
+  // Updating query text must NOT collapse or close the builder
+  const queryInput = env.document.getElementById('vl-query-input');
+  queryInput.value = 'tags: Science';
+  queryInput.oninput();
+  assert.equal(queryBuilderCard.hasAttribute('hidden'), false);
+  assert.equal(queryBuilderCard.style.display, '');
+
+  // Clicking close button collapses it
+  closeBtn.onclick();
+  assert.equal(queryBuilderCard.hasAttribute('hidden'), true);
+  assert.equal(queryBuilderCard.style.display, 'none');
 });

@@ -87,7 +87,8 @@ class CalibreService:
                     (SELECT s.name FROM books_series_link bsl JOIN series s ON bsl.series = s.id WHERE bsl.book = b.id) as series,
                     (SELECT group_concat(d.format, ',') FROM data d WHERE d.book = b.id) as formats,
                     (SELECT c.text FROM comments c WHERE c.book = b.id) as comments,
-                    (SELECT val FROM identifiers WHERE book = b.id AND type = 'isbn' LIMIT 1) as isbn
+                    (SELECT val FROM identifiers WHERE book = b.id AND type = 'isbn' LIMIT 1) as isbn,
+                    (SELECT p.name FROM books_publishers_link bpl JOIN publishers p ON bpl.publisher = p.id WHERE bpl.book = b.id LIMIT 1) as publisher
                 FROM books b
             """
             params = []
@@ -125,6 +126,7 @@ class CalibreService:
                     "date_added": row["date_added"],
                     "comments": row["comments"],
                     "isbn": row["isbn"],
+                    "publisher": row["publisher"],
                     "has_cover": has_cover,
                     "cover_url": f"/api/books/{book_id}/cover" if has_cover else None
                 })

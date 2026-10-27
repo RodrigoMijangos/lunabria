@@ -6,8 +6,12 @@ class VirtualLibraryManager {
   constructor(onLibrariesChanged) {
     this.onLibrariesChanged = onLibrariesChanged;
     this.modal = typeof document !== 'undefined' ? document.getElementById('vl-modal') : null;
+    this.manageModal = typeof document !== 'undefined' ? document.getElementById('vl-manage-modal') : null;
     this.selectedBookIds = new Set();
+    this.manageSelectedBookIds = new Set();
     this.books = null;
+    this.manageBooks = null;
+    this.manageOpenSequence = 0;
     this.mode = 'query';
     this.openSequence = 0;
     this.manualPage = 0;
@@ -88,10 +92,140 @@ class VirtualLibraryManager {
     };
     updateSelectedCounter();
 
+    const fieldSelect = document.getElementById('vl-builder-field');
+    const valueInput = document.getElementById('vl-builder-value');
+    const exactCheckbox = document.getElementById('vl-builder-exact');
+    const addTermBtn = document.getElementById('vl-builder-add-btn');
+    const compiledPreview = document.getElementById('vl-compiled-preview');
+    const clearQueryBtn = document.getElementById('vl-query-clear-btn');
+    const queryTokensContainer = document.getElementById('vl-query-tokens');
+    const queryBuilderCard = document.getElementById('vl-query-builder');
+    const builderToggleBtn = document.getElementById('vl-builder-toggle-btn');
+    const builderCloseBtn = document.getElementById('vl-builder-close-btn');
+    const helperBtns = this.modal?.querySelectorAll ? this.modal.querySelectorAll('.vl-helper-btn') : [];
+
+    const setBuilderVisible = (visible) => {
+      if (!queryBuilderCard) return;
+      if (visible) {
+        if (typeof queryBuilderCard.removeAttribute === 'function') {
+          queryBuilderCard.removeAttribute('hidden');
+        }
+        if (queryBuilderCard.style) queryBuilderCard.style.display = '';
+      } else {
+        if (typeof queryBuilderCard.setAttribute === 'function') {
+          queryBuilderCard.setAttribute('hidden', '');
+        }
+        if (queryBuilderCard.style) queryBuilderCard.style.display = 'none';
+      }
+      if (builderToggleBtn) {
+        if (typeof builderToggleBtn.setAttribute === 'function') {
+          builderToggleBtn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+        }
+        if (builderToggleBtn.classList?.toggle) {
+          builderToggleBtn.classList.toggle('active', visible);
+        }
+        const textSpan = builderToggleBtn.querySelector ? builderToggleBtn.querySelector('span') : null;
+        if (textSpan) {
+          textSpan.textContent = visible ? 'Hide Builder' : 'Query Builder';
+        }
+      }
+    };
+
+    if (builderToggleBtn) {
+      builderToggleBtn.onclick = () => {
+        const isHidden = queryBuilderCard
+          ? (Boolean(queryBuilderCard.hasAttribute?.('hidden')) || queryBuilderCard.style?.display === 'none')
+          : false;
+        setBuilderVisible(isHidden);
+      };
+    }
+
+    if (builderCloseBtn) {
+      builderCloseBtn.onclick = () => {
+        setBuilderVisible(false);
+      };
+    }
+
+    const renderQueryTokens = () => {
+      if (!queryTokensContainer) return;
+      const raw = queryInput?.value?.trim?.() || '';
+      if (!raw || typeof LunabriaQueryCompiler === 'undefined' || typeof LunabriaQueryCompiler.parseClauses !== 'function') {
+        if (typeof queryTokensContainer.replaceChildren === 'function') {
+          queryTokensContainer.replaceChildren();
+        } else {
+          queryTokensContainer.textContent = '';
+        }
+        return;
+      }
+      const clauses = LunabriaQueryCompiler.parseClauses(raw);
+      if (typeof queryTokensContainer.replaceChildren === 'function') {
+        queryTokensContainer.replaceChildren();
+      } else {
+        queryTokensContainer.textContent = '';
+      }
+      if (!clauses.length) return;
+
+      clauses.forEach((cl, idx) => {
+        const pill = document.createElement('div');
+        pill.className = `vl-token-pill${cl.op === '-' ? ' is-negated' : ''}`;
+
+        if (cl.op === '-') {
+          const opSpan = document.createElement('span');
+          opSpan.className = 'vl-token-op vl-token-op-not';
+          opSpan.textContent = 'NOT';
+          pill.appendChild(opSpan);
+        } else if (idx > 0) {
+          const opSpan = document.createElement('span');
+          opSpan.className = 'vl-token-op vl-token-op-and';
+          opSpan.textContent = 'AND';
+          pill.appendChild(opSpan);
+        }
+
+        if (cl.field) {
+          const fieldSpan = document.createElement('span');
+          fieldSpan.className = 'vl-token-field';
+          fieldSpan.textContent = `${cl.field}:`;
+          pill.appendChild(fieldSpan);
+        }
+
+        const valSpan = document.createElement('span');
+        valSpan.className = 'vl-token-value';
+        valSpan.textContent = cl.values.map(v => v.isQuoted ? `"${v.value}"` : v.value).join(', ');
+        pill.appendChild(valSpan);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'vl-token-remove';
+        if (typeof removeBtn.setAttribute === 'function') {
+          removeBtn.setAttribute('aria-label', `Remove filter ${cl.field ? cl.field + ' ' : ''}${valSpan.textContent}`);
+        }
+        removeBtn.textContent = '�';
+        removeBtn.onclick = (e) => {
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          clauses.splice(idx, 1);
+          const nextVal = LunabriaQueryCompiler.formatClauses(clauses);
+          if (queryInput) queryInput.value = nextVal;
+          updateQueryPreview();
+        };
+        pill.appendChild(removeBtn);
+
+        queryTokensContainer.appendChild(pill);
+      });
+    };
+
     const updateQueryPreview = async () => {
+      renderQueryTokens();
       if (!queryPreviewList) return;
-      const calibreQuery = queryInput?.value.trim() || '';
-      if (!calibreQuery) {
+      const rawQuery = queryInput?.value.trim() || '';
+      const compiledQuery = typeof LunabriaQueryCompiler !== 'undefined'
+        ? LunabriaQueryCompiler.compile(rawQuery)
+        : rawQuery;
+
+      if (compiledPreview) {
+        compiledPreview.textContent = compiledQuery ? `Calibre: ${compiledQuery}` : '';
+      }
+
+      if (!rawQuery) {
         if (queryPreviewContainer) queryPreviewContainer.style.display = 'none';
         queryPreviewList.replaceChildren();
         return;
@@ -102,7 +236,7 @@ class VirtualLibraryManager {
       queryPreviewList.textContent = 'Searching books matching expression...';
 
       try {
-        const response = await api.getBooks(calibreQuery, null, { pageSize: 100 });
+        const response = await api.getBooks(compiledQuery, null, { pageSize: 100 });
         if (sequence !== this.openSequence) return;
         const pageBooks = Array.isArray(response)
           ? response
@@ -245,6 +379,8 @@ class VirtualLibraryManager {
       manualTab.onclick = () => loadManualBooks();
       setMode(initialMode);
     }
+    renderQueryTokens();
+    setBuilderVisible(false);
     if (cancelBtn) cancelBtn.onclick = () => ModalView.close(this.modal);
     if (closeBtn) closeBtn.onclick = () => ModalView.close(this.modal);
 
@@ -319,6 +455,44 @@ class VirtualLibraryManager {
         querySearchTimeout = window.setTimeout(updateQueryPreview, 250);
       };
     }
+
+    if (addTermBtn) {
+      addTermBtn.onclick = () => {
+        const val = valueInput?.value.trim() || '';
+        if (!val || !queryInput) return;
+        const field = fieldSelect?.value || 'tags:';
+        const isExact = exactCheckbox?.checked ?? true;
+        const formattedVal = isExact ? `"${val}"` : val;
+        const term = `${field} ${formattedVal}`;
+        const current = queryInput.value.trim();
+        queryInput.value = current ? `${current} + ${term}` : term;
+        if (valueInput) valueInput.value = '';
+        updateQueryPreview();
+      };
+    }
+
+    if (clearQueryBtn) {
+      clearQueryBtn.onclick = () => {
+        if (queryInput) queryInput.value = '';
+        if (compiledPreview) compiledPreview.textContent = '';
+        renderQueryTokens();
+        updateQueryPreview();
+      };
+    }
+
+    helperBtns.forEach(btn => {
+      btn.onclick = () => {
+        const insert = btn.dataset.insert;
+        if (!insert || !queryInput) return;
+        const current = queryInput.value.trim();
+        if (insert.startsWith(' + ') || insert.startsWith(', ') || insert.startsWith(' - ')) {
+          queryInput.value = current ? `${current}${insert}` : (insert.trim().startsWith('-') ? '- ' : '');
+        } else {
+          queryInput.value = current ? `${current} + ${insert}` : insert;
+        }
+        updateQueryPreview();
+      };
+    });
 
     if (saveBtn) {
       saveBtn.onclick = async () => {
@@ -427,6 +601,261 @@ class VirtualLibraryManager {
         });
       }
     }
+  }
+
+  async openManageModal(library) {
+    if (!library) return;
+    const manageModal = typeof document !== 'undefined'
+      ? (this.manageModal || document.getElementById('vl-manage-modal'))
+      : null;
+    if (!manageModal) return;
+    this.manageModal = manageModal;
+    const sequence = ++this.manageOpenSequence;
+
+    const titleEl = document.getElementById('vl-manage-title');
+    const closeBtn = document.getElementById('vl-manage-close-x-btn');
+    const doneBtn = document.getElementById('vl-manage-done-btn');
+    const nameInput = document.getElementById('vl-manage-name-input');
+    const renameBtn = document.getElementById('vl-manage-rename-btn');
+    const renameStatus = document.getElementById('vl-manage-rename-status');
+
+    const querySection = document.getElementById('vl-manage-query-section');
+    const queryText = document.getElementById('vl-manage-query-text');
+
+    const booksSection = document.getElementById('vl-manage-books-section');
+    const booksCount = document.getElementById('vl-manage-books-count');
+    const selectedCount = document.getElementById('vl-manage-selected-count');
+    const selectAllBtn = document.getElementById('vl-manage-select-all-btn');
+    const deselectAllBtn = document.getElementById('vl-manage-deselect-all-btn');
+    const removeSelectedBtn = document.getElementById('vl-manage-remove-selected-btn');
+    const searchInput = document.getElementById('vl-manage-search-input');
+    const booksList = document.getElementById('vl-manage-books-list');
+
+    if (titleEl) {
+      titleEl.innerHTML = `<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#folder"></use></svg> Manage: ${library.name}`;
+    }
+    if (nameInput) nameInput.value = library.name || '';
+    if (renameStatus) {
+      renameStatus.textContent = '';
+      renameStatus.style.color = 'var(--accent-color)';
+    }
+    if (searchInput) searchInput.value = '';
+
+    this.manageSelectedBookIds = new Set();
+    this.manageBooks = null;
+
+    const updateManageSelectedCounter = () => {
+      const count = this.manageSelectedBookIds.size;
+      if (selectedCount) {
+        selectedCount.textContent = `${count} selected`;
+      }
+      if (removeSelectedBtn) {
+        removeSelectedBtn.disabled = count === 0;
+        removeSelectedBtn.textContent = count > 0 ? `Remove selected (${count})` : 'Remove selected';
+      }
+    };
+    updateManageSelectedCounter();
+
+    const closeModal = () => ModalView.close(manageModal);
+    if (closeBtn) closeBtn.onclick = closeModal;
+    if (doneBtn) doneBtn.onclick = closeModal;
+
+    if (manageModal && typeof manageModal.addEventListener === 'function') {
+      manageModal.addEventListener('click', event => {
+        if (event.target === manageModal) closeModal();
+      });
+    }
+
+    if (renameBtn) {
+      renameBtn.onclick = async () => {
+        const newName = nameInput?.value.trim() || '';
+        if (!newName) {
+          if (renameStatus) {
+            renameStatus.textContent = 'Please enter a valid collection name.';
+            renameStatus.style.color = '#dc2626';
+          }
+          return;
+        }
+        if (newName === library.name) {
+          if (renameStatus) {
+            renameStatus.textContent = 'Name is unchanged.';
+            renameStatus.style.color = 'var(--text-secondary)';
+          }
+          return;
+        }
+
+        renameBtn.disabled = true;
+        try {
+          const updated = await api.updateVirtualLibrary(library.id, { name: newName });
+          library.name = updated.name;
+          if (titleEl) {
+            titleEl.innerHTML = `<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#folder"></use></svg> Manage: ${updated.name}`;
+          }
+          if (renameStatus) {
+            renameStatus.textContent = 'Collection renamed successfully.';
+            renameStatus.style.color = 'var(--accent-color)';
+          }
+          if (this.onLibrariesChanged) await this.onLibrariesChanged(updated);
+        } catch (err) {
+          if (renameStatus) {
+            renameStatus.textContent = `Error: ${err.message}`;
+            renameStatus.style.color = '#dc2626';
+          }
+        } finally {
+          renameBtn.disabled = false;
+        }
+      };
+    }
+
+    if (library.type === 'query') {
+      if (querySection) querySection.style.display = '';
+      if (booksSection) booksSection.style.display = 'none';
+      if (queryText) queryText.textContent = library.query || '(empty)';
+    } else {
+      if (querySection) querySection.style.display = 'none';
+      if (booksSection) booksSection.style.display = '';
+
+      const renderBooks = () => {
+        if (!booksList || !Array.isArray(this.manageBooks)) return;
+        const query = searchInput?.value.toLowerCase().trim() || '';
+        const filtered = this.manageBooks.filter(book => {
+          const tags = Array.isArray(book.tags) ? book.tags.join(' ') : (book.tags || '');
+          const text = `${book.title || ''} ${book.authors || ''} ${tags}`.toLowerCase();
+          return !query || text.includes(query);
+        });
+
+        if (booksCount) {
+          booksCount.textContent = String(this.manageBooks.length);
+        }
+        booksList.replaceChildren();
+
+        if (!filtered.length) {
+          const empty = document.createElement('div');
+          empty.style.padding = '12px';
+          empty.style.textAlign = 'center';
+          empty.style.color = 'var(--text-secondary)';
+          empty.textContent = this.manageBooks.length === 0
+            ? 'No books in this collection.'
+            : 'No books match your search.';
+          booksList.appendChild(empty);
+          return;
+        }
+
+        filtered.forEach(book => {
+          const isSelected = this.manageSelectedBookIds.has(Number(book.id));
+          const label = document.createElement('label');
+          label.className = `vl-book-item${isSelected ? ' is-selected' : ''}`;
+          label.dataset.bookId = String(book.id);
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.dataset.bookId = String(book.id);
+          checkbox.checked = isSelected;
+
+          const description = document.createElement('span');
+          description.className = 'vl-book-title-author';
+          description.textContent = `${book.title} ? ${book.authors || ''}`;
+
+          const coverWrap = document.createElement('div');
+          coverWrap.className = 'vl-book-cover-wrap';
+          const coverImg = document.createElement('img');
+          coverImg.className = 'vl-book-cover';
+          coverImg.alt = book.title || '';
+          coverImg.loading = 'lazy';
+          coverImg.src = book.cover_url || `/api/books/${book.id}/cover`;
+          coverImg.onerror = () => {
+            coverImg.onerror = null;
+            coverImg.src = typeof OFFLINE_FALLBACK_COVER !== 'undefined'
+              ? OFFLINE_FALLBACK_COVER
+              : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="100%" height="100%" fill="%232d3748"/><path d="M70 120h60M70 150h60" stroke="%23718096" stroke-width="6"/><circle cx="100" cy="80" r="18" fill="%23a0aec0"/></svg>';
+          };
+          coverWrap.appendChild(coverImg);
+
+          label.append(checkbox, description, coverWrap);
+          booksList.appendChild(label);
+        });
+      };
+
+      if (booksList) {
+        booksList.onchange = (event) => {
+          const checkbox = event.target.dataset?.bookId ? event.target : event.target.closest?.('input[data-book-id]');
+          if (!checkbox) return;
+          const id = Number(checkbox.dataset.bookId);
+          const isChecked = checkbox.checked;
+          if (isChecked) this.manageSelectedBookIds.add(id);
+          else this.manageSelectedBookIds.delete(id);
+          const itemLabel = checkbox.closest?.('.vl-book-item');
+          if (itemLabel?.classList) {
+            itemLabel.classList.toggle('is-selected', isChecked);
+          }
+          updateManageSelectedCounter();
+        };
+      }
+
+      if (selectAllBtn) {
+        selectAllBtn.onclick = () => {
+          if (!Array.isArray(this.manageBooks)) return;
+          const query = searchInput?.value.toLowerCase().trim() || '';
+          this.manageBooks.forEach(b => {
+            const tags = Array.isArray(b.tags) ? b.tags.join(' ') : (b.tags || '');
+            const text = `${b.title || ''} ${b.authors || ''} ${tags}`.toLowerCase();
+            if (!query || text.includes(query)) {
+              this.manageSelectedBookIds.add(Number(b.id));
+            }
+          });
+          renderBooks();
+          updateManageSelectedCounter();
+        };
+      }
+
+      if (deselectAllBtn) {
+        deselectAllBtn.onclick = () => {
+          this.manageSelectedBookIds.clear();
+          renderBooks();
+          updateManageSelectedCounter();
+        };
+      }
+
+      if (searchInput) {
+        searchInput.oninput = () => {
+          renderBooks();
+        };
+      }
+
+      if (removeSelectedBtn) {
+        removeSelectedBtn.onclick = async () => {
+          const idsToRemove = [...this.manageSelectedBookIds];
+          if (!idsToRemove.length) return;
+          removeSelectedBtn.disabled = true;
+          try {
+            const updated = await api.removeBooksFromVirtualLibrary(library.id, idsToRemove);
+            library.book_ids = updated.book_ids;
+            this.manageBooks = (this.manageBooks || []).filter(b => !idsToRemove.includes(Number(b.id)));
+            this.manageSelectedBookIds.clear();
+            renderBooks();
+            updateManageSelectedCounter();
+            if (this.onLibrariesChanged) await this.onLibrariesChanged(updated);
+          } catch (err) {
+            alert(`Error removing books: ${err.message}`);
+          } finally {
+            removeSelectedBtn.disabled = this.manageSelectedBookIds.size === 0;
+          }
+        };
+      }
+
+      if (booksList) booksList.textContent = 'Loading collection books...';
+      try {
+        const fetchedBooks = await api.getVirtualLibraryBooks(library.id);
+        if (sequence !== this.manageOpenSequence) return;
+        this.manageBooks = Array.isArray(fetchedBooks) ? fetchedBooks : [];
+        renderBooks();
+      } catch (err) {
+        if (sequence !== this.manageOpenSequence) return;
+        if (booksList) booksList.textContent = 'Could not load collection books.';
+      }
+    }
+
+    ModalView.open(manageModal);
   }
 }
 

@@ -151,3 +151,61 @@ test('ReaderDocumentLifecycle.open extracts nested outlines online and offline a
   assert.deepEqual(rendered, [1]);
   assert.equal(warnings.length, 1);
 });
+
+test('ReaderDocumentLifecycle prepares mobile state before revealing and rendering the reader', async () => {
+  const { context } = createContext();
+  const { reader } = createReader(context, false, {
+    numPages: 1,
+    getOutline: async () => []
+  });
+  const events = [];
+  reader.container.style.display = 'none';
+  reader.mobile = {
+    prepareForBookOpen() {
+      assert.equal(reader.container.style.display, 'none');
+      events.push('prepare');
+    },
+    onBookOpened() {
+      events.push('opened');
+    }
+  };
+  reader.renderCurrentViewMode = async () => {
+    assert.equal(reader.container.style.display, 'flex');
+    events.push('render');
+  };
+
+  await new context.window.ReaderDocumentLifecycle(reader).open(13, 1);
+
+  assert.deepEqual(events, ['prepare', 'render', 'opened']);
+});
+
+test('ReaderDocumentLifecycle skips mobile open completion when a render is superseded', async () => {
+  const { context } = createContext();
+  const { reader } = createReader(context, false, {
+    numPages: 1,
+    getOutline: async () => []
+  });
+  let finishRender;
+  let notifyRenderStarted;
+  const renderStarted = new Promise(resolve => { notifyRenderStarted = resolve; });
+  const events = [];
+  reader.mobile = {
+    prepareForBookOpen() {},
+    onBookOpened() {
+      events.push('opened');
+    }
+  };
+  reader.renderCurrentViewMode = () => {
+    events.push('render');
+    notifyRenderStarted();
+    return new Promise(resolve => { finishRender = resolve; });
+  };
+
+  const opening = new context.window.ReaderDocumentLifecycle(reader).open(14, 1);
+  await renderStarted;
+  reader.openSequence += 1;
+  finishRender();
+  await opening;
+
+  assert.deepEqual(events, ['render']);
+});

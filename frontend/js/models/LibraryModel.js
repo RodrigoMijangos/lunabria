@@ -104,8 +104,9 @@ class LibraryModel {
 
       const title = (book.title || '').toLowerCase();
       const authors = (book.authors || '').toLowerCase();
+      const publisher = (book.publisher || '').toLowerCase();
       const tags = Array.isArray(book.tags) ? book.tags.join(' ').toLowerCase() : '';
-      return title.includes(query) || authors.includes(query) || tags.includes(query);
+      return title.includes(query) || authors.includes(query) || publisher.includes(query) || tags.includes(query);
     });
 
     if (this.catalogSort === 'title') {

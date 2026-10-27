@@ -1,3 +1,4 @@
+from app.services.query_compiler import compile_lunabria_query
 import asyncio
 import logging
 import shutil
@@ -95,7 +96,7 @@ def _check_duplicate_isbn(prepared: list, staged_paths: list) -> Optional[dict]:
 def list_books(
     search: Optional[str] = Query(None, description="Calibre search query"),
     virtual_library_id: Optional[int] = Query(None, description="Filter by virtual library ID"),
-    q: Optional[str] = Query(None, max_length=200, description="Text search in titles, authors and tags"),
+    q: Optional[str] = Query(None, max_length=200, description="Text search in titles, authors, publishers and tags"),
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=100),
     sort: Literal["title", "date_added", "last_read_at"] = Query("title"),
@@ -104,7 +105,7 @@ def list_books(
     if virtual_library_id is not None:
         books = library_service.get_books_in_virtual_library(virtual_library_id)
     else:
-        books = calibre_service.list_books(search_query=search)
+        books = calibre_service.list_books(search_query=compile_lunabria_query(search) if search else None)
     books = reader_service.add_last_read_dates(books)
     query = (q or "").strip().casefold()
     if query:
@@ -114,6 +115,7 @@ def list_books(
             searchable_text = " ".join([
                 str(book.get("title") or ""),
                 str(book.get("authors") or ""),
+                str(book.get("publisher") or ""),
                 tags_text
             ])
             return query in searchable_text.casefold()

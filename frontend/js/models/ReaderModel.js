@@ -143,9 +143,9 @@ class ReaderModel {
     return validModes.includes(normalized) ? normalized : 'paginated';
   }
 
-  setViewMode(mode) {
+  setViewMode(mode, { persist = true } = {}) {
     this.viewMode = this.normalizeViewMode(mode);
-    localStorage.setItem('moon_reader_view_mode', this.viewMode);
+    if (persist) localStorage.setItem('moon_reader_view_mode', this.viewMode);
     return this.viewMode;
   }
 

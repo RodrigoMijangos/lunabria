@@ -28,6 +28,7 @@ const CatalogView = {
       catalogSelectionLibrary: 'catalog-selection-library',
       catalogSelectionAddButton: 'catalog-selection-add-btn',
       catalogSelectionCreateButton: 'catalog-selection-create-btn',
+      catalogSelectionRemoveButton: 'catalog-selection-remove-btn',
       catalogSelectionStatus: 'catalog-selection-status'
     };
     Object.entries(ids).forEach(([name, id]) => {

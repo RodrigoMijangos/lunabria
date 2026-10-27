@@ -23,6 +23,22 @@ const createVirtualLibrariesApiService = () => ({
     return result;
   },
 
+  async updateVirtualLibrary(id, data) {
+    console.log('[Lunabria] ✏️ Updating virtual library:', id, data);
+    const res = await fetch(`/api/virtual-libraries/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Error updating virtual library');
+    }
+    const result = await res.json();
+    console.log('[Lunabria] ✔️ Virtual library updated:', result);
+    return result;
+  },
+
   async addBooksToVirtualLibrary(id, bookIds) {
     const res = await fetch(`/api/virtual-libraries/${id}/books`, {
       method: 'POST',
@@ -32,6 +48,20 @@ const createVirtualLibrariesApiService = () => ({
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.detail || 'Error adding books to virtual library');
+    }
+    return res.json();
+  },
+
+  async removeBooksFromVirtualLibrary(id, bookIds) {
+    console.log('[Lunabria] ➖ Removing books from virtual library:', id, bookIds);
+    const res = await fetch(`/api/virtual-libraries/${id}/books`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ book_ids: bookIds })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Error removing books from virtual library');
     }
     return res.json();
   },

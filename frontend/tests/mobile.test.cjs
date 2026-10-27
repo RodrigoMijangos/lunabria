@@ -1150,6 +1150,58 @@ test('MobileReaderController does not apply mobile-reader-active or mobile-drawi
   assert.equal(documentStub.body.classList.contains('mobile-drawing-active'), false, 'Body must remove mobile-drawing-active when reader is closed');
 });
 
+test('MobileReaderController prepares mobile layout and view mode before showing the reader', () => {
+  const { context, documentStub } = createDOMContext();
+
+  loadScript(context, 'js/models/ReaderModel.js');
+  loadScript(context, 'js/mobile/DeviceEnvironment.js');
+  loadScript(context, 'js/mobile/MobileReaderController.js');
+
+  const viewModeWrites = [];
+  context.localStorage.setItem = (key, value) => {
+    if (key === 'moon_reader_view_mode') viewModeWrites.push(value);
+  };
+  const ReaderModel = context.window.ReaderModel || context.ReaderModel;
+  const MobileReaderController = context.window.MobileReaderController || context.MobileReaderController;
+  const model = new ReaderModel();
+  model.setViewMode('dual-flow');
+  viewModeWrites.length = 0;
+
+  const readerContainer = new context.Element('div', { id: 'reader-container' });
+  readerContainer.style.display = 'none';
+  let viewModeSyncs = 0;
+  const fakeReader = {
+    container: readerContainer,
+    nav: { syncViewModeUI: () => { viewModeSyncs += 1; } },
+    drawing: { toggleDrawMode() {}, setDrawTool() {} }
+  };
+  const controller = new MobileReaderController(fakeReader, model);
+  controller.device.isMobileReaderActive = () => true;
+
+  controller.prepareForBookOpen();
+  assert.equal(documentStub.body.classList.contains('mobile-reader-active'), true);
+  assert.equal(readerContainer.style.display, 'none', 'Responsive class must be prepared before the reader is shown');
+  assert.equal(model.viewMode, 'flow', 'Mobile must leave dual-flow before the initial document render');
+  assert.equal(viewModeSyncs, 1, 'The viewport mode classes must match the initial mobile render');
+  assert.deepEqual(viewModeWrites, [], 'The preferred view mode must not be persisted before the document opens');
+
+  controller.onBookClosed();
+  assert.equal(model.viewMode, 'dual-flow', 'A failed open must restore the previous in-memory preference');
+  assert.deepEqual(viewModeWrites, [], 'A failed open must not persist a mobile-only view mode');
+  assert.equal(documentStub.body.classList.contains('mobile-reader-active'), false);
+
+  model.setViewMode('dual-flow');
+  viewModeWrites.length = 0;
+  controller.prepareForBookOpen();
+  readerContainer.style.display = 'flex';
+  controller.onBookOpened();
+  assert.equal(model.viewMode, 'flow');
+  assert.deepEqual(viewModeWrites, ['flow'], 'The mobile view mode is persisted only after a successful open');
+
+  readerContainer.style.display = 'none';
+  controller.onBookClosed();
+});
+
 test('MobileSelectionController preserves scroll position and targets correct page during long-press selection', async () => {
   const { context, elementsById, documentStub } = createDOMContext();
 

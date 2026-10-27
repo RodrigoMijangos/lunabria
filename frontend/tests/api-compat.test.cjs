@@ -694,8 +694,8 @@ function parity(name, options, action, verify) {
 const expectedKeys = [
   'getBooks', 'getBook', 'deleteBook', 'uploadBook', 'uploadBooks',
   'uploadBookWithProgress', 'getActiveUploadJobs', 'getUploadJob', 'getRecents',
-  'getVirtualLibraries', 'createVirtualLibrary', 'addBooksToVirtualLibrary',
-  'deleteVirtualLibrary', 'getVirtualLibraryBooks', 'getMetadataSources',
+  'getVirtualLibraries', 'createVirtualLibrary', 'updateVirtualLibrary', 'addBooksToVirtualLibrary',
+  'removeBooksFromVirtualLibrary', 'deleteVirtualLibrary', 'getVirtualLibraryBooks', 'getMetadataSources',
   'saveMetadataSources', 'fetchMetadataOnline', 'fetchMetadataByIsbn', 'updateMetadata',
   '_layoutBatches', 'syncConfig', '_pendingProgress', '_autoSaveTimer', '_lastSyncTime',
   'getProgress', 'markBookOpened', 'saveProgress', 'ensureAutoSaveTimer',
@@ -714,7 +714,8 @@ test('facade preserves global identity, own keys/order, descriptors and unchange
   assert.equal(vm.runInContext('api === window.api', extracted.context), true);
   const newOrChangedMethods = new Set([
     'uploadBooks', 'uploadBookWithProgress', 'getActiveUploadJobs', 'getUploadJob',
-    'getAnnotationExportSections', 'exportAnnotations'
+    'getAnnotationExportSections', 'exportAnnotations',
+    'updateVirtualLibrary', 'removeBooksFromVirtualLibrary'
   ]);
   for (const key of expectedKeys) {
     const b = Object.getOwnPropertyDescriptor(extracted.api, key);

@@ -14,6 +14,7 @@ class BookBase(BaseModel):
     last_read_at: Optional[str] = None
     comments: Optional[str] = None
     isbn: Optional[str] = None
+    publisher: Optional[str] = None
     has_cover: bool = False
     cover_url: Optional[str] = None
 
@@ -34,11 +35,21 @@ class VirtualLibraryBase(BaseModel):
     type: str = "query"  # "query" or "manual"
     query: Optional[str] = ""
     book_ids: Optional[List[int]] = []
+    excluded_book_ids: Optional[List[int]] = []
 
 class VirtualLibraryCreate(VirtualLibraryBase):
     pass
 
+class VirtualLibraryUpdate(BaseModel):
+    name: Optional[str] = None
+    query: Optional[str] = None
+    book_ids: Optional[List[int]] = None
+    excluded_book_ids: Optional[List[int]] = None
+
 class VirtualLibraryBooksAddRequest(BaseModel):
+    book_ids: List[int] = Field(min_length=1)
+
+class VirtualLibraryBooksRemoveRequest(BaseModel):
     book_ids: List[int] = Field(min_length=1)
 
 class VirtualLibraryResponse(VirtualLibraryBase):

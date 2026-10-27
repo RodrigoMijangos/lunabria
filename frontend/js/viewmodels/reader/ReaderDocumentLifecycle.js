@@ -14,6 +14,7 @@ class ReaderDocumentLifecycle {
     reader.loadingTask = null;
     reader.renderer.resetViewportDOM();
     reader.model.reset();
+    reader.mobile?.prepareForBookOpen();
     reader.toolbar.setOfflineStatus({ pdfCached: false, layoutsCached: false });
     reader.container.style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -155,6 +156,7 @@ class ReaderDocumentLifecycle {
       reader.nav.syncViewModeUI();
       reader.nav.updateHUD();
       await reader.renderCurrentViewMode(initialPage);
+      if (sequence !== reader.openSequence) return;
       reader.mobile?.onBookOpened();
 
       // Reconcile offline-complete books in the background; failed requests are harmless here.

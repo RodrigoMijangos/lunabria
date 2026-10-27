@@ -1,7 +1,14 @@
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from app.services.library_service import library_service
-from app.models import VirtualLibraryBooksAddRequest, VirtualLibraryCreate, VirtualLibraryResponse, BookBase
+from app.models import (
+    VirtualLibraryBooksAddRequest,
+    VirtualLibraryBooksRemoveRequest,
+    VirtualLibraryCreate,
+    VirtualLibraryUpdate,
+    VirtualLibraryResponse,
+    BookBase,
+)
 
 router = APIRouter(prefix="/api/virtual-libraries", tags=["Virtual Libraries"])
 
@@ -16,7 +23,8 @@ def create_virtual_library(req: VirtualLibraryCreate):
             name=req.name,
             lib_type=req.type,
             query=req.query or "",
-            book_ids=req.book_ids or []
+            book_ids=req.book_ids or [],
+            excluded_book_ids=req.excluded_book_ids or []
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error creating virtual library: {e}")
@@ -31,6 +39,16 @@ def add_books_to_virtual_library(lib_id: int, req: VirtualLibraryBooksAddRequest
         raise HTTPException(status_code=404, detail="Virtual library not found")
     return lib
 
+@router.delete("/{lib_id}/books", response_model=VirtualLibraryResponse)
+def remove_books_from_virtual_library(lib_id: int, req: VirtualLibraryBooksRemoveRequest):
+    try:
+        lib = library_service.remove_books_from_manual_library(lib_id, req.book_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not lib:
+        raise HTTPException(status_code=404, detail="Virtual library not found")
+    return lib
+
 @router.get("/{lib_id}", response_model=VirtualLibraryResponse)
 def get_virtual_library(lib_id: int):
     lib = library_service.get_virtual_library(lib_id)
@@ -39,13 +57,17 @@ def get_virtual_library(lib_id: int):
     return lib
 
 @router.put("/{lib_id}", response_model=VirtualLibraryResponse)
-def update_virtual_library(lib_id: int, req: VirtualLibraryCreate):
-    lib = library_service.update_virtual_library(
-        lib_id=lib_id,
-        name=req.name,
-        query=req.query,
-        book_ids=req.book_ids
-    )
+def update_virtual_library(lib_id: int, req: VirtualLibraryUpdate):
+    try:
+        lib = library_service.update_virtual_library(
+            lib_id=lib_id,
+            name=req.name,
+            query=req.query,
+            book_ids=req.book_ids,
+            excluded_book_ids=req.excluded_book_ids
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not lib:
         raise HTTPException(status_code=404, detail="Virtual library not found")
     return lib

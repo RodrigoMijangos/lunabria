@@ -492,6 +492,7 @@ class LibraryViewModel {
   setBookSelectionMode(enabled) { this.catalogSelectionManager.setMode(enabled); }
   setBookSelected(bookId, selected) { this.catalogSelectionManager.setBookSelected(bookId, selected); }
   async addSelectedBooksToLibrary() { await this.catalogSelectionManager.addToLibrary(); }
+  async removeSelectedBooksFromLibrary() { await this.catalogSelectionManager.removeFromLibrary(); }
   createLibraryFromSelection() { this.catalogSelectionManager.createLibrary(); }
   async onVirtualLibrariesChanged(createdLibrary = null) {
     await this.catalogSelectionManager.onLibrariesChanged(createdLibrary);
@@ -575,7 +576,8 @@ class LibraryViewModel {
       this.model.virtualLibraries,
       this.model.activeVirtualLibraryId,
       libraryId => this.selectVirtualLibrary(libraryId),
-      library => this.deleteVirtualLibrary(library)
+      library => this.deleteVirtualLibrary(library),
+      library => this.vlManager?.openManageModal(library)
     );
   }
 
@@ -679,6 +681,7 @@ class LibraryViewModel {
     this.catalogSelectionLibrary?.addEventListener('change', () => this.syncCatalogSelectionControls());
     this.catalogSelectionAddButton?.addEventListener('click', () => this.addSelectedBooksToLibrary());
     this.catalogSelectionCreateButton?.addEventListener('click', () => this.createLibraryFromSelection());
+    this.catalogSelectionRemoveButton?.addEventListener('click', () => this.removeSelectedBooksFromLibrary());
     window.addEventListener('resize', () => {
       window.clearTimeout(this.catalogResizeTimeout);
       this.catalogResizeTimeout = window.setTimeout(() => {

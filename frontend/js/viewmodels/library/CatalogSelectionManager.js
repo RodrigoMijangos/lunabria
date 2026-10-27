@@ -15,6 +15,9 @@ class CatalogSelectionManager {
   syncControls() {
     const vm = this.viewModel;
     const selectedLibraryId = CatalogSelectionView.getSelectedLibraryId(vm.catalogSelectionLibrary);
+    const activeLibrary = vm.model.virtualLibraries.find(
+      library => Number(library.id) === Number(vm.model.activeVirtualLibraryId)
+    );
     CatalogSelectionView.syncControls(vm, {
       selectionMode: vm.selectionMode,
       selectedCount: vm.selectedBookIds.size,
@@ -22,6 +25,7 @@ class CatalogSelectionManager {
       targetLibrary: vm.model.virtualLibraries.find(
         library => library.type === 'manual' && library.id === selectedLibraryId
       ),
+      activeLibrary,
       busy: vm.catalogSelectionBusy
     });
   }
@@ -65,6 +69,32 @@ class CatalogSelectionManager {
         `Selection added to «${library.name}». Duplicates were skipped.`);
     } catch (error) {
       CatalogSelectionView.setStatus(vm.catalogSelectionStatus, `Could not add books: ${error.message}`);
+    } finally {
+      vm.catalogSelectionBusy = false;
+      vm.syncCatalogSelectionControls();
+    }
+  }
+
+  async removeFromLibrary() {
+    const vm = this.viewModel;
+    const activeLibrary = vm.model.virtualLibraries.find(
+      library => Number(library.id) === Number(vm.model.activeVirtualLibraryId)
+    );
+    const selectedIds = [...vm.selectedBookIds];
+    if (!activeLibrary || activeLibrary.type !== 'manual' || !selectedIds.length) return;
+    vm.catalogSelectionBusy = true;
+    vm.syncCatalogSelectionControls();
+    CatalogSelectionView.setStatus(vm.catalogSelectionStatus, 'Removing books…');
+    try {
+      await api.removeBooksFromVirtualLibrary(activeLibrary.id, selectedIds);
+      vm.selectionMode = false;
+      vm.selectedBookIds.clear();
+      await vm.loadVirtualLibraries();
+      await vm.loadBookGrid();
+      CatalogSelectionView.setStatus(vm.catalogSelectionStatus,
+        `Removed ${selectedIds.length} ${selectedIds.length === 1 ? 'book' : 'books'} from «${activeLibrary.name}».`);
+    } catch (error) {
+      CatalogSelectionView.setStatus(vm.catalogSelectionStatus, `Could not remove books: ${error.message}`);
     } finally {
       vm.catalogSelectionBusy = false;
       vm.syncCatalogSelectionControls();

@@ -25,7 +25,7 @@ const CatalogSelectionView = {
     return Number(select?.value);
   },
 
-  syncControls(elements, { selectionMode, selectedCount, hasManualLibraries, targetLibrary, busy }) {
+  syncControls(elements, { selectionMode, selectedCount, hasManualLibraries, targetLibrary, activeLibrary, busy }) {
     if (elements.catalogSelectionToggle) {
       elements.catalogSelectionToggle.textContent = selectionMode ? 'Cancel selection' : 'Select books';
       elements.catalogSelectionToggle.setAttribute('aria-pressed', String(selectionMode));
@@ -41,6 +41,14 @@ const CatalogSelectionView = {
     }
     if (elements.catalogSelectionCreateButton) {
       elements.catalogSelectionCreateButton.disabled = !selectionMode || !selectedCount || busy;
+    }
+    if (elements.catalogSelectionRemoveButton) {
+      const isManualActive = activeLibrary?.type === 'manual';
+      elements.catalogSelectionRemoveButton.hidden = !isManualActive;
+      elements.catalogSelectionRemoveButton.disabled = !selectionMode || !selectedCount || busy;
+      if (isManualActive) {
+        elements.catalogSelectionRemoveButton.textContent = `Remove from «${activeLibrary.name}»`;
+      }
     }
   },
 
