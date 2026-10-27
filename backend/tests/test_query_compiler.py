@@ -1,5 +1,5 @@
 import unittest
-from app.services.query_compiler import compile_lunabria_query
+from app.services.query_compiler import compile_lunabria_query, parse_query_clauses
 
 
 class TestLunabriaQueryCompiler(unittest.TestCase):
@@ -53,6 +53,42 @@ class TestLunabriaQueryCompiler(unittest.TestCase):
     def test_bare_terms(self):
         self.assertEqual(compile_lunabria_query("clean code"), "clean and code")
         self.assertEqual(compile_lunabria_query('"Clean Code"'), '"=Clean Code"')
+
+    def test_comma_between_different_fields_acts_as_or(self):
+        query = "tags: linux, comment:linux"
+        self.assertEqual(compile_lunabria_query(query), "tags:linux or comment:linux")
+        clauses = parse_query_clauses(query)
+        self.assertEqual(len(clauses), 2)
+        self.assertEqual(clauses[0]["op"], "+")
+        self.assertEqual(clauses[1]["op"], ",")
+
+    def test_natural_words_and_or_not(self):
+        self.assertEqual(
+            compile_lunabria_query("tags:linux and not tags:arch"),
+            "tags:linux and (not tags:arch)"
+        )
+        self.assertEqual(
+            compile_lunabria_query("tags:linux not tags:arch"),
+            "tags:linux and (not tags:arch)"
+        )
+        self.assertEqual(
+            compile_lunabria_query("tags:linux or comment:linux"),
+            "tags:linux or comment:linux"
+        )
+        self.assertEqual(
+            compile_lunabria_query("tags:linux, not tags:arch"),
+            "tags:linux or (not tags:arch)"
+        )
+
+    def test_parentheses_grouping(self):
+        self.assertEqual(
+            compile_lunabria_query("(tags:linux or comment:linux) and not tags:arch"),
+            "(tags:linux or comment:linux) and (not tags:arch)"
+        )
+        self.assertEqual(
+            compile_lunabria_query("(tags:linux, comment:linux) and not tags:arch"),
+            "(tags:linux or comment:linux) and (not tags:arch)"
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,14 @@
+{
+  "name": "lunabria-dev-tools",
+  "private": true,
+  "scripts": {
+    "lint": "biome lint frontend/js frontend/css",
+    "format": "biome format --write frontend/js frontend/css",
+    "typecheck": "tsc --project jsconfig.json --noEmit",
+    "test": "node --test frontend/tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.7.2"
+  }
+}

@@ -143,6 +143,133 @@ const UploadModalView = {
       row.appendChild(progressTrack);
     }
     return true;
+  },
+
+  updateBackgroundIndicator({ queue = [], activeJobsCount = 0, isModalOpen = false, justCompletedTimestamp = null, onOpenModal } = {}) {
+    if (typeof document === 'undefined' || !document?.body || typeof document.createElement !== 'function') {
+      return;
+    }
+
+    const uploadingItems = queue.filter(item => ['uploading', 'sent'].includes(item.status));
+    const processingItems = queue.filter(item => ['queued', 'processing'].includes(item.status));
+    const hasActiveBackground = uploadingItems.length > 0 || processingItems.length > 0 || activeJobsCount > 0;
+
+    let dock = document.getElementById('upload-background-dock');
+
+    // Update navbar badge if #upload-btn exists
+    const uploadBtn = document.getElementById('upload-btn');
+    if (uploadBtn && typeof uploadBtn.querySelector === 'function') {
+      let badge = uploadBtn.querySelector('.upload-btn-badge');
+      if (hasActiveBackground) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'upload-btn-badge';
+          uploadBtn.appendChild(badge);
+        }
+        const activeCount = uploadingItems.length + Math.max(processingItems.length, activeJobsCount);
+        badge.textContent = `${activeCount}`;
+        badge.title = `${activeCount} book${activeCount === 1 ? '' : 's'} in background`;
+      } else if (badge && typeof badge.remove === 'function') {
+        badge.remove();
+      }
+    }
+
+    if (isModalOpen || (!hasActiveBackground && !justCompletedTimestamp)) {
+      if (dock) dock.style.display = 'none';
+      return;
+    }
+
+    if (!dock) {
+      dock = document.createElement('div');
+      dock.id = 'upload-background-dock';
+      dock.className = 'upload-background-dock';
+      dock.setAttribute('role', 'status');
+      dock.setAttribute('aria-live', 'polite');
+      document.body.appendChild(dock);
+    }
+
+    dock.style.display = 'flex';
+
+    let titleText = '';
+    let percent = 0;
+    let isProcessing = false;
+
+    if (uploadingItems.length > 0) {
+      const activeItem = uploadingItems[0];
+      percent = activeItem.progress || 0;
+      const isStaging = percent >= 100 || activeItem.status === 'sent';
+      if (isStaging) {
+        titleText = uploadingItems.length === 1
+          ? `Staging: ${activeItem.name}...`
+          : `Staging ${uploadingItems.length} books on server...`;
+        isProcessing = true;
+      } else {
+        titleText = uploadingItems.length === 1
+          ? `Uploading: ${activeItem.name} (${percent}%)`
+          : `Uploading ${uploadingItems.length} books (${percent}%)`;
+      }
+    } else if (processingItems.length > 0 || activeJobsCount > 0) {
+      const count = Math.max(processingItems.length, activeJobsCount);
+      titleText = count === 1
+        ? 'Processing metadata with Calibre...'
+        : `Processing ${count} books with Calibre...`;
+      isProcessing = true;
+      percent = 100;
+    } else if (justCompletedTimestamp) {
+      titleText = 'All books imported successfully';
+      percent = 100;
+    }
+
+    if (typeof dock.replaceChildren === 'function') {
+      dock.replaceChildren();
+    } else {
+      dock.innerHTML = '';
+    }
+
+    const header = document.createElement('div');
+    header.className = 'upload-dock-header';
+
+    const info = document.createElement('div');
+    info.className = 'upload-dock-info';
+
+    const iconSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    iconSvg.setAttribute('class', `ui-icon${isProcessing || uploadingItems.length > 0 ? ' ui-icon-spin' : ''}`);
+    iconSvg.setAttribute('aria-hidden', 'true');
+    const iconUse = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    iconUse.setAttribute('href', isProcessing || uploadingItems.length > 0 ? './icons.svg#loader' : './icons.svg#circle-check');
+    iconSvg.appendChild(iconUse);
+
+    const title = document.createElement('span');
+    title.className = 'upload-dock-title';
+    title.textContent = titleText;
+    title.title = titleText;
+
+    info.append(iconSvg, title);
+
+    const dismissBtn = document.createElement('button');
+    dismissBtn.type = 'button';
+    dismissBtn.className = 'upload-dock-dismiss-btn';
+    dismissBtn.setAttribute('aria-label', 'Dismiss background upload widget');
+    dismissBtn.textContent = '×';
+    dismissBtn.onclick = (e) => {
+      e.stopPropagation();
+      dock.style.display = 'none';
+    };
+
+    header.append(info, dismissBtn);
+
+    const track = document.createElement('div');
+    track.className = 'upload-dock-progress-track';
+    const fill = document.createElement('div');
+    fill.className = `upload-dock-progress-fill${isProcessing ? ' is-indeterminate' : ''}`;
+    fill.style.width = isProcessing ? '40%' : `${percent}%`;
+    track.appendChild(fill);
+
+    dock.append(header, track);
+    dock.onclick = (e) => {
+      if (e.target.closest?.('.upload-dock-dismiss-btn')) return;
+      onOpenModal?.();
+    };
   }
 };
 

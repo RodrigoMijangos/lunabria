@@ -113,6 +113,31 @@ class LibraryViewModel {
     }
   }
 
+  isStaleCatalogRequest(requestSequence) {
+    return requestSequence !== this.catalogRequestSequence;
+  }
+
+  shouldClearLocalCache(pageTotal) {
+    return (
+      typeof localDB !== 'undefined' &&
+      localDB &&
+      pageTotal === 0 &&
+      !this.model.searchQuery &&
+      !this.model.activeVirtualLibraryId &&
+      typeof localDB.clearCachedBooks === 'function'
+    );
+  }
+
+  shouldSaveLocalCache(books) {
+    return (
+      typeof localDB !== 'undefined' &&
+      localDB &&
+      typeof localDB.saveCachedBooks === 'function' &&
+      Array.isArray(books) &&
+      books.length > 0
+    );
+  }
+
   async loadHome() {
     const requestSequence = ++this.catalogRequestSequence;
     if (this.catalogSearchTimeout !== null) {
@@ -124,7 +149,7 @@ class LibraryViewModel {
     if (typeof localDB !== 'undefined' && localDB && typeof localDB.getAllCachedBooks === 'function') {
       try {
         const cached = await localDB.getAllCachedBooks();
-        if (requestSequence !== this.catalogRequestSequence) return;
+        if (this.isStaleCatalogRequest(requestSequence)) return;
         cachedBooks = Array.isArray(cached) ? cached : [];
         if (
           cachedBooks.length > 0 &&
@@ -139,40 +164,27 @@ class LibraryViewModel {
       let recents = [];
       if (this.model.catalogSort !== 'last_read_at') {
         const serverRecents = await api.getRecents();
-        if (requestSequence !== this.catalogRequestSequence) return;
+        if (this.isStaleCatalogRequest(requestSequence)) return;
         recents = await this.attachCachedCovers(serverRecents, cachedBooks);
-        if (requestSequence !== this.catalogRequestSequence) return;
+        if (this.isStaleCatalogRequest(requestSequence)) return;
       }
       this.model.setRecentBooks(recents);
 
       const options = this.getCatalogRequestOptions();
       const response = await api.getBooks(null, this.model.activeVirtualLibraryId, options);
-      if (requestSequence !== this.catalogRequestSequence) return;
+      if (this.isStaleCatalogRequest(requestSequence)) return;
       const page = this.normalizeCatalogResponse(response, options);
       const books = await this.attachCachedCovers(page.books, cachedBooks);
-      if (requestSequence !== this.catalogRequestSequence) return;
+      if (this.isStaleCatalogRequest(requestSequence)) return;
       this.model.setBooks(books);
       if (page.serverPaged) {
         this.model.setCatalogPage(page.page);
         this.catalogServerPage = { page: page.page, pageSize: page.pageSize, total: page.total };
       }
 
-      if (
-        typeof localDB !== 'undefined' &&
-        localDB &&
-        page.total === 0 &&
-        !this.model.searchQuery &&
-        !this.model.activeVirtualLibraryId &&
-        typeof localDB.clearCachedBooks === 'function'
-      ) {
+      if (this.shouldClearLocalCache(page.total)) {
         localDB.clearCachedBooks().catch(() => {});
-      } else if (
-        typeof localDB !== 'undefined' &&
-        localDB &&
-        typeof localDB.saveCachedBooks === 'function' &&
-        Array.isArray(books) &&
-        books.length > 0
-      ) {
+      } else if (this.shouldSaveLocalCache(books)) {
         localDB.saveCachedBooks(books)
           .then(() => this.cacheMissingOfflineCovers(books))
           .catch(err => {
@@ -200,7 +212,7 @@ class LibraryViewModel {
         serverAvailable = await monitor.checkServer();
       } catch (_) {}
     }
-    if (requestSequence !== this.catalogRequestSequence) return;
+    if (this.isStaleCatalogRequest(requestSequence)) return;
 
     if (serverAvailable) {
       this.hideOfflineBanner();
@@ -263,7 +275,7 @@ class LibraryViewModel {
       } catch (dbErr) {
         console.error('[LibraryViewModel] Error retrieving offline complete books:', dbErr);
       }
-      if (requestSequence !== this.catalogRequestSequence) return;
+      if (this.isStaleCatalogRequest(requestSequence)) return;
       offlineBooks = Array.isArray(offlineBooks) ? offlineBooks : [];
       this.model.setBooks(offlineBooks);
       this.model.setRecentBooks([]);
@@ -423,10 +435,10 @@ class LibraryViewModel {
     const options = this.getCatalogRequestOptions();
     try {
       const response = await api.getBooks(null, this.model.activeVirtualLibraryId, options);
-      if (requestSequence !== this.catalogRequestSequence) return;
+      if (this.isStaleCatalogRequest(requestSequence)) return;
       const page = this.normalizeCatalogResponse(response, options);
       const books = await this.attachCachedCovers(page.books);
-      if (requestSequence !== this.catalogRequestSequence) return;
+      if (this.isStaleCatalogRequest(requestSequence)) return;
       this.model.setBooks(books);
       if (page.serverPaged) {
         this.model.setCatalogPage(page.page);

@@ -120,7 +120,7 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 - **Adaptive Paginated Catalog:** Dynamic grid view that scales gracefully with your viewport width, supporting custom page sizes, responsive column layouts, and local cover caching.
 - **Virtual Library Switcher:** Filter your book collection without duplicating files, with cover cards, live Calibre query previews, preselected search/collection matches, and quick select/deselect controls.
 - **Batch Book Management:** Select multiple books from search results or the catalog to group them into manual virtual collections or remove them directly from the active collection.
-- **Universal Live Search:** Instant filtering supporting multi-word queries, boolean operators (`+` AND, `,` OR, `-` NOT), exact quote matching (`"..."`), and targeted prefixes across titles, authors, publishers, and Calibre tags.
+- **Universal Live Search:** Instant filtering supporting multi-word queries, symbolic and natural-language boolean operators (`+` / `and`, `,` / `or`, `-` / `not`), parentheses grouping, exact quote matching (`"..."`), and targeted prefixes across titles, authors, publishers, and Calibre tags.
 - **Local Cover Caching & Vector Fallback:** Book covers viewed in the library are cached locally in IndexedDB for instant retrieval and offline reuse; books without an embedded cover fall back seamlessly to an offline vector cover.
 - **Reconnection Detection:** Automatically detects when a dropped connection is restored, refreshing the catalog and syncing queued reading progress.
 - **Ergonomic Themes:** **Sepia** (warm daylight tone), **AMOLED Black** (pure `#000000` for OLED displays), and **Dark** (slate).
@@ -157,10 +157,10 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 
 ## 📚 Virtual Libraries & Collections
 
-- **Universal Query Engine:** Combine logical operators (`+` AND, `,` OR, `-` NOT), exact quote matching (`"..."`), and field-directed queries (`tags:`, `author:`, `publisher:`, `title:`) across live search and collection rules with automatic Calibre syntax compilation.
+- **Universal Query Engine:** Combine symbolic and natural-language logical operators (`+` / `and`, `,` / `or`, `-` / `not`), parentheses grouping, exact quote matching (`"..."`), and field-directed queries (`tags:`, `author:`, `publisher:`, `title:`) across live search and collection rules with automatic Calibre syntax compilation.
 - **Optional Visual Query Builder:** Collapsible query builder modal with tactile operator chips and live Calibre expression preview for intuitive rule construction.
-- **Hybrid Collections:** Seamlessly unite automatic search rules with manual book additions and explicit book exclusions.
-- **Collection Management Dialog:** Rename virtual libraries and manage book memberships directly with an expanded preview grid (up to 860px width) and quick-edit collection badges in the library catalog.
+- **Hybrid Collections:** Seamlessly unite automatic search rules with manual book additions and explicit book exclusions; search the catalog to add books directly to an existing collection.
+- **Collection Management Dialog:** Rename virtual libraries and manage book memberships directly, edit rules with removable query tokens and a live Calibre preview, and use quick-edit collection badges in the library catalog.
 - **Zero Disk Duplication:** No physical files are moved or duplicated.
 
 ---

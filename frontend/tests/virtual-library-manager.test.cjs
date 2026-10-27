@@ -296,7 +296,7 @@ test('virtual-library modal renders interactive query token pills with removable
 
   // Remove the second token (format: epub)
   const removeBtn = secondToken.children[3];
-  assert.equal(removeBtn.textContent, '�');
+  assert.equal(removeBtn.textContent, '✕');
   removeBtn.onclick();
 
   const queryInput = env.document.getElementById('vl-query-input');
@@ -334,4 +334,80 @@ test('virtual-library modal makes query builder card optional and toggleable', a
   closeBtn.onclick();
   assert.equal(queryBuilderCard.hasAttribute('hidden'), true);
   assert.equal(queryBuilderCard.style.display, 'none');
+});
+
+test('virtual-library modal renders OR token pill when query contains commas', async () => {
+  const env = createEnvironment(async () => ({ books: [], total: 0 }));
+  const manager = new env.VirtualLibraryManager();
+
+  await manager.openVirtualLibraryModal({
+    searchQuery: 'tags: linux, comment: linux'
+  });
+
+  const tokensContainer = env.document.getElementById('vl-query-tokens');
+  assert.equal(tokensContainer.children.length, 2);
+
+  const firstToken = tokensContainer.children[0];
+  assert.equal(firstToken.children[0].textContent, 'tags:');
+  assert.equal(firstToken.children[1].textContent, 'linux');
+
+  const secondToken = tokensContainer.children[1];
+  assert.equal(secondToken.children[0].textContent, 'OR');
+  assert.equal(secondToken.children[1].textContent, 'comment:');
+  assert.equal(secondToken.children[2].textContent, 'linux');
+});
+
+test('openManageModal allows editing search rule and adding books from catalog', async () => {
+  let updatedQueryPayload = null;
+  let addedBooksPayload = null;
+  const env = createEnvironment(async () => ({
+    books: [{ id: 50, title: 'Catalog Linux', authors: 'Linus' }],
+    total: 1
+  }), {
+    updateVirtualLibrary: async (id, data) => {
+      updatedQueryPayload = { id, data };
+      return { id, name: 'Linux', type: 'query', query: data.query, book_ids: [] };
+    },
+    getVirtualLibraryBooks: async () => [
+      { id: 10, title: 'Book 10', authors: 'Auth' }
+    ],
+    addBooksToVirtualLibrary: async (id, bookIds) => {
+      addedBooksPayload = { id, bookIds };
+      return { id, name: 'Linux', type: 'query', query: 'tags: linux', book_ids: bookIds };
+    }
+  });
+
+  const manager = new env.VirtualLibraryManager();
+  const library = { id: 7, name: 'Linux', type: 'query', query: 'tags: arch' };
+  await manager.openManageModal(library);
+
+  // Test query editing
+  const queryInput = env.document.getElementById('vl-manage-query-input');
+  assert.equal(queryInput.value, 'tags: arch');
+  queryInput.value = 'tags: linux';
+  queryInput.oninput();
+
+  const preview = env.document.getElementById('vl-manage-compiled-preview');
+  assert.equal(preview.textContent, 'Calibre: tags:linux');
+
+  const saveBtn = env.document.getElementById('vl-manage-save-query-btn');
+  await saveBtn.onclick();
+  assert.deepEqual(plain(updatedQueryPayload), { id: 7, data: { query: 'tags: linux' } });
+  assert.equal(library.query, 'tags: linux');
+
+  // Test catalog search & add books
+  const addToggleBtn = env.document.getElementById('vl-manage-add-toggle-btn');
+  await addToggleBtn.onclick();
+  const catalogList = env.document.getElementById('vl-manage-catalog-list');
+  assert.equal(catalogList.children.length, 1);
+
+  // Simulate checking the book
+  const checkbox = catalogList.children[0].children[0];
+  checkbox.checked = true;
+  catalogList.onchange({ target: checkbox });
+  assert.equal(manager.manageAddSelectedBookIds.has(50), true);
+
+  const addConfirmBtn = env.document.getElementById('vl-manage-add-confirm-btn');
+  await addConfirmBtn.onclick();
+  assert.deepEqual(plain(addedBooksPayload), { id: 7, bookIds: [50] });
 });

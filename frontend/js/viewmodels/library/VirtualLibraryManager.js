@@ -20,6 +20,19 @@ class VirtualLibraryManager {
     this.filterVirtualLibraryId = null;
   }
 
+  validateCollectionInput(name, mode, query, selectedCount) {
+    if (!name) {
+      return { valid: false, error: 'Please enter a name for the collection.' };
+    }
+    if (mode === 'query' && !query) {
+      return { valid: false, error: 'Enter a Calibre search expression.' };
+    }
+    if (mode === 'manual' && selectedCount === 0) {
+      return { valid: false, error: 'Select at least one book for the collection.' };
+    }
+    return { valid: true };
+  }
+
   async openVirtualLibraryModal(options = {}) {
     if (!this.modal) return;
     const sequence = ++this.openSequence;
@@ -166,18 +179,27 @@ class VirtualLibraryManager {
       if (!clauses.length) return;
 
       clauses.forEach((cl, idx) => {
+        const isNegated = cl.op === '-' || cl.op === ',-';
+        const isOr = cl.op === ',' || cl.op === ',-';
         const pill = document.createElement('div');
-        pill.className = `vl-token-pill${cl.op === '-' ? ' is-negated' : ''}`;
+        pill.className = `vl-token-pill${isNegated ? ' is-negated' : ''}`;
 
-        if (cl.op === '-') {
+        if (idx > 0 && isOr) {
           const opSpan = document.createElement('span');
-          opSpan.className = 'vl-token-op vl-token-op-not';
-          opSpan.textContent = 'NOT';
+          opSpan.className = 'vl-token-op vl-token-op-or';
+          opSpan.textContent = 'OR';
           pill.appendChild(opSpan);
-        } else if (idx > 0) {
+        } else if (idx > 0 && !isNegated) {
           const opSpan = document.createElement('span');
           opSpan.className = 'vl-token-op vl-token-op-and';
           opSpan.textContent = 'AND';
+          pill.appendChild(opSpan);
+        }
+
+        if (isNegated) {
+          const opSpan = document.createElement('span');
+          opSpan.className = 'vl-token-op vl-token-op-not';
+          opSpan.textContent = 'NOT';
           pill.appendChild(opSpan);
         }
 
@@ -199,7 +221,7 @@ class VirtualLibraryManager {
         if (typeof removeBtn.setAttribute === 'function') {
           removeBtn.setAttribute('aria-label', `Remove filter ${cl.field ? cl.field + ' ' : ''}${valSpan.textContent}`);
         }
-        removeBtn.textContent = '�';
+        removeBtn.textContent = '\u2715';
         removeBtn.onclick = (e) => {
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
           clauses.splice(idx, 1);
@@ -498,16 +520,9 @@ class VirtualLibraryManager {
       saveBtn.onclick = async () => {
         const name = nameInput?.value.trim() || '';
         const query = queryInput?.value.trim() || '';
-        if (!name) {
-          alert('Please enter a name for the collection.');
-          return;
-        }
-        if (this.mode === 'query' && !query) {
-          alert('Enter a Calibre search expression.');
-          return;
-        }
-        if (this.mode === 'manual' && this.selectedBookIds.size === 0) {
-          alert('Select at least one book for the collection.');
+        const validation = this.validateCollectionInput(name, this.mode, query, this.selectedBookIds.size);
+        if (!validation.valid) {
+          alert(validation.error);
           return;
         }
 
@@ -707,13 +722,148 @@ class VirtualLibraryManager {
       };
     }
 
+    const tabRuleBtn = document.getElementById('vl-manage-tab-rule-btn');
+    const tabBooksBtn = document.getElementById('vl-manage-tab-books-btn');
+    const tabBooksCount = document.getElementById('vl-manage-tab-books-count');
+
+    const queryInput = document.getElementById('vl-manage-query-input');
+    const queryClearBtn = document.getElementById('vl-manage-query-clear-btn');
+    const saveQueryBtn = document.getElementById('vl-manage-save-query-btn');
+    const queryTokensContainer = document.getElementById('vl-manage-query-tokens');
+    const compiledPreview = document.getElementById('vl-manage-compiled-preview');
+    const queryStatus = document.getElementById('vl-manage-query-status');
+
+    const addToggleBtn = document.getElementById('vl-manage-add-toggle-btn');
+    const addContainer = document.getElementById('vl-manage-add-container');
+    const addSearchInput = document.getElementById('vl-manage-add-search-input');
+    const addSelectedCount = document.getElementById('vl-manage-add-selected-count');
+    const addConfirmBtn = document.getElementById('vl-manage-add-confirm-btn');
+    const catalogList = document.getElementById('vl-manage-catalog-list');
+
+    this.manageAddSelectedBookIds = new Set();
+    this.manageCatalogBooks = null;
+
+    if (queryInput) queryInput.value = library.query || '';
+    if (queryText) queryText.textContent = library.query || '(empty)';
+
+    const renderManageTokens = () => {
+      if (!queryTokensContainer) return;
+      const raw = queryInput?.value?.trim?.() || '';
+      if (!raw || typeof LunabriaQueryCompiler === 'undefined' || typeof LunabriaQueryCompiler.parseClauses !== 'function') {
+        if (typeof queryTokensContainer.replaceChildren === 'function') queryTokensContainer.replaceChildren();
+        else queryTokensContainer.textContent = '';
+        if (compiledPreview) compiledPreview.textContent = '';
+        return;
+      }
+      const compiled = LunabriaQueryCompiler.compile(raw);
+      if (compiledPreview) compiledPreview.textContent = compiled ? `Calibre: ${compiled}` : '';
+      const clauses = LunabriaQueryCompiler.parseClauses(raw);
+      if (typeof queryTokensContainer.replaceChildren === 'function') queryTokensContainer.replaceChildren();
+      else queryTokensContainer.textContent = '';
+
+      clauses.forEach((cl, idx) => {
+        const isNegated = cl.op === '-' || cl.op === ',-';
+        const isOr = cl.op === ',' || cl.op === ',-';
+        const pill = document.createElement('div');
+        pill.className = `vl-token-pill${isNegated ? ' is-negated' : ''}`;
+
+        if (idx > 0 && isOr) {
+          const opSpan = document.createElement('span');
+          opSpan.className = 'vl-token-op vl-token-op-or';
+          opSpan.textContent = 'OR';
+          pill.appendChild(opSpan);
+        } else if (idx > 0 && !isNegated) {
+          const opSpan = document.createElement('span');
+          opSpan.className = 'vl-token-op vl-token-op-and';
+          opSpan.textContent = 'AND';
+          pill.appendChild(opSpan);
+        }
+
+        if (isNegated) {
+          const opSpan = document.createElement('span');
+          opSpan.className = 'vl-token-op vl-token-op-not';
+          opSpan.textContent = 'NOT';
+          pill.appendChild(opSpan);
+        }
+
+        if (cl.field) {
+          const fieldSpan = document.createElement('span');
+          fieldSpan.className = 'vl-token-field';
+          fieldSpan.textContent = `${cl.field}:`;
+          pill.appendChild(fieldSpan);
+        }
+
+        const valSpan = document.createElement('span');
+        valSpan.className = 'vl-token-value';
+        valSpan.textContent = cl.values.map(v => v.isQuoted ? `"${v.value}"` : v.value).join(', ');
+        pill.appendChild(valSpan);
+
+        pill.onclick = (e) => {
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          clauses.splice(idx, 1);
+          const nextVal = LunabriaQueryCompiler.formatClauses(clauses);
+          if (queryInput) queryInput.value = nextVal;
+          renderManageTokens();
+        };
+
+        queryTokensContainer.appendChild(pill);
+      });
+    };
+    renderManageTokens();
+
+    if (queryInput) {
+      queryInput.oninput = () => {
+        renderManageTokens();
+      };
+    }
+
+    if (queryClearBtn) {
+      queryClearBtn.onclick = () => {
+        if (queryInput) queryInput.value = '';
+        renderManageTokens();
+      };
+    }
+
+    if (saveQueryBtn) {
+      saveQueryBtn.onclick = async () => {
+        const newQuery = queryInput?.value.trim() || '';
+        saveQueryBtn.disabled = true;
+        try {
+          const updated = await api.updateVirtualLibrary(library.id, { query: newQuery });
+          library.query = updated.query;
+          if (queryText) queryText.textContent = updated.query || '(empty)';
+          if (queryStatus) {
+            queryStatus.textContent = 'Search rule updated successfully.';
+            queryStatus.style.color = 'var(--accent-color)';
+          }
+          if (this.onLibrariesChanged) await this.onLibrariesChanged(updated);
+          loadManageBooks();
+        } catch (err) {
+          if (queryStatus) {
+            queryStatus.textContent = `Error: ${err.message}`;
+            queryStatus.style.color = '#dc2626';
+          }
+        } finally {
+          saveQueryBtn.disabled = false;
+        }
+      };
+    }
+
+    const setManageTab = (tab) => {
+      if (querySection) querySection.style.display = tab === 'rule' ? '' : 'none';
+      if (booksSection) booksSection.style.display = tab === 'books' ? '' : 'none';
+      if (tabRuleBtn?.classList) tabRuleBtn.classList.toggle('active', tab === 'rule');
+      if (tabBooksBtn?.classList) tabBooksBtn.classList.toggle('active', tab === 'books');
+    };
+
+    if (tabRuleBtn) tabRuleBtn.onclick = () => setManageTab('rule');
+    if (tabBooksBtn) tabBooksBtn.onclick = () => setManageTab('books');
+
     if (library.type === 'query') {
-      if (querySection) querySection.style.display = '';
-      if (booksSection) booksSection.style.display = 'none';
-      if (queryText) queryText.textContent = library.query || '(empty)';
+      setManageTab('rule');
     } else {
-      if (querySection) querySection.style.display = 'none';
-      if (booksSection) booksSection.style.display = '';
+      setManageTab('books');
+    }
 
       const renderBooks = () => {
         if (!booksList || !Array.isArray(this.manageBooks)) return;
@@ -754,7 +904,7 @@ class VirtualLibraryManager {
 
           const description = document.createElement('span');
           description.className = 'vl-book-title-author';
-          description.textContent = `${book.title} ? ${book.authors || ''}`;
+          description.textContent = `${book.title} — ${book.authors || ''}`;
 
           const coverWrap = document.createElement('div');
           coverWrap.className = 'vl-book-cover-wrap';
@@ -843,17 +993,147 @@ class VirtualLibraryManager {
         };
       }
 
-      if (booksList) booksList.textContent = 'Loading collection books...';
-      try {
-        const fetchedBooks = await api.getVirtualLibraryBooks(library.id);
-        if (sequence !== this.manageOpenSequence) return;
-        this.manageBooks = Array.isArray(fetchedBooks) ? fetchedBooks : [];
-        renderBooks();
-      } catch (err) {
-        if (sequence !== this.manageOpenSequence) return;
-        if (booksList) booksList.textContent = 'Could not load collection books.';
+      const loadManageBooks = async () => {
+        if (booksList) booksList.textContent = 'Loading collection books...';
+        try {
+          const fetchedBooks = await api.getVirtualLibraryBooks(library.id);
+          if (sequence !== this.manageOpenSequence) return;
+          this.manageBooks = Array.isArray(fetchedBooks) ? fetchedBooks : [];
+          if (tabBooksCount) tabBooksCount.textContent = String(this.manageBooks.length);
+          renderBooks();
+        } catch (err) {
+          if (sequence !== this.manageOpenSequence) return;
+          if (booksList) booksList.textContent = 'Could not load collection books.';
+        }
+      };
+
+      // Add Books from Catalog
+      const renderCatalogBooks = () => {
+        if (!catalogList || !Array.isArray(this.manageCatalogBooks)) return;
+        catalogList.replaceChildren();
+        if (!this.manageCatalogBooks.length) {
+          const empty = document.createElement('div');
+          empty.style.padding = '12px';
+          empty.style.textAlign = 'center';
+          empty.style.color = 'var(--text-secondary)';
+          empty.textContent = 'No matching books found in catalog.';
+          catalogList.appendChild(empty);
+          return;
+        }
+
+        this.manageCatalogBooks.forEach(book => {
+          const isSelected = this.manageAddSelectedBookIds.has(Number(book.id));
+          const label = document.createElement('label');
+          label.className = `vl-book-item${isSelected ? ' is-selected' : ''}`;
+          label.dataset.bookId = String(book.id);
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.dataset.bookId = String(book.id);
+          checkbox.checked = isSelected;
+
+          const description = document.createElement('span');
+          description.className = 'vl-book-title-author';
+          description.textContent = `${book.title} — ${book.authors || ''}`;
+
+          const coverWrap = document.createElement('div');
+          coverWrap.className = 'vl-book-cover-wrap';
+          const coverImg = document.createElement('img');
+          coverImg.className = 'vl-book-cover';
+          coverImg.alt = book.title || '';
+          coverImg.loading = 'lazy';
+          coverImg.src = book.cover_url || `/api/books/${book.id}/cover`;
+          coverImg.onerror = () => {
+            coverImg.onerror = null;
+            coverImg.src = typeof OFFLINE_FALLBACK_COVER !== 'undefined'
+              ? OFFLINE_FALLBACK_COVER
+              : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="100%" height="100%" fill="%232d3748"/><path d="M70 120h60M70 150h60" stroke="%23718096" stroke-width="6"/><circle cx="100" cy="80" r="18" fill="%23a0aec0"/></svg>';
+          };
+          coverWrap.appendChild(coverImg);
+
+          label.append(checkbox, description, coverWrap);
+          catalogList.appendChild(label);
+        });
+      };
+
+      const updateAddSelectedCounter = () => {
+        const count = this.manageAddSelectedBookIds.size;
+        if (addSelectedCount) addSelectedCount.textContent = `${count} selected`;
+        if (addConfirmBtn) {
+          addConfirmBtn.disabled = count === 0;
+          addConfirmBtn.textContent = count > 0 ? `Add selected (${count})` : 'Add to Collection';
+        }
+      };
+
+      if (catalogList) {
+        catalogList.onchange = (event) => {
+          const checkbox = event.target.dataset?.bookId ? event.target : event.target.closest?.('input[data-book-id]');
+          if (!checkbox) return;
+          const id = Number(checkbox.dataset.bookId);
+          const isChecked = checkbox.checked;
+          if (isChecked) this.manageAddSelectedBookIds.add(id);
+          else this.manageAddSelectedBookIds.delete(id);
+          const itemLabel = checkbox.closest?.('.vl-book-item');
+          if (itemLabel?.classList) itemLabel.classList.toggle('is-selected', isChecked);
+          updateAddSelectedCounter();
+        };
       }
-    }
+
+      const loadCatalogBooks = async () => {
+        if (catalogList) catalogList.textContent = 'Searching catalog...';
+        const q = addSearchInput?.value?.trim() || '';
+        try {
+          const res = await api.getBooks(null, null, { query: q, pageSize: 40 });
+          if (sequence !== this.manageOpenSequence) return;
+          const books = Array.isArray(res) ? res : (Array.isArray(res?.books) ? res.books : []);
+          this.manageCatalogBooks = books;
+          renderCatalogBooks();
+        } catch (e) {
+          if (sequence !== this.manageOpenSequence) return;
+          if (catalogList) catalogList.textContent = 'Could not load catalog books.';
+        }
+      };
+
+      if (addToggleBtn) {
+        addToggleBtn.onclick = async () => {
+          const isHidden = !addContainer || !addContainer.style.display || addContainer.style.display === 'none';
+          if (addContainer) addContainer.style.display = isHidden ? 'block' : 'none';
+          if (isHidden && !this.manageCatalogBooks) {
+            await loadCatalogBooks();
+          }
+        };
+      }
+
+      let catalogSearchTimeout = null;
+      if (addSearchInput) {
+        addSearchInput.oninput = () => {
+          if (catalogSearchTimeout) window.clearTimeout(catalogSearchTimeout);
+          catalogSearchTimeout = window.setTimeout(loadCatalogBooks, 250);
+        };
+      }
+
+      if (addConfirmBtn) {
+        addConfirmBtn.onclick = async () => {
+          const idsToAdd = [...this.manageAddSelectedBookIds];
+          if (!idsToAdd.length) return;
+          addConfirmBtn.disabled = true;
+          try {
+            const updated = await api.addBooksToVirtualLibrary(library.id, idsToAdd);
+            library.book_ids = updated.book_ids;
+            this.manageAddSelectedBookIds.clear();
+            updateAddSelectedCounter();
+            await loadManageBooks();
+            if (this.onLibrariesChanged) await this.onLibrariesChanged(updated);
+            if (addContainer) addContainer.style.display = 'none';
+          } catch (err) {
+            alert(`Error adding books: ${err.message}`);
+          } finally {
+            addConfirmBtn.disabled = this.manageAddSelectedBookIds.size === 0;
+          }
+        };
+      }
+
+      loadManageBooks();
 
     ModalView.open(manageModal);
   }

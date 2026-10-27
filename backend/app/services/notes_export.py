@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pymupdf
 import tomli_w
@@ -149,3 +149,136 @@ def render_md_by_color(model: Dict[str, Any]) -> str:
 
 def render_md_by_page(model: Dict[str, Any]) -> str:
     return _renderers.render_md_by_page(model)
+
+
+def _select_all_annotations(
+    annotations: List[Dict[str, Any]],
+    *,
+    has_page_bounds: bool,
+    **kwargs: Any
+) -> List[Dict[str, Any]]:
+    if has_page_bounds:
+        raise ValueError("Page and section filters require a matching export scope.")
+    return annotations
+
+
+def _select_page_annotations(
+    annotations: List[Dict[str, Any]],
+    *,
+    page: Optional[int] = None,
+    start_page: Optional[int] = None,
+    end_page: Optional[int] = None,
+    section_index: Optional[int] = None,
+    total_pages: Optional[int] = None,
+    **kwargs: Any
+) -> List[Dict[str, Any]]:
+    if page is None or start_page is not None or end_page is not None or section_index is not None:
+        raise ValueError("A single page is required for page exports.")
+    if total_pages is not None and page > total_pages:
+        raise ValueError("Page is outside this book.")
+    return [annotation for annotation in annotations if annotation["page"] == page]
+
+
+def _select_range_annotations(
+    annotations: List[Dict[str, Any]],
+    *,
+    page: Optional[int] = None,
+    start_page: Optional[int] = None,
+    end_page: Optional[int] = None,
+    section_index: Optional[int] = None,
+    total_pages: Optional[int] = None,
+    **kwargs: Any
+) -> List[Dict[str, Any]]:
+    if start_page is None or end_page is None or page is not None or section_index is not None:
+        raise ValueError("Both start_page and end_page are required for range exports.")
+    if start_page > end_page:
+        raise ValueError("start_page must be less than or equal to end_page.")
+    if total_pages is not None and end_page > total_pages:
+        raise ValueError("Page range is outside this book.")
+    return [
+        annotation for annotation in annotations
+        if start_page <= annotation["page"] <= end_page
+    ]
+
+
+def _select_section_annotations(
+    annotations: List[Dict[str, Any]],
+    *,
+    page: Optional[int] = None,
+    start_page: Optional[int] = None,
+    end_page: Optional[int] = None,
+    section_index: Optional[int] = None,
+    sections: Optional[List[Dict[str, Any]]] = None,
+    **kwargs: Any
+) -> List[Dict[str, Any]]:
+    if section_index is None or any(value is not None for value in (page, start_page, end_page)):
+        raise ValueError("A table-of-contents section is required for section exports.")
+    if not sections:
+        raise ValueError("This book has no table of contents for chapter exports.")
+    if section_index >= len(sections):
+        raise ValueError("The selected table-of-contents section does not exist.")
+    section = sections[section_index]
+    page_start = section["page_start"]
+    page_end = section["page_end"]
+    return [
+        annotation for annotation in annotations
+        if page_start <= annotation["page"] <= page_end
+    ]
+
+
+SCOPE_SELECTORS: Dict[str, Callable[..., List[Dict[str, Any]]]] = {
+    "all": _select_all_annotations,
+    "page": _select_page_annotations,
+    "range": _select_range_annotations,
+    "section": _select_section_annotations,
+}
+
+
+def select_export_annotations(
+    annotations: List[Dict[str, Any]],
+    scope: str,
+    *,
+    page: Optional[int] = None,
+    start_page: Optional[int] = None,
+    end_page: Optional[int] = None,
+    section_index: Optional[int] = None,
+    sections: Optional[List[Dict[str, Any]]] = None,
+    total_pages: Optional[int] = None
+) -> List[Dict[str, Any]]:
+    """Filters annotations by scope (all, page, range, section). Raises ValueError on invalid inputs."""
+    selector = SCOPE_SELECTORS.get(scope)
+    if not selector:
+        raise ValueError("Unsupported annotation export scope.")
+
+    has_page_bounds = any(value is not None for value in (page, start_page, end_page, section_index))
+    return selector(
+        annotations=annotations,
+        has_page_bounds=has_page_bounds,
+        page=page,
+        start_page=start_page,
+        end_page=end_page,
+        section_index=section_index,
+        sections=sections,
+        total_pages=total_pages
+    )
+
+
+EXPORT_FORMAT_DISPATCH: Dict[str, Tuple[Callable[[Dict[str, Any], str], str], str, str]] = {
+    "json": (lambda m, g: render_json(m), "application/json", "json"),
+    "jsonl": (lambda m, g: render_jsonl(m), "application/x-ndjson", "jsonl"),
+    "yaml": (lambda m, g: render_yaml(m), "application/yaml", "yaml"),
+    "toml": (lambda m, g: render_toml(m), "application/toml", "toml"),
+}
+
+
+def render_export_payload(
+    model: Dict[str, Any],
+    format: str,
+    group_by: str = "hierarchy"
+) -> Tuple[str, str, str]:
+    """Returns (content, media_type, file_extension) for an export model."""
+    dispatch = EXPORT_FORMAT_DISPATCH.get(format)
+    if dispatch:
+        render_fn, media_type, ext = dispatch
+        return render_fn(model, group_by), media_type, ext
+    return render_md(model, group_by), "text/markdown", "md"

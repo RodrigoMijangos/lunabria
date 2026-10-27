@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, Response, Body
 from app.services.reader_service import reader_service
 from app.services.calibre_service import calibre_service
@@ -13,7 +14,6 @@ from app.models import (
     SelectedAnnotationsExportRequest,
     HighlightColor
 )
-from datetime import datetime
 
 router = APIRouter(tags=["Reader & Annotations"])
 
@@ -97,48 +97,19 @@ def _select_export_annotations(
     sections: Optional[List[Dict[str, Any]]] = None,
     total_pages: Optional[int] = None
 ) -> List[Dict[str, Any]]:
-    has_page_bounds = any(value is not None for value in (page, start_page, end_page, section_index))
-
-    if scope == "all":
-        if has_page_bounds:
-            raise HTTPException(status_code=422, detail="Page and section filters require a matching export scope.")
-        return annotations
-
-    if scope == "page":
-        if page is None or start_page is not None or end_page is not None or section_index is not None:
-            raise HTTPException(status_code=422, detail="A single page is required for page exports.")
-        if total_pages is not None and page > total_pages:
-            raise HTTPException(status_code=422, detail="Page is outside this book.")
-        return [annotation for annotation in annotations if annotation["page"] == page]
-
-    if scope == "range":
-        if start_page is None or end_page is None or page is not None or section_index is not None:
-            raise HTTPException(status_code=422, detail="Both start_page and end_page are required for range exports.")
-        if start_page > end_page:
-            raise HTTPException(status_code=422, detail="start_page must be less than or equal to end_page.")
-        if total_pages is not None and end_page > total_pages:
-            raise HTTPException(status_code=422, detail="Page range is outside this book.")
-        return [
-            annotation for annotation in annotations
-            if start_page <= annotation["page"] <= end_page
-        ]
-
-    if scope == "section":
-        if section_index is None or any(value is not None for value in (page, start_page, end_page)):
-            raise HTTPException(status_code=422, detail="A table-of-contents section is required for section exports.")
-        if not sections:
-            raise HTTPException(status_code=422, detail="This book has no table of contents for chapter exports.")
-        if section_index >= len(sections):
-            raise HTTPException(status_code=422, detail="The selected table-of-contents section does not exist.")
-        section = sections[section_index]
-        page_start = section["page_start"]
-        page_end = section["page_end"]
-        return [
-            annotation for annotation in annotations
-            if page_start <= annotation["page"] <= page_end
-        ]
-
-    raise HTTPException(status_code=422, detail="Unsupported annotation export scope.")
+    try:
+        return notes_export.select_export_annotations(
+            annotations,
+            scope,
+            page=page,
+            start_page=start_page,
+            end_page=end_page,
+            section_index=section_index,
+            sections=sections,
+            total_pages=total_pages
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 def _render_annotations_export(
@@ -163,26 +134,7 @@ def _render_annotations_export(
         exported_at=exported_at
     )
 
-    if format == "json":
-        content = notes_export.render_json(model)
-        media_type = "application/json"
-        ext = "json"
-    elif format == "jsonl":
-        content = notes_export.render_jsonl(model)
-        media_type = "application/x-ndjson"
-        ext = "jsonl"
-    elif format == "yaml":
-        content = notes_export.render_yaml(model)
-        media_type = "application/yaml"
-        ext = "yaml"
-    elif format == "toml":
-        content = notes_export.render_toml(model)
-        media_type = "application/toml"
-        ext = "toml"
-    else:
-        content = notes_export.render_md(model, group_by)
-        media_type = "text/markdown"
-        ext = "md"
+    content, media_type, ext = notes_export.render_export_payload(model, format, group_by)
 
     return Response(
         content=content,

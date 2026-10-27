@@ -84,6 +84,39 @@ const VirtualLibraryView = {
       group.appendChild(deleteButton);
       chipContainer.appendChild(group);
     });
+  },
+
+  createBookListItem(book, isSelected) {
+    const label = document.createElement('label');
+    label.className = `vl-book-item${isSelected ? ' is-selected' : ''}`;
+    label.dataset.bookId = String(book.id);
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.bookId = String(book.id);
+    checkbox.checked = isSelected;
+
+    const description = document.createElement('span');
+    description.className = 'vl-book-title-author';
+    description.textContent = `${book.title} — ${book.authors || ''}`;
+
+    const coverWrap = document.createElement('div');
+    coverWrap.className = 'vl-book-cover-wrap';
+    const coverImg = document.createElement('img');
+    coverImg.className = 'vl-book-cover';
+    coverImg.alt = book.title || '';
+    coverImg.loading = 'lazy';
+    coverImg.src = book.cover_url || `/api/books/${book.id}/cover`;
+    coverImg.onerror = () => {
+      coverImg.onerror = null;
+      coverImg.src = typeof OFFLINE_FALLBACK_COVER !== 'undefined'
+        ? OFFLINE_FALLBACK_COVER
+        : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="100%" height="100%" fill="%232d3748"/><path d="M70 120h60M70 150h60" stroke="%23718096" stroke-width="6"/><circle cx="100" cy="80" r="18" fill="%23a0aec0"/></svg>';
+    };
+    coverWrap.appendChild(coverImg);
+
+    label.append(checkbox, description, coverWrap);
+    return label;
   }
 };
 

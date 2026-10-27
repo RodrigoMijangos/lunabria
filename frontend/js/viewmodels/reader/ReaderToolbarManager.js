@@ -176,12 +176,14 @@ class ReaderToolbarManager {
     tabs.forEach((tab, index) => {
       tab.button?.addEventListener('click', () => this.activateDrawerTab(tab.name));
       tab.button?.addEventListener('keydown', event => {
-        let nextIndex = null;
-        if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
-        else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
-        else if (event.key === 'Home') nextIndex = 0;
-        else if (event.key === 'End') nextIndex = tabs.length - 1;
-        if (nextIndex === null) return;
+        const nextIndexMap = {
+          ArrowRight: (index + 1) % tabs.length,
+          ArrowLeft: (index - 1 + tabs.length) % tabs.length,
+          Home: 0,
+          End: tabs.length - 1,
+        };
+        const nextIndex = nextIndexMap[event.key];
+        if (nextIndex === undefined) return;
         event.preventDefault();
         this.activateDrawerTab(tabs[nextIndex].name, true);
       });
@@ -552,19 +554,15 @@ class ReaderToolbarManager {
     }
   }
 
-  buildExportOptions() {
-    const formatValue = this.exportFormatSelect?.value || 'md_hierarchy';
-    let format = formatValue;
-    let groupBy = 'color';
-    if (formatValue === 'md_hierarchy') {
-      format = 'md';
-      groupBy = 'hierarchy';
-    } else if (formatValue === 'md_color') {
-      format = 'md';
-      groupBy = 'color';
-    }
+  _resolveExportFormatAndGrouping(formatValue) {
+    const map = {
+      md_hierarchy: { format: 'md', group_by: 'hierarchy' },
+      md_color: { format: 'md', group_by: 'color' },
+    };
+    return map[formatValue] || { format: formatValue, group_by: 'color' };
+  }
 
-    const options = { format, group_by: groupBy, scope: this.exportScopeSelect?.value || 'all' };
+  _populateExportScopeOptions(options) {
     const parsePage = (input, label) => {
       const page = Number(input?.value);
       const totalPages = Number(this.model.totalPages);
@@ -574,26 +572,41 @@ class ReaderToolbarManager {
       return page;
     };
 
-    if (options.scope === 'page') {
-      options.page = parsePage(this.exportPageInput, 'Page');
-    } else if (options.scope === 'range') {
-      options.start_page = parsePage(this.exportStartPageInput, 'Start page');
-      options.end_page = parsePage(this.exportEndPageInput, 'End page');
-      if (options.start_page > options.end_page) {
-        throw new Error('The start page must not be after the end page.');
-      }
-    } else if (options.scope === 'section') {
-      const sectionIndex = Number(this.exportSectionSelect?.value);
-      if (!Number.isInteger(sectionIndex) || sectionIndex < 0) {
-        throw new Error('Choose a chapter or section to export.');
-      }
-      options.section_index = sectionIndex;
-    } else if (options.scope === 'selected') {
-      options.annotation_ids = Array.from(this.model.selectedAnnotationIds || []);
-      if (options.annotation_ids.length === 0) {
-        throw new Error('Select at least one annotation to export.');
-      }
-    }
+    const scopePopulators = {
+      page: () => {
+        options.page = parsePage(this.exportPageInput, 'Page');
+      },
+      range: () => {
+        options.start_page = parsePage(this.exportStartPageInput, 'Start page');
+        options.end_page = parsePage(this.exportEndPageInput, 'End page');
+        if (options.start_page > options.end_page) {
+          throw new Error('The start page must not be after the end page.');
+        }
+      },
+      section: () => {
+        const sectionIndex = Number(this.exportSectionSelect?.value);
+        if (!Number.isInteger(sectionIndex) || sectionIndex < 0) {
+          throw new Error('Choose a chapter or section to export.');
+        }
+        options.section_index = sectionIndex;
+      },
+      selected: () => {
+        options.annotation_ids = Array.from(this.model.selectedAnnotationIds || []);
+        if (options.annotation_ids.length === 0) {
+          throw new Error('Select at least one annotation to export.');
+        }
+      },
+    };
+
+    const populator = scopePopulators[options.scope];
+    if (populator) populator();
+  }
+
+  buildExportOptions() {
+    const formatValue = this.exportFormatSelect?.value || 'md_hierarchy';
+    const { format, group_by } = this._resolveExportFormatAndGrouping(formatValue);
+    const options = { format, group_by, scope: this.exportScopeSelect?.value || 'all' };
+    this._populateExportScopeOptions(options);
     return options;
   }
 
@@ -871,6 +884,161 @@ class ReaderToolbarManager {
     if (modal) modal.style.display = 'none';
   }
 
+  _handleModifierShortcuts(e) {
+    if (e.key === 'z' || e.key === 'Z') {
+      e.preventDefault();
+      this.drawing.undoLastStroke();
+      return true;
+    }
+    const zoomActions = {
+      '+': () => this.nav.zoomIn(),
+      '=': () => this.nav.zoomIn(),
+      NumpadAdd: () => this.nav.zoomIn(),
+      '-': () => this.nav.zoomOut(),
+      NumpadSubtract: () => this.nav.zoomOut(),
+      '0': () => this.nav.resetZoom(),
+      Numpad0: () => this.nav.resetZoom(),
+    };
+    const action = zoomActions[e.key] || zoomActions[e.code];
+    if (action) {
+      e.preventDefault();
+      action();
+      return true;
+    }
+    return false;
+  }
+
+  _handleDrawModeShortcuts(e) {
+    const key = e.key;
+    const lowerKey = typeof key === 'string' ? key.toLowerCase() : '';
+
+    if (lowerKey === 'p' || lowerKey === 'b') {
+      e.preventDefault();
+      this.drawing.setDrawTool('pen');
+      return true;
+    }
+    if (lowerKey === 'h' || lowerKey === 's') {
+      e.preventDefault();
+      this.drawing.setDrawTool('highlighter');
+      return true;
+    }
+    if (lowerKey === 'e') {
+      e.preventDefault();
+      if (typeof this.drawing?.toggleEraser === 'function') {
+        this.drawing.toggleEraser();
+      } else if (typeof this.drawing?.setDrawTool === 'function') {
+        this.drawing.setDrawTool('eraser');
+      }
+      return true;
+    }
+    if (lowerKey === 'v' || lowerKey === 'm') {
+      e.preventDefault();
+      this.drawing.setDrawTool('pan');
+      return true;
+    }
+
+    const colorPalette = {
+      '1': '#1e293b',
+      '2': '#2563eb',
+      '3': '#dc2626',
+      '4': '#eab308',
+      '5': '#16a34a',
+      '6': '#9333ea',
+    };
+    if (colorPalette[key]) {
+      e.preventDefault();
+      this.drawing.setDrawColor(colorPalette[key]);
+      return true;
+    }
+
+    if (key === '[') {
+      e.preventDefault();
+      this.drawing.cycleDrawWidth(-1);
+      return true;
+    }
+    if (key === ']') {
+      e.preventDefault();
+      this.drawing.cycleDrawWidth(1);
+      return true;
+    }
+    if (key === 'Delete' || key === 'Backspace') {
+      e.preventDefault();
+      this.drawing.clearCurrentPageDrawings();
+      return true;
+    }
+    if (lowerKey === 't') {
+      e.preventDefault();
+      this.drawing.toggleDrawingTool();
+      return true;
+    }
+    if (key === 'Escape') {
+      e.preventDefault();
+      const stylusModal = document.getElementById('stylus-accessibility-modal');
+      if (stylusModal && stylusModal.style.display !== 'none') {
+        this.closeStylusAccessibilityModal();
+        return true;
+      }
+      this.drawing.toggleDrawMode(false);
+      return true;
+    }
+    return false;
+  }
+
+  _handleReadingShortcuts(e) {
+    const key = e.key;
+    const lowerKey = typeof key === 'string' ? key.toLowerCase() : '';
+
+    if ((lowerKey === 'p' || lowerKey === 'd') && this.model.viewMode !== 'notes' && !this.model.isDrawMode) {
+      e.preventDefault();
+      this.drawing.toggleDrawMode(true);
+      return true;
+    }
+
+    if (!this.model.isDrawMode) {
+      if (lowerKey === 't') {
+        e.preventDefault();
+        this.toggleDrawerTab('chapters');
+        return true;
+      }
+      if (lowerKey === 'n') {
+        e.preventDefault();
+        this.toggleDrawerTab('notes');
+        return true;
+      }
+    }
+
+    if (key === 'Escape') {
+      e.preventDefault();
+      this.annotations.clearTextSelection();
+      return true;
+    }
+
+    if (lowerKey === 'w') {
+      e.preventDefault();
+      this.nav.fitWidth();
+      return true;
+    }
+
+    if (lowerKey === 'h') {
+      e.preventDefault();
+      this.nav.fitPage();
+      return true;
+    }
+
+    if (this.model.viewMode === 'notes') return false;
+
+    if (key === 'ArrowRight' || key === 'PageDown') {
+      this.nav.nextPage();
+      return true;
+    }
+    if (key === 'ArrowLeft' || key === 'PageUp') {
+      this.nav.prevPage();
+      return true;
+    }
+
+    return false;
+  }
+
   bindKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
       if (this.container.style.display !== 'flex') return;
@@ -907,141 +1075,15 @@ class ReaderToolbarManager {
       }
 
       if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'z' || e.key === 'Z') {
-          e.preventDefault();
-          this.drawing.undoLastStroke();
-          return;
-        }
-        if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') {
-          e.preventDefault();
-          this.nav.zoomIn();
-        } else if (e.key === '-' || e.code === 'NumpadSubtract') {
-          e.preventDefault();
-          this.nav.zoomOut();
-        } else if (e.key === '0' || e.code === 'Numpad0') {
-          e.preventDefault();
-          this.nav.resetZoom();
-        }
-      } else {
-        if (e.key === 'p' || e.key === 'P' || e.key === 'd' || e.key === 'D') {
-          if (this.model.viewMode !== 'notes' && !this.model.isDrawMode) {
-            e.preventDefault();
-            this.drawing.toggleDrawMode(true);
-            return;
-          }
-        }
-
-        if (this.model.isDrawMode) {
-          if (e.key === 'p' || e.key === 'P' || e.key === 'b' || e.key === 'B') {
-            e.preventDefault();
-            this.drawing.setDrawTool('pen');
-            return;
-          } else if (e.key === 'h' || e.key === 'H' || e.key === 's' || e.key === 'S') {
-            e.preventDefault();
-            this.drawing.setDrawTool('highlighter');
-            return;
-          } else if (e.key === 'e' || e.key === 'E') {
-            e.preventDefault();
-            if (typeof this.drawing?.toggleEraser === 'function') {
-              this.drawing.toggleEraser();
-            } else if (typeof this.drawing?.setDrawTool === 'function') {
-              this.drawing.setDrawTool('eraser');
-            }
-            return;
-          } else if (e.key === 'v' || e.key === 'V' || e.key === 'm' || e.key === 'M') {
-            e.preventDefault();
-            this.drawing.setDrawTool('pan');
-            return;
-          } else if (e.key === '1') {
-            e.preventDefault();
-            this.drawing.setDrawColor('#1e293b');
-            return;
-          } else if (e.key === '2') {
-            e.preventDefault();
-            this.drawing.setDrawColor('#2563eb');
-            return;
-          } else if (e.key === '3') {
-            e.preventDefault();
-            this.drawing.setDrawColor('#dc2626');
-            return;
-          } else if (e.key === '4') {
-            e.preventDefault();
-            this.drawing.setDrawColor('#eab308');
-            return;
-          } else if (e.key === '5') {
-            e.preventDefault();
-            this.drawing.setDrawColor('#16a34a');
-            return;
-          } else if (e.key === '6') {
-            e.preventDefault();
-            this.drawing.setDrawColor('#9333ea');
-            return;
-          } else if (e.key === '[') {
-            e.preventDefault();
-            this.drawing.cycleDrawWidth(-1);
-            return;
-          } else if (e.key === ']') {
-            e.preventDefault();
-            this.drawing.cycleDrawWidth(1);
-            return;
-          } else if (e.key === 'Delete' || e.key === 'Backspace') {
-            e.preventDefault();
-            this.drawing.clearCurrentPageDrawings();
-            return;
-          } else if (e.key === 't' || e.key === 'T') {
-            e.preventDefault();
-            this.drawing.toggleDrawingTool();
-            return;
-          } else if (e.key === 'Escape') {
-            e.preventDefault();
-            const stylusModal = document.getElementById('stylus-accessibility-modal');
-            if (stylusModal && stylusModal.style.display !== 'none') {
-              this.closeStylusAccessibilityModal();
-              return;
-            }
-            this.drawing.toggleDrawMode(false);
-            return;
-          }
-        }
-
-        if (!this.model.isDrawMode) {
-          if (e.key === 't' || e.key === 'T') {
-            e.preventDefault();
-            this.toggleDrawerTab('chapters');
-            return;
-          }
-          if (e.key === 'n' || e.key === 'N') {
-            e.preventDefault();
-            this.toggleDrawerTab('notes');
-            return;
-          }
-        }
-
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          this.annotations.clearTextSelection();
-          return;
-        }
-
-        if (e.key === 'w' || e.key === 'W') {
-          e.preventDefault();
-          this.nav.fitWidth();
-          return;
-        }
-
-        if (e.key === 'h' || e.key === 'H') {
-          e.preventDefault();
-          this.nav.fitPage();
-          return;
-        }
-
-        if (this.model.viewMode === 'notes') return;
-        if (e.key === 'ArrowRight' || e.key === 'PageDown') {
-          this.nav.nextPage();
-        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-          this.nav.prevPage();
-        }
+        this._handleModifierShortcuts(e);
+        return;
       }
+
+      if (this.model.isDrawMode && this._handleDrawModeShortcuts(e)) {
+        return;
+      }
+
+      this._handleReadingShortcuts(e);
     });
 
     window.addEventListener('keyup', (e) => {

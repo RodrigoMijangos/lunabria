@@ -746,16 +746,31 @@
         <small id="vl-manage-rename-status" role="status" style="display: block; margin-top: 4px; font-size: 0.82rem; min-height: 1.2em;"></small>
       </div>
 
-      <!-- Mode A: Query Details -->
+      <!-- Hybrid Controls: Toggle between Search Rule and Member Books -->
+      <div style="display: flex; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+        <button id="vl-manage-tab-rule-btn" type="button" class="btn btn-secondary" style="font-size: 0.82rem; padding: 4px 10px;">Search Rule</button>
+        <button id="vl-manage-tab-books-btn" type="button" class="btn btn-secondary active" style="font-size: 0.82rem; padding: 4px 10px;">Member Books (<span id="vl-manage-tab-books-count">0</span>)</button>
+      </div>
+
+      <!-- Mode A: Query Details & Rule Editor -->
       <div id="vl-manage-query-section" style="display: none;">
         <div class="form-group">
-          <label class="form-label">Calibre Search Expression:</label>
-          <div id="vl-manage-query-text" style="padding: 10px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); font-family: monospace; font-size: 0.88rem; word-break: break-all;"></div>
-          <small style="color: var(--text-secondary); display: block; margin-top: 4px;">Search-based collections update automatically based on Calibre matching rules.</small>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" for="vl-manage-query-input" style="margin-bottom: 0;">Calibre Search Expression:</label>
+            <button id="vl-manage-query-clear-btn" type="button" class="btn btn-secondary" style="font-size: 0.75rem; padding: 2px 8px;">Clear</button>
+          </div>
+          <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+            <input type="text" id="vl-manage-query-input" class="input-custom" placeholder="Search rule expression (e.g. tags: linux, comment:linux)..." style="flex: 1;" />
+            <button id="vl-manage-save-query-btn" type="button" class="btn btn-primary">Update Rule</button>
+          </div>
+          <div id="vl-manage-query-text" style="display: none; padding: 10px; border-radius: 8px; background: var(--bg-secondary); border: 1px solid var(--border-color); font-family: monospace; font-size: 0.88rem; word-break: break-all;"></div>
+          <div id="vl-manage-query-tokens" class="vl-query-tokens" style="margin-top: 6px;"></div>
+          <div id="vl-manage-compiled-preview" class="vl-compiled-preview" style="font-size: 0.82rem; margin-top: 4px; color: var(--accent-color); font-family: monospace;"></div>
+          <small id="vl-manage-query-status" role="status" style="display: block; margin-top: 4px; font-size: 0.82rem; min-height: 1.2em;"></small>
         </div>
       </div>
 
-      <!-- Mode B: Member Books & Selective Removal -->
+      <!-- Mode B: Member Books & Selective Removal + Catalog Addition -->
       <div id="vl-manage-books-section" style="display: none;">
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
@@ -771,7 +786,27 @@
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg>
             <input type="text" id="vl-manage-search-input" class="input-custom" placeholder="Filter collection books by title or author..." style="width: 100%; margin-bottom: 8px;" />
           </div>
-          <div id="vl-manage-books-list" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 8px;"></div>
+          <div id="vl-manage-books-list"></div>
+
+          <div style="margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+            <button id="vl-manage-add-toggle-btn" type="button" class="btn btn-secondary" style="font-size: 0.82rem; width: 100%; display: flex; justify-content: center; align-items: center; gap: 6px;">
+              <span>+ Add Books from Catalog</span>
+            </button>
+            <div id="vl-manage-add-container" style="display: none; margin-top: 10px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+                <label class="form-label" style="margin-bottom: 0;">Catalog Books:</label>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <span id="vl-manage-add-selected-count" style="font-size: 0.78rem; color: var(--accent-color); font-weight: 600;">0 selected</span>
+                  <button id="vl-manage-add-confirm-btn" type="button" class="btn btn-primary" style="font-size: 0.75rem; padding: 2px 10px;" disabled>Add to Collection</button>
+                </div>
+              </div>
+              <div class="manual-library-search-wrap">
+                <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#search"></use></svg>
+                <input type="text" id="vl-manage-add-search-input" class="input-custom" placeholder="Search catalog to add books..." style="width: 100%; margin-bottom: 8px;" />
+              </div>
+              <div id="vl-manage-catalog-list"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1004,10 +1039,10 @@
   <!-- Core Storage & API Services -->
   <script src="./js/services/http.js?v=1.0.0"></script>
   <script src="./js/services/connectivity.js?v=1.0.4"></script>
-  <script src="./js/db.js?v=1.4.5"></script>
+  <script src="./js/db.js?v=1.4.6"></script>
   <script src="./js/services/books.js?v=1.0.15-proxy-buffering-resilience"></script>
   <script src="./js/services/virtual-libraries.js?v=1.0.8"></script>
-  <script src="./js/services/LunabriaQueryCompiler.js?v=1.1.0-chips"></script>
+  <script src="./js/services/LunabriaQueryCompiler.js?v=1.2.0-natural-query"></script>
   <script src="./js/services/metadata.js?v=1.0.8"></script>
   <script src="./js/services/progress.js?v=1.0.8"></script>
   <script src="./js/services/layouts.js?v=1.0.8"></script>
@@ -1035,8 +1070,8 @@
   <script src="./js/views/ModalView.js?v=0.6.2"></script>
   <script src="./js/views/library/BookCardView.js?v=1.4.3"></script>
   <script src="./js/views/library/RecentReadsView.js?v=0.9.3"></script>
-  <script src="./js/views/library/VirtualLibraryView.js?v=1.0.9"></script>
-  <script src="./js/views/library/UploadModalView.js?v=1.0.15-proxy-buffering-resilience"></script>
+  <script src="./js/views/library/VirtualLibraryView.js?v=1.0.10"></script>
+  <script src="./js/views/library/UploadModalView.js?v=1.0.16"></script>
   <script src="./js/views/ui/ToastView.js?v=1.0.0"></script>
   <script src="./js/views/LibraryViews.js?v=0.6.0"></script>
   <script src="./js/views/library/CatalogView.js?v=1.0.8"></script>
@@ -1045,13 +1080,13 @@
 
   <!-- MVVM Architecture: Modular Library ViewModels -->
   <script src="./js/mobile/MobilePWAInstaller.js?v=1.1.0"></script>
-  <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.15-proxy-buffering-resilience"></script>
+  <script src="./js/viewmodels/library/BookUploadManager.js?v=1.0.16"></script>
   <script src="./js/viewmodels/library/BookMetadataManager.js?v=1.0.10"></script>
-  <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.5-query-chips"></script>
+  <script src="./js/viewmodels/library/VirtualLibraryManager.js?v=0.8.6-collection-management"></script>
   <script src="./js/viewmodels/library/HighlightColorSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/SyncSettingsManager.js?v=1.4.0"></script>
   <script src="./js/viewmodels/library/CatalogSelectionManager.js?v=1.0.8"></script>
-  <script src="./js/viewmodels/LibraryViewModel.js?v=1.4.14"></script>
+  <script src="./js/viewmodels/LibraryViewModel.js?v=1.4.15"></script>
 
   <!-- MVVM Architecture: Modular Reader ViewModels -->
   <script src="./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.8"></script>
@@ -1068,7 +1103,7 @@
   <script src="./js/views/reader/LinkOverlayView.js?v=1.0.0"></script>
   <script src="./js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references"></script>
   <script src="./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9"></script>
-  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.4.0"></script>
+  <script src="./js/viewmodels/reader/ReaderToolbarManager.js?v=1.4.1"></script>
   <script src="./js/services/reader/ReaderOfflineService.js?v=1.0.9"></script>
   <script src="./js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0"></script>
   <script src="./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.6-mobile-first-paint"></script>

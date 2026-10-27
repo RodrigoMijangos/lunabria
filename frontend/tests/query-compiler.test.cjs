@@ -89,3 +89,42 @@ test('LunabriaQueryCompiler formatClauses roundtrip', () => {
   const formatted = LunabriaQueryCompiler.formatClauses(clauses);
   assert.equal(formatted, 'tags: "Physics" - author: Curie');
 });
+
+test('LunabriaQueryCompiler comma between different fields acts as OR', () => {
+  const query = 'tags: linux, comment:linux';
+  assert.equal(LunabriaQueryCompiler.compile(query), 'tags:linux or comment:linux');
+  const clauses = LunabriaQueryCompiler.parseClauses(query);
+  assert.equal(clauses.length, 2);
+  assert.equal(clauses[0].op, '+');
+  assert.equal(clauses[1].op, ',');
+});
+
+test('LunabriaQueryCompiler natural words and, or, not', () => {
+  assert.equal(
+    LunabriaQueryCompiler.compile('tags:linux and not tags:arch'),
+    'tags:linux and (not tags:arch)'
+  );
+  assert.equal(
+    LunabriaQueryCompiler.compile('tags:linux not tags:arch'),
+    'tags:linux and (not tags:arch)'
+  );
+  assert.equal(
+    LunabriaQueryCompiler.compile('tags:linux or comment:linux'),
+    'tags:linux or comment:linux'
+  );
+  assert.equal(
+    LunabriaQueryCompiler.compile('tags:linux, not tags:arch'),
+    'tags:linux or (not tags:arch)'
+  );
+});
+
+test('LunabriaQueryCompiler parentheses grouping', () => {
+  assert.equal(
+    LunabriaQueryCompiler.compile('(tags:linux or comment:linux) and not tags:arch'),
+    '(tags:linux or comment:linux) and (not tags:arch)'
+  );
+  assert.equal(
+    LunabriaQueryCompiler.compile('(tags:linux, comment:linux) and not tags:arch'),
+    '(tags:linux or comment:linux) and (not tags:arch)'
+  );
+});

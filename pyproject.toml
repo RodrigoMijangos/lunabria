@@ -1,0 +1,52 @@
+[tool.radon]
+exclude = "tests/*,.venv/*,.venv-wsl/*"
+cc_min = "B"
+show_complexity = true
+show_mi = true
+
+[tool.xenon]
+max_absolute = "F"
+max_modules = "F"
+max_average = "A"
+exclude = "tests/*,.venv/*,.venv-wsl/*"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["backend"]
+extend-exclude = [".venv", ".venv-wsl", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "S"]
+# Keep checks useful without applying hundreds of existing style/security diagnostics at once.
+ignore = [
+    "E402",
+    "E741",
+    "F401",
+    "F541",
+    "F841",
+    "B007",
+    "B008",
+    "B904",
+    "S104",
+    "S108",
+    "S110",
+    "S310",
+    "S314",
+    "S324",
+    "S603",
+    "S608"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["backend/app"]
+mypy_path = "backend"
+ignore_missing_imports = true
+check_untyped_defs = true
+explicit_package_bases = true
+show_error_codes = true
+warn_unused_configs = true

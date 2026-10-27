@@ -5,6 +5,8 @@ __pycache__/
 .venv*/
 env/
 venv/
+.mypy_cache/
+.ruff_cache/
 
 # Application data and Calibre libraries
 data/
@@ -28,6 +30,9 @@ backend/certs/
 .env
 .env.*
 !.env.example
+
+# Frontend dev tooling
+node_modules/
 
 # IDE & Editor settings
 .idea/

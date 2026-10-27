@@ -133,7 +133,7 @@ def export_annotations_markdown(self, book_id: int, color_filter: Optional[str] 
 
     if group_by == "color":
         # Group by color
-        by_color = {}
+        by_color: Dict[str, List[Dict[str, Any]]] = {}
         for a in annotations:
             c = a["color"]
             by_color.setdefault(c, []).append(a)

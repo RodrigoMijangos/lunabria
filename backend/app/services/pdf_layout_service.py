@@ -13,7 +13,7 @@ class PdfLayoutService:
         if not words:
             return []
         sorted_words = sorted(words, key=lambda w: (round(w["y0"] / 4.0) * 4.0, w["x0"]))
-        line_groups = []
+        line_groups: List[List[Dict[str, Any]]] = []
         for w in sorted_words:
             w_y0 = w["y0"]
             w_y1 = w["y1"]

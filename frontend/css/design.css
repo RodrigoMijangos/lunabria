@@ -861,7 +861,9 @@
 }
 
 #vl-manual-list,
-#vl-query-preview-list {
+#vl-query-preview-list,
+#vl-manage-books-list,
+#vl-manage-catalog-list {
   display: grid !important;
   grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)) !important;
   gap: 14px !important;
@@ -1639,6 +1641,11 @@
 .vl-token-op-and {
   background-color: rgba(var(--brand-accent-rgb, 168, 82, 34), 0.14);
   color: var(--accent-color);
+}
+
+.vl-token-op-or {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
 }
 
 .vl-token-op-not {

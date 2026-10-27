@@ -1,95 +1,29 @@
 from app.services.query_compiler import compile_lunabria_query
 import asyncio
 import logging
-import shutil
-import unicodedata
 from collections.abc import Mapping
 from uuid import uuid4
 from pathlib import Path
-from typing import Optional, List, Literal
+from typing import Any, Dict, Optional, List, Literal
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Request
 
 from app.config import UPLOAD_DIR
 from app import database
 from app.services.calibre_service import calibre_service
-from app.services.pdf_metadata_extractor import extract_pdf_metadata, extract_candidate_isbns_from_text
 from app.services.ingestion_queue import ingestion_queue
 from app.services.library_service import library_service
 from app.services.reader_service import reader_service
+from app.services.book_staging import (
+    copy_upload_to_staging as _copy_upload_to_staging,
+    public_upload_job as _public_upload_job,
+    auto_fetch_metadata_enabled as _auto_fetch_metadata_enabled,
+    check_duplicate_isbn as _check_duplicate_isbn,
+)
 from app.models import BookBase, PaginatedBooksResponse
 
 router = APIRouter(prefix="/api/books", tags=["Books"])
 logger = logging.getLogger(__name__)
-
-
-def _copy_upload_to_staging(upload_file, destination):
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with destination.open("wb") as buffer:
-        shutil.copyfileobj(upload_file, buffer, length=1024 * 1024)
-
-
-def _public_upload_job(job):
-    return {
-        "job_id": job["job_id"],
-        "filename": job["filename"],
-        "status": job["status"],
-        "error": job.get("error"),
-        "book_id": job.get("book_id"),
-        "created_at": job.get("created_at"),
-        "updated_at": job.get("updated_at"),
-    }
-
-
-def _auto_fetch_metadata_enabled(form_data: Mapping[str, object], parsed_value: Optional[bool]) -> bool:
-    if "auto_fetch_metadata" not in form_data or parsed_value is None:
-        return True
-    return parsed_value
-
-
-def _check_duplicate_isbn(prepared: list, staged_paths: list) -> Optional[dict]:
-    """Inspects staged uploads for duplicate ISBNs already present in Calibre in PDF format."""
-    for job in prepared:
-        staged_path = Path(job["staging_path"])
-        candidate_isbns = []
-        if job.get("isbn"):
-            candidate_isbns.append(job.get("isbn"))
-
-        for can, _ in extract_candidate_isbns_from_text(job.get("filename") or ""):
-            if can not in candidate_isbns:
-                candidate_isbns.append(can)
-
-        try:
-            extracted = extract_pdf_metadata(staged_path, max_isbn_candidates=5)
-            for can in extracted.get("isbns", []):
-                if can not in candidate_isbns:
-                    candidate_isbns.append(can)
-        except Exception:
-            pass
-
-        duplicate = None
-        matched_isbn = None
-        for candidate in candidate_isbns:
-            duplicate = calibre_service.find_duplicate_by_isbn(candidate, format_name="PDF")
-            if duplicate:
-                matched_isbn = duplicate.get("isbn") or candidate
-                break
-
-        if duplicate:
-            for p in staged_paths:
-                try:
-                    p.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            return {
-                "code": "DUPLICATE_ISBN_FORMAT",
-                "isbn": matched_isbn,
-                "format": "PDF",
-                "existing_title": duplicate.get("title"),
-                "existing_id": duplicate.get("id"),
-                "message": f"A book with ISBN {matched_isbn} in PDF format already exists: '{duplicate.get('title')}'.",
-            }
-    return None
 
 
 @router.get("", response_model=PaginatedBooksResponse)
@@ -107,37 +41,8 @@ def list_books(
     else:
         books = calibre_service.list_books(search_query=compile_lunabria_query(search) if search else None)
     books = reader_service.add_last_read_dates(books)
-    query = (q or "").strip().casefold()
-    if query:
-        def matches_query(book):
-            tags = book.get("tags") or []
-            tags_text = " ".join(str(tag) for tag in tags) if isinstance(tags, (list, tuple, set)) else str(tags)
-            searchable_text = " ".join([
-                str(book.get("title") or ""),
-                str(book.get("authors") or ""),
-                str(book.get("publisher") or ""),
-                tags_text
-            ])
-            return query in searchable_text.casefold()
+    books = library_service.filter_and_sort_books(books, q=q, sort=sort, exclude_ids=exclude_ids)
 
-        books = [book for book in books if matches_query(book)]
-
-    excluded_ids = {int(book_id) for book_id in (exclude_ids or [])}
-    if excluded_ids:
-        books = [book for book in books if int(book.get("id", 0)) not in excluded_ids]
-
-    def sort_key(book):
-        book_id = int(book.get("id") or 0)
-        value = str(book.get(sort) or "")
-        if sort == "title":
-            value = "".join(
-                char for char in unicodedata.normalize("NFKD", value.casefold())
-                if not unicodedata.combining(char)
-            )
-            return value, book_id
-        return value, book_id
-
-    books.sort(key=sort_key, reverse=sort != "title")
     total = len(books)
     page_count = max(1, (total + page_size - 1) // page_size)
     page = min(page, page_count)
@@ -171,7 +76,7 @@ async def upload_books(
     form_data = await request.form()
     metadata_fetch_enabled = _auto_fetch_metadata_enabled(form_data, auto_fetch_metadata)
     isbn_list = [value.strip() for value in (isbns or "").split(",") if value.strip()]
-    prepared = []
+    prepared: List[Dict[str, Any]] = []
     for index, upload_file in enumerate(files):
         filename = (upload_file.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
         if (
@@ -194,8 +99,8 @@ async def upload_books(
             "upload_file": upload_file,
         })
 
-    staged_paths = []
-    job_records = [
+    staged_paths: List[Path] = []
+    job_records: List[Dict[str, Any]] = [
         {key: value for key, value in job.items() if key != "upload_file"}
         for job in prepared
     ]

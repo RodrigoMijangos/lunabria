@@ -127,6 +127,7 @@ def search_books(self, search_query: str, *, CALIBREDB_BIN, subprocess, json) ->
         return books
     except Exception as e:
         print(f"calibredb search failed: {e}. Falling back to SQLite.")
+        return None
 
 
 def remove_book(self, book_id: int, *, CALIBREDB_BIN, subprocess) -> None:

@@ -1,0 +1,27 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff
+        entry: python -m ruff check backend/
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: mypy
+        name: Mypy
+        entry: python -m mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: biome
+        name: Biome
+        entry: npm run lint
+        language: system
+        types: [javascript, css]
+        pass_filenames: false
+      - id: javascript-types
+        name: JavaScript type check
+        entry: npm run typecheck
+        language: system
+        types: [javascript]
+        pass_filenames: false

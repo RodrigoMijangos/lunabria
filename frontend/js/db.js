@@ -721,58 +721,81 @@ class LocalDB {
     return this._outboxPromise;
   }
 
+  _isOutboxOpReady(op, now = Date.now()) {
+    const backoffMs = op.attempts > 0 ? Math.min(60000, 1000 * Math.pow(2, op.attempts - 1)) : 0;
+    return !op.lastAttempt || (now - op.lastAttempt) >= backoffMs;
+  }
+
+  async _executeAnnotationOutboxOp(client, op) {
+    if (op.action === 'create') {
+      await client.createAnnotation(op.bookId, op.payload);
+      return true;
+    }
+    if (op.action === 'update') {
+      await client.updateAnnotation(op.entityId, op.payload);
+      return true;
+    }
+    if (op.action === 'delete') {
+      try {
+        await client.deleteAnnotation(op.entityId);
+        return true;
+      } catch (delErr) {
+        if (delErr?.message?.includes('404') || delErr?.status === 404) {
+          return true;
+        }
+        throw delErr;
+      }
+    }
+    return false;
+  }
+
+  async _executeProgressOutboxOp(client, op) {
+    const res = await fetch(`/api/books/${op.bookId}/progress`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(op.payload)
+    });
+    return Boolean(res?.ok);
+  }
+
+  async _executeDrawingOutboxOp(client, op) {
+    if (op.action === 'save') {
+      const res = await client.savePageDrawings(op.bookId, op.page, op.payload?.strokes);
+      return res !== null;
+    }
+    if (op.action === 'clear') {
+      const res = await client.clearPageDrawings(op.bookId, op.page);
+      return Boolean(res);
+    }
+    return false;
+  }
+
+  async _executeOutboxOp(client, op) {
+    switch (op.type) {
+      case 'annotation':
+        return await this._executeAnnotationOutboxOp(client, op);
+      case 'progress':
+        return await this._executeProgressOutboxOp(client, op);
+      case 'drawing':
+        return await this._executeDrawingOutboxOp(client, op);
+      default:
+        return false;
+    }
+  }
+
   async processOutboxQueueInternal(client) {
     let processed = 0;
     const ops = await this.getPendingOutboxOps();
     const now = Date.now();
 
     for (const op of ops) {
-      // Exponential backoff: 1s, 2s, 4s, 8s, up to 60s
-      const backoffMs = op.attempts > 0 ? Math.min(60000, 1000 * Math.pow(2, op.attempts - 1)) : 0;
-      if (op.lastAttempt && (now - op.lastAttempt) < backoffMs) {
+      if (!this._isOutboxOpReady(op, now)) {
         continue;
       }
 
       let success = false;
       try {
-        if (op.type === 'annotation') {
-          if (op.action === 'create') {
-            await client.createAnnotation(op.bookId, op.payload);
-            success = true;
-          } else if (op.action === 'update') {
-            await client.updateAnnotation(op.entityId, op.payload);
-            success = true;
-          } else if (op.action === 'delete') {
-            try {
-              await client.deleteAnnotation(op.entityId);
-              success = true;
-            } catch (delErr) {
-              // Accept 404 as idempotent deletion success
-              if (delErr?.message?.includes('404') || delErr?.status === 404) {
-                success = true;
-              } else {
-                throw delErr;
-              }
-            }
-          }
-        } else if (op.type === 'progress') {
-          const res = await fetch(`/api/books/${op.bookId}/progress`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(op.payload)
-          });
-          if (res.ok) {
-            success = true;
-          }
-        } else if (op.type === 'drawing') {
-          if (op.action === 'save') {
-            const res = await client.savePageDrawings(op.bookId, op.page, op.payload.strokes);
-            if (res !== null) success = true;
-          } else if (op.action === 'clear') {
-            const res = await client.clearPageDrawings(op.bookId, op.page);
-            if (res) success = true;
-          }
-        }
+        success = await this._executeOutboxOp(client, op);
       } catch (execErr) {
         console.warn(`[LocalDB] Outbox operation ${op.id} attempt failed:`, execErr);
         success = false;

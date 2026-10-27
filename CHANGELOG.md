@@ -11,6 +11,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-27
+
+### Added
+- Search rules now accept the words `and`, `or`, `not`, and parentheses for grouping.
+- The collection manager can search the catalog to add books to hybrid collections and edit rules with removable query tokens, live Calibre previews, and a responsive book grid.
+
+### Fixed
+- Commas now work as OR across fields, and negation with `-` or `not` works consistently.
+- Failed PDF metadata reads no longer leave staged uploads locked on Windows.
+
 ## [1.12.0] - 2026-10-27
 
 ### Added
@@ -569,7 +579,8 @@ Mobile PWA, responsive reader and offline capabilities.
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.2...v1.11.0
 [1.10.2]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.1...v1.10.2

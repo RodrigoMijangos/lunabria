@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -258,7 +258,11 @@ def extract_pdf_metadata(
     try:
         doc = pymupdf.open(str(path_obj))
     except Exception as err:
-        logger.warning("Could not open PDF %s for metadata extraction: %s", path_obj, err)
+        logger.warning(
+            "Could not open PDF %s for metadata extraction: %s",
+            path_obj,
+            str(err),
+        )
         return {"isbns": [], "title": None, "author": None}
 
     try:

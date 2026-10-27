@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 from app import database
 from app.services.calibre_service import calibre_service
@@ -10,7 +10,7 @@ from app.services.pdf_metadata_extractor import extract_pdf_metadata
 logger = logging.getLogger(__name__)
 
 
-def process_upload_job(job):
+def process_upload_job(job: Dict[str, Any]) -> int:
     file_path = job["staging_path"]
     clean_title = Path(job["filename"]).stem.replace("_", " ").replace("-", " ")
     book_id = calibre_service.add_book(
@@ -23,11 +23,12 @@ def process_upload_job(job):
         try:
             extracted = extract_pdf_metadata(file_path)
 
-            candidate_isbns = []
-            if job.get("isbn"):
-                candidate_isbns.append(job.get("isbn"))
+            candidate_isbns: list[str] = []
+            provided_isbn = job.get("isbn")
+            if isinstance(provided_isbn, str) and provided_isbn:
+                candidate_isbns.append(provided_isbn)
             for candidate in extracted.get("isbns", []):
-                if candidate not in candidate_isbns:
+                if isinstance(candidate, str) and candidate not in candidate_isbns:
                     candidate_isbns.append(candidate)
 
             metadata = calibre_service.fetch_metadata_cascade(
@@ -63,25 +64,25 @@ def process_upload_job(job):
 
 
 class IngestionQueue:
-    def __init__(self, processor: Optional[Callable] = None):
+    def __init__(self, processor: Optional[Callable[[Dict[str, Any]], int]] = None):
         self._processor = processor or process_upload_job
-        self._queue = None
-        self._worker_task = None
+        self._queue: Optional[asyncio.Queue[Optional[Dict[str, Any]]]] = None
+        self._worker_task: Optional[asyncio.Task[None]] = None
         self._accepting = False
 
     @property
-    def is_running(self):
+    def is_running(self) -> bool:
         return (
             self._accepting
             and self._worker_task is not None
             and not self._worker_task.done()
         )
 
-    async def start(self):
+    async def start(self) -> None:
         if self.is_running:
             return
 
-        queue = asyncio.Queue()
+        queue: asyncio.Queue[Optional[Dict[str, Any]]] = asyncio.Queue()
         for job in database.get_active_upload_jobs():
             if not Path(job["staging_path"]).is_file():
                 database.update_upload_job(
@@ -102,13 +103,13 @@ class IngestionQueue:
         )
         self._accepting = True
 
-    async def enqueue_many(self, jobs):
+    async def enqueue_many(self, jobs: list[Dict[str, Any]]) -> None:
         if not self.is_running or self._queue is None:
             raise RuntimeError("Book ingestion worker is not running.")
         for job in jobs:
             self._queue.put_nowait(job)
 
-    async def stop(self):
+    async def stop(self) -> None:
         self._accepting = False
         queue = self._queue
         worker_task = self._worker_task
@@ -126,7 +127,7 @@ class IngestionQueue:
         self._queue = None
         self._worker_task = None
 
-    async def _run(self, queue):
+    async def _run(self, queue: asyncio.Queue[Optional[Dict[str, Any]]]) -> None:
         while True:
             job = await queue.get()
             if job is None:

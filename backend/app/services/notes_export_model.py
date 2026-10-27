@@ -207,7 +207,7 @@ def build_model(
             m["section_id"] = "s_default_no_index"
 
     has_no_index_marks = any(m["section_id"] == "s_default_no_index" for m in processed_marks)
-    all_sections = []
+    all_sections: List[Dict[str, Any]] = []
     if has_no_index_marks or not raw_sections:
         all_sections.append({
             "id": "s_default_no_index",
@@ -264,6 +264,8 @@ def build_model(
                 "marks": [m]
             }
         else:
+            if current_run is None:
+                raise RuntimeError("Cannot append a mark without an active export run.")
             current_run["marks"].append(m)
             current_run["pages"][1] = m["page"]
 

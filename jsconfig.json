@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "target": "ES2022"
+  },
+  "include": [
+    "frontend/js/types/globals.d.ts",
+    "frontend/js/services/LunabriaQueryCompiler.js",
+    "frontend/js/services/reader/ReaderSelectionGeometry.js",
+    "frontend/js/services/http.js",
+    "frontend/js/views/reader/HighlightOverlayView.js"
+  ],
+  "exclude": ["node_modules", "frontend/tests"]
+}
