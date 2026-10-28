@@ -3,171 +3,188 @@ Lunabria Universal Query Compiler (Python implementation)
 Compiles intuitive symbol-based search queries (+, -, comma, exact quotes, natural boolean words)
 into Calibre-native search expressions.
 """
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
+
+_SINGLE_CHAR_TOKENS = {
+    "(": ("LPAREN", "("),
+    ")": ("RPAREN", ")"),
+    "+": ("AND", "+"),
+    ",": ("OR", ","),
+    "-": ("NOT", "-"),
+}
+
+_DELIMITER_CHARS = ("(", ")", "+", ",", "-", '"')
 
 
-def parse_query_clauses(raw_query: Optional[str]) -> List[Dict[str, Any]]:
-    if not raw_query or not raw_query.strip():
-        return []
-
-    s = raw_query.strip()
+def _read_quoted_token(s: str, start_idx: int) -> Tuple[Tuple[str, Any], int]:
     n = len(s)
+    i = start_idx + 1
+    val_chars: List[str] = []
+    while i < n and s[i] != '"':
+        if s[i] == "\\" and i + 1 < n:
+            val_chars.append(s[i + 1])
+            i += 2
+        else:
+            val_chars.append(s[i])
+            i += 1
+    if i < n and s[i] == '"':
+        i += 1
+    return ("VALUE", ("".join(val_chars), True)), i
 
+
+def _classify_word_token(word: str) -> List[Tuple[str, Any]]:
+    lower_word = word.lower()
+    if lower_word in ("and", "y"):
+        return [("AND", word)]
+    if lower_word in ("or", "o"):
+        return [("OR", word)]
+    if lower_word == "not":
+        return [("NOT", word)]
+    if word.endswith(":") and len(word) > 1:
+        return [("FIELD", word[:-1])]
+    if ":" in word and not word.startswith(":"):
+        field_part, val_part = word.split(":", 1)
+        out: List[Tuple[str, Any]] = [("FIELD", field_part)]
+        if val_part:
+            out.append(("VALUE", (val_part, False)))
+        return out
+    return [("VALUE", (word, False))]
+
+
+def _tokenize_query(s: str) -> List[Tuple[str, Any]]:
     tokens: List[Tuple[str, Any]] = []
+    n = len(s)
     i = 0
     while i < n:
         c = s[i]
         if c.isspace():
             i += 1
             continue
-        if c == '(':
-            tokens.append(('LPAREN', '('))
-            i += 1
-            continue
-        if c == ')':
-            tokens.append(('RPAREN', ')'))
-            i += 1
-            continue
-        if c == '+':
-            tokens.append(('AND', '+'))
-            i += 1
-            continue
-        if c == ',':
-            tokens.append(('OR', ','))
-            i += 1
-            continue
-        if c == '-':
-            tokens.append(('NOT', '-'))
+        if c in _SINGLE_CHAR_TOKENS:
+            tokens.append(_SINGLE_CHAR_TOKENS[c])
             i += 1
             continue
         if c == '"':
-            i += 1
-            val_chars: List[str] = []
-            while i < n and s[i] != '"':
-                if s[i] == '\\' and i + 1 < n:
-                    val_chars.append(s[i + 1])
-                    i += 2
-                else:
-                    val_chars.append(s[i])
-                    i += 1
-            if i < n and s[i] == '"':
-                i += 1
-            tokens.append(('VALUE', (''.join(val_chars), True)))
+            tok, i = _read_quoted_token(s, i)
+            tokens.append(tok)
             continue
 
         start = i
-        while i < n and not s[i].isspace() and s[i] not in ('(', ')', '+', ',', '-', '"'):
+        while i < n and not s[i].isspace() and s[i] not in _DELIMITER_CHARS:
             i += 1
-        word = s[start:i]
+        tokens.extend(_classify_word_token(s[start:i]))
+    return tokens
 
-        lower_word = word.lower()
-        if lower_word in ('and', 'y'):
-            tokens.append(('AND', word))
-        elif lower_word in ('or', 'o'):
-            tokens.append(('OR', word))
-        elif lower_word == 'not':
-            tokens.append(('NOT', word))
-        elif word.endswith(':') and len(word) > 1:
-            tokens.append(('FIELD', word[:-1]))
-        elif ':' in word and not word.startswith(':'):
-            parts = word.split(':', 1)
-            tokens.append(('FIELD', parts[0]))
-            if parts[1]:
-                tokens.append(('VALUE', (parts[1], False)))
-        else:
-            tokens.append(('VALUE', (word, False)))
 
-    clauses: List[Dict[str, Any]] = []
-    incoming_connector = '+'
-    is_negated = False
-    current_field: Optional[str] = None
-    current_values: List[Tuple[str, bool]] = []
-    pending_comma = False
-    pending_open_parens = 0
-    pending_close_parens = 0
+class _ClauseBuilder:
+    def __init__(self) -> None:
+        self.clauses: List[Dict[str, Any]] = []
+        self.incoming_connector = "+"
+        self.is_negated = False
+        self.current_field: Optional[str] = None
+        self.current_values: List[Tuple[str, bool]] = []
+        self.pending_comma = False
+        self.pending_open_parens = 0
+        self.pending_close_parens = 0
 
-    def flush_clause():
-        nonlocal current_values, current_field, incoming_connector, is_negated
-        nonlocal pending_open_parens, pending_close_parens, pending_comma
-        if not current_values:
+    def flush(self) -> None:
+        if not self.current_values:
             return
 
-        if is_negated:
-            op = ',-' if incoming_connector == ',' else '-'
+        if self.is_negated:
+            op = ",-" if self.incoming_connector == "," else "-"
         else:
-            op = ',' if incoming_connector == ',' else '+'
+            op = "," if self.incoming_connector == "," else "+"
 
         cl: Dict[str, Any] = {
-            'op': op,
-            'field': current_field,
-            'values': current_values,
+            "op": op,
+            "field": self.current_field,
+            "values": self.current_values,
         }
-        if pending_open_parens > 0:
-            cl['openParens'] = pending_open_parens
-            pending_open_parens = 0
-        if pending_close_parens > 0:
-            cl['closeParens'] = pending_close_parens
-            pending_close_parens = 0
+        if self.pending_open_parens > 0:
+            cl["openParens"] = self.pending_open_parens
+            self.pending_open_parens = 0
+        if self.pending_close_parens > 0:
+            cl["closeParens"] = self.pending_close_parens
+            self.pending_close_parens = 0
 
-        clauses.append(cl)
-        current_values = []
-        is_negated = False
-        incoming_connector = '+'
-        pending_comma = False
+        self.clauses.append(cl)
+        self.current_values = []
+        self.is_negated = False
+        self.incoming_connector = "+"
+        self.pending_comma = False
 
+    def consume(self, tok_type: str, tok_val: Any) -> None:
+        if tok_type == "LPAREN":
+            self.pending_open_parens += 1
+        elif tok_type == "RPAREN":
+            self._handle_rparen()
+        elif tok_type == "AND":
+            self.flush()
+            self.incoming_connector = "+"
+            self.pending_comma = False
+        elif tok_type == "OR":
+            self.pending_comma = True
+        elif tok_type == "NOT":
+            self._handle_not()
+        elif tok_type == "FIELD":
+            self._handle_field(tok_val)
+        elif tok_type == "VALUE":
+            self._handle_value(tok_val)
+
+    def _handle_rparen(self) -> None:
+        if self.current_values:
+            self.pending_close_parens += 1
+            self.flush()
+        elif self.clauses:
+            self.clauses[-1]["closeParens"] = self.clauses[-1].get("closeParens", 0) + 1
+
+    def _handle_not(self) -> None:
+        if self.pending_comma:
+            self.flush()
+            self.incoming_connector = ","
+            self.pending_comma = False
+        elif self.current_values:
+            self.flush()
+        self.is_negated = True
+
+    def _handle_field(self, field_name: str) -> None:
+        if self.pending_comma:
+            self.flush()
+            self.incoming_connector = ","
+            self.pending_comma = False
+        else:
+            self.flush()
+        self.current_field = field_name
+
+    def _handle_value(self, tok_val: Tuple[str, bool]) -> None:
+        val, is_quoted = tok_val
+        if self.current_values and not self.pending_comma:
+            self.flush()
+            self.incoming_connector = "+"
+        self.current_values.append((val, is_quoted))
+        self.pending_comma = False
+
+
+def parse_query_clauses(raw_query: Optional[str]) -> List[Dict[str, Any]]:
+    if not raw_query or not raw_query.strip():
+        return []
+
+    tokens = _tokenize_query(raw_query.strip())
+    builder = _ClauseBuilder()
     for tok_type, tok_val in tokens:
-        if tok_type == 'LPAREN':
-            pending_open_parens += 1
-            continue
+        builder.consume(tok_type, tok_val)
+    builder.flush()
+    return builder.clauses
 
-        if tok_type == 'RPAREN':
-            if current_values:
-                pending_close_parens += 1
-                flush_clause()
-            elif clauses:
-                clauses[-1]['closeParens'] = clauses[-1].get('closeParens', 0) + 1
-            continue
 
-        if tok_type == 'AND':
-            flush_clause()
-            incoming_connector = '+'
-            pending_comma = False
-            continue
-
-        if tok_type == 'OR':
-            pending_comma = True
-            continue
-
-        if tok_type == 'NOT':
-            if pending_comma:
-                flush_clause()
-                incoming_connector = ','
-                pending_comma = False
-            elif current_values:
-                flush_clause()
-            is_negated = True
-            continue
-
-        if tok_type == 'FIELD':
-            if pending_comma:
-                flush_clause()
-                incoming_connector = ','
-                pending_comma = False
-            else:
-                flush_clause()
-            current_field = tok_val
-            continue
-
-        if tok_type == 'VALUE':
-            val, is_quoted = tok_val
-            if current_values and not pending_comma:
-                flush_clause()
-                incoming_connector = '+'
-            current_values.append((val, is_quoted))
-            pending_comma = False
-
-    flush_clause()
-    return clauses
+def _format_clause_value(field: Optional[str], val: str, is_quoted: bool) -> Optional[str]:
+    if not val and not is_quoted:
+        return None
+    if is_quoted:
+        clean_val = val.lstrip("=")
+        return f'{field}:"={clean_val}"' if field else f'"={clean_val}"'
+    return f"{field}:{val}" if field else val
 
 
 def compile_lunabria_query(raw_query: Optional[str]) -> str:
@@ -177,67 +194,35 @@ def compile_lunabria_query(raw_query: Optional[str]) -> str:
     - `,` / `or` -> `or`
     - `-` / `not` -> `(not ...)`
     - `(...)` -> preserves grouping parentheses
-    - `\"value\"` (with quotes) -> exact match (`field:\"=value\"`)
+    - `\"value\"` (with quotes) -> exact match (`field:\" =value\"`)
     - `value` (without quotes) -> substring / partial match (`field:value`)
     """
     clauses = parse_query_clauses(raw_query)
     if not clauses:
         return ""
 
-    tokens_out = []
-
+    parts: List[str] = []
     for idx, cl in enumerate(clauses):
-        field = cl['field']
-        op = cl['op']
-        val_exprs: List[str] = []
-
-        for val, is_quoted in cl['values']:
-            if not val and not is_quoted:
-                continue
-            if field:
-                if is_quoted:
-                    clean_val = val.lstrip('=')
-                    val_exprs.append(f'{field}:"={clean_val}"')
-                else:
-                    val_exprs.append(f'{field}:{val}')
-            else:
-                if is_quoted:
-                    clean_val = val.lstrip('=')
-                    val_exprs.append(f'"={clean_val}"')
-                else:
-                    val_exprs.append(val)
-
+        field = cl["field"]
+        op = cl["op"]
+        val_exprs = [
+            formatted
+            for val, is_quoted in cl["values"]
+            if (formatted := _format_clause_value(field, val, is_quoted)) is not None
+        ]
         if not val_exprs:
             continue
 
-        if len(val_exprs) == 1:
-            expr = val_exprs[0]
-        else:
-            joined_vals = ' or '.join(val_exprs)
-            expr = f"({joined_vals})"
-
-        if op in ('-', ',-'):
+        expr = val_exprs[0] if len(val_exprs) == 1 else f"({' or '.join(val_exprs)})"
+        if op in ("-", ",-"):
             expr = f"(not {expr})"
 
-        open_p = '(' * cl.get('openParens', 0)
-        close_p = ')' * cl.get('closeParens', 0)
-        connector = 'or' if (',' in op) else 'and'
+        open_p = "(" * cl.get("openParens", 0)
+        close_p = ")" * cl.get("closeParens", 0)
+        connector = "or" if ("," in op) else "and"
 
-        tokens_out.append({
-            'open_p': open_p,
-            'expr': expr,
-            'close_p': close_p,
-            'connector': connector,
-            'is_first': (idx == 0)
-        })
+        if idx > 0 and parts:
+            parts.append(connector)
+        parts.append(f"{open_p}{expr}{close_p}")
 
-    if not tokens_out:
-        return ""
-
-    parts: List[str] = []
-    for item in tokens_out:
-        if not item['is_first']:
-            parts.append(item['connector'])
-        parts.append(f"{item['open_p']}{item['expr']}{item['close_p']}")
-
-    return ' '.join(parts)
+    return " ".join(parts)

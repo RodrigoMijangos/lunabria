@@ -1,19 +1,24 @@
-'use strict';
+"use strict";
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
 
-const frontend = path.resolve(__dirname, '..');
-const textLayerSource = fs.readFileSync(
-  path.join(frontend, 'js', 'views', 'reader', 'TextLayerView.js'),
-  'utf8'
+const frontend = path.resolve(__dirname, "..");
+const decoratorSource = fs.readFileSync(
+  path.join(frontend, "js", "views", "reader", "TextLayerCrossReferenceDecorator.js"),
+  "utf8",
+);
+const textLayerSource = fs.readFileSync(path.join(frontend, "js", "views", "reader", "TextLayerView.js"), "utf8");
+const layerBuilderSource = fs.readFileSync(
+  path.join(frontend, "js", "viewmodels", "reader", "ReaderPageLayerBuilder.js"),
+  "utf8",
 );
 const rendererSource = fs.readFileSync(
-  path.join(frontend, 'js', 'viewmodels', 'reader', 'ReaderPageRenderer.js'),
-  'utf8'
+  path.join(frontend, "js", "viewmodels", "reader", "ReaderPageRenderer.js"),
+  "utf8",
 );
 
 class EventTargetStub {
@@ -27,7 +32,10 @@ class EventTargetStub {
   }
 
   removeEventListener(type, handler) {
-    this.listeners.set(type, (this.listeners.get(type) || []).filter(listener => listener !== handler));
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) || []).filter((listener) => listener !== handler),
+    );
   }
 
   emit(type, properties = {}) {
@@ -35,8 +43,10 @@ class EventTargetStub {
       type,
       target: this,
       defaultPrevented: false,
-      preventDefault() { this.defaultPrevented = true; },
-      ...properties
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+      ...properties,
     };
     for (const handler of this.listeners.get(type) || []) handler(event);
     return event;
@@ -59,7 +69,7 @@ class TextNodeStub {
 }
 
 class ElementStub extends EventTargetStub {
-  constructor(tagName = 'div') {
+  constructor(tagName = "div") {
     super();
     this.nodeType = 1;
     this.tagName = tagName.toUpperCase();
@@ -68,9 +78,9 @@ class ElementStub extends EventTargetStub {
     this.dataset = {};
     this._classes = new Set();
     this.classList = {
-      add: (...names) => names.forEach(name => this._classes.add(name)),
-      remove: (...names) => names.forEach(name => this._classes.delete(name)),
-      contains: name => this._classes.has(name)
+      add: (...names) => names.forEach((name) => this._classes.add(name)),
+      remove: (...names) => names.forEach((name) => this._classes.delete(name)),
+      contains: (name) => this._classes.has(name),
     };
     this.style = { setProperty() {} };
   }
@@ -80,7 +90,7 @@ class ElementStub extends EventTargetStub {
   }
 
   get className() {
-    return Array.from(this._classes).join(' ');
+    return Array.from(this._classes).join(" ");
   }
 
   appendChild(child) {
@@ -99,7 +109,7 @@ class ElementStub extends EventTargetStub {
 
   replaceChild(replacement, child) {
     const index = this.childNodes.indexOf(child);
-    if (index < 0) throw new Error('Child not found');
+    if (index < 0) throw new Error("Child not found");
     if (replacement.parentNode) replacement.parentNode.removeChild(replacement);
     replacement.parentNode = this;
     child.parentNode = null;
@@ -135,7 +145,7 @@ class ElementStub extends EventTargetStub {
   }
 
   get textContent() {
-    return this.childNodes.map(child => child.textContent).join('');
+    return this.childNodes.map((child) => child.textContent).join("");
   }
 
   set textContent(value) {
@@ -149,7 +159,7 @@ function createTextLayerWorld() {
   let nextTimer = 0;
   const window = new EventTargetStub();
   window.getSelection = () => ({ isCollapsed: true });
-  const document = { createElement: tagName => new ElementStub(tagName) };
+  const document = { createElement: (tagName) => new ElementStub(tagName) };
   const context = vm.createContext({
     window,
     document,
@@ -159,40 +169,41 @@ function createTextLayerWorld() {
       timers.set(id, { callback, delay });
       return id;
     },
-    clearTimeout: id => timers.delete(id),
+    clearTimeout: (id) => timers.delete(id),
     api: { getPageLayout: async () => null },
-    pdfjsLib: {}
+    pdfjsLib: {},
   });
-  vm.runInContext(textLayerSource, context, { filename: 'TextLayerView.js', timeout: 2000 });
+  vm.runInContext(decoratorSource, context, { filename: "TextLayerCrossReferenceDecorator.js", timeout: 2000 });
+  vm.runInContext(textLayerSource, context, { filename: "TextLayerView.js", timeout: 2000 });
   return {
     context,
     window,
     document,
     timers,
-    textLayerView: vm.runInContext('TextLayerView', context)
+    textLayerView: vm.runInContext("TextLayerView", context),
   };
 }
 
 const navigationMap = {
   toc: [
-    { title: 'Chapter 3: The Moon', page: 5, level: 0, children: [] },
+    { title: "Chapter 3: The Moon", page: 5, level: 0, children: [] },
     {
-      title: 'Chapter IV - The Garden',
+      title: "Chapter IV - The Garden",
       page: 8,
       level: 0,
       children: [
-        { title: 'Section 2.1.5: The Gate', page: 11, level: 1, children: [] },
-        { title: '2.2 The Path', page: 12, level: 1, children: [] }
-      ]
+        { title: "Section 2.1.5: The Gate", page: 11, level: 1, children: [] },
+        { title: "2.2 The Path", page: 12, level: 1, children: [] },
+      ],
     },
-    { title: '2.3 Flat section', page: 13, level: 0, children: [] }
-  ]
+    { title: "2.3 Flat section", page: 13, level: 0, children: [] },
+  ],
 };
 
 function findAnchors(root) {
   const anchors = [];
-  const visit = node => {
-    if (node.nodeType === 1 && node.classList.contains('reader-reference-link')) {
+  const visit = (node) => {
+    if (node.nodeType === 1 && node.classList.contains("reader-reference-link")) {
       anchors.push(node);
     }
     for (const child of node.childNodes || []) visit(child);
@@ -201,159 +212,182 @@ function findAnchors(root) {
   return anchors;
 }
 
-function decoratedReference(text = 'See Chapter 3 now.') {
+function decoratedReference(text = "See Chapter 3 now.") {
   const world = createTextLayerWorld();
   const container = new ElementStub();
   container.dataset = {};
   container.appendText(text);
   const navigations = [];
-  const count = world.textLayerView.decorateCrossReferences(
-    container,
-    navigationMap,
-    4,
-    (targetPage, sourcePage) => navigations.push({ targetPage, sourcePage })
+  const count = world.textLayerView.decorateCrossReferences(container, navigationMap, 4, (targetPage, sourcePage) =>
+    navigations.push({ targetPage, sourcePage }),
   );
   return { ...world, container, navigations, count, links: findAnchors(container) };
 }
 
-test('cross-references match strict TOC chapter and section titles with accents and Roman numerals', () => {
+test("cross-references match strict TOC chapter and section titles with accents and Roman numerals", () => {
   const { textLayerView } = createTextLayerWorld();
-  const text = 'Capítulo 3, chapter iv, sección 2.1.5, section 2.2, section 2.3, chapter 9, section 3.1.';
+  const text = "Capítulo 3, chapter iv, sección 2.1.5, section 2.2, section 2.3, chapter 9, section 3.1.";
   const references = textLayerView.findCrossReferences(text, navigationMap);
 
-  assert.deepEqual(Array.from(references, reference => ({
-    text: reference.text,
-    kind: reference.kind,
-    targetPage: reference.targetPage
-  })), [
-    { text: 'Capítulo 3', kind: 'chapter', targetPage: 5 },
-    { text: 'chapter iv', kind: 'chapter', targetPage: 8 },
-    { text: 'sección 2.1.5', kind: 'section', targetPage: 11 },
-    { text: 'section 2.2', kind: 'section', targetPage: 12 },
-    { text: 'section 2.3', kind: 'section', targetPage: 13 }
-  ]);
+  assert.deepEqual(
+    Array.from(references, (reference) => ({
+      text: reference.text,
+      kind: reference.kind,
+      targetPage: reference.targetPage,
+    })),
+    [
+      { text: "Capítulo 3", kind: "chapter", targetPage: 5 },
+      { text: "chapter iv", kind: "chapter", targetPage: 8 },
+      { text: "sección 2.1.5", kind: "section", targetPage: 11 },
+      { text: "section 2.2", kind: "section", targetPage: 12 },
+      { text: "section 2.3", kind: "section", targetPage: 13 },
+    ],
+  );
   for (const reference of references) {
     assert.equal(text.slice(reference.start, reference.end), reference.text);
   }
 });
 
-test('text decoration preserves split DOM text and exposes one keyboard stop per reference', () => {
+test("text decoration preserves split DOM text and exposes one keyboard stop per reference", () => {
   const world = createTextLayerWorld();
   const container = new ElementStub();
   container.dataset = {};
-  container.appendText('See Chap');
-  container.appendText('ter 3 in this paragraph.');
+  container.appendText("See Chap");
+  container.appendText("ter 3 in this paragraph.");
   const originalText = container.textContent;
 
-  const decoratedCount = world.textLayerView.decorateCrossReferences(
-    container,
-    navigationMap,
-    4,
-    () => {}
-  );
+  const decoratedCount = world.textLayerView.decorateCrossReferences(container, navigationMap, 4, () => {});
   const links = findAnchors(container);
 
   assert.equal(decoratedCount, 2);
   assert.equal(container.textContent, originalText);
   assert.equal(links.length, 2);
   assert.equal(links[0].tabIndex, 0);
-  assert.equal(links[0].getAttribute('aria-label'), 'Go to Chapter 3, page 5');
+  assert.equal(links[0].getAttribute("aria-label"), "Go to Chapter 3, page 5");
   assert.equal(links[1].tabIndex, -1);
-  assert.equal(links[1].getAttribute('aria-hidden'), 'true');
-  assert.equal(world.textLayerView.decorateCrossReferences(container, navigationMap, 4, () => {}), 0);
+  assert.equal(links[1].getAttribute("aria-hidden"), "true");
+  assert.equal(
+    world.textLayerView.decorateCrossReferences(container, navigationMap, 4, () => {}),
+    0,
+  );
 });
 
-test('reference taps navigate, while selection, native PDF links, drags, and long holds do not', () => {
+test("reference taps navigate, while selection, native PDF links, drags, and long holds do not", () => {
   const tap = decoratedReference();
-  tap.links[0].emit('pointerdown', {
-    button: 0, isPrimary: true, pointerId: 3, pointerType: 'mouse',
-    clientX: 20, clientY: 20, timeStamp: 10
+  tap.links[0].emit("pointerdown", {
+    button: 0,
+    isPrimary: true,
+    pointerId: 3,
+    pointerType: "mouse",
+    clientX: 20,
+    clientY: 20,
+    timeStamp: 10,
   });
-  tap.window.emit('pointerup', { pointerId: 3, clientX: 20, clientY: 20, timeStamp: 50 });
-  const tapEvent = tap.links[0].emit('click', { detail: 1, clientX: 20, clientY: 20 });
+  tap.window.emit("pointerup", { pointerId: 3, clientX: 20, clientY: 20, timeStamp: 50 });
+  const tapEvent = tap.links[0].emit("click", { detail: 1, clientX: 20, clientY: 20 });
   assert.equal(tapEvent.defaultPrevented, true);
   assert.deepEqual(tap.navigations, [{ targetPage: 5, sourcePage: 4 }]);
 
   const touchTap = decoratedReference();
-  touchTap.links[0].emit('pointerdown', {
-    button: 0, isPrimary: true, pointerId: 4, pointerType: 'touch',
-    clientX: 20, clientY: 20, timeStamp: 100
+  touchTap.links[0].emit("pointerdown", {
+    button: 0,
+    isPrimary: true,
+    pointerId: 4,
+    pointerType: "touch",
+    clientX: 20,
+    clientY: 20,
+    timeStamp: 100,
   });
-  touchTap.window.emit('pointerup', { pointerId: 4, clientX: 20, clientY: 20, timeStamp: 350 });
-  touchTap.links[0].emit('click', { detail: 1, clientX: 20, clientY: 20 });
+  touchTap.window.emit("pointerup", { pointerId: 4, clientX: 20, clientY: 20, timeStamp: 350 });
+  touchTap.links[0].emit("click", { detail: 1, clientX: 20, clientY: 20 });
   assert.deepEqual(touchTap.navigations, [{ targetPage: 5, sourcePage: 4 }]);
 
   const keyboard = decoratedReference();
   keyboard.window.getSelection = () => ({ isCollapsed: false });
-  keyboard.links[0].emit('click', { detail: 0 });
+  keyboard.links[0].emit("click", { detail: 0 });
   assert.deepEqual(keyboard.navigations, [{ targetPage: 5, sourcePage: 4 }]);
 
   const selected = decoratedReference();
   selected.window.getSelection = () => ({ isCollapsed: false });
-  selected.links[0].emit('click', { detail: 1, clientX: 20, clientY: 20 });
+  selected.links[0].emit("click", { detail: 1, clientX: 20, clientY: 20 });
   assert.deepEqual(selected.navigations, []);
 
   const nativeLink = decoratedReference();
   const pageWrapper = {
-    querySelectorAll: () => [{
-      getBoundingClientRect: () => ({ left: 10, right: 30, top: 10, bottom: 30 })
-    }]
+    querySelectorAll: () => [
+      {
+        getBoundingClientRect: () => ({ left: 10, right: 30, top: 10, bottom: 30 }),
+      },
+    ],
   };
   nativeLink.container.closest = () => pageWrapper;
-  nativeLink.links[0].emit('click', { detail: 1, clientX: 20, clientY: 20 });
+  nativeLink.links[0].emit("click", { detail: 1, clientX: 20, clientY: 20 });
   assert.deepEqual(nativeLink.navigations, []);
 
   const dragged = decoratedReference();
   const link = dragged.links[0];
-  link.emit('pointerdown', {
-    button: 0, isPrimary: true, pointerId: 1, pointerType: 'mouse',
-    clientX: 10, clientY: 10, timeStamp: 100
+  link.emit("pointerdown", {
+    button: 0,
+    isPrimary: true,
+    pointerId: 1,
+    pointerType: "mouse",
+    clientX: 10,
+    clientY: 10,
+    timeStamp: 100,
   });
-  dragged.window.emit('pointermove', { pointerId: 1, clientX: 30, clientY: 10, timeStamp: 110 });
-  dragged.window.emit('pointerup', { pointerId: 1, clientX: 30, clientY: 10, timeStamp: 120 });
-  link.emit('click', { detail: 1, clientX: 30, clientY: 10 });
+  dragged.window.emit("pointermove", { pointerId: 1, clientX: 30, clientY: 10, timeStamp: 110 });
+  dragged.window.emit("pointerup", { pointerId: 1, clientX: 30, clientY: 10, timeStamp: 120 });
+  link.emit("click", { detail: 1, clientX: 30, clientY: 10 });
   assert.deepEqual(dragged.navigations, []);
 
   const held = decoratedReference();
-  held.links[0].emit('pointerdown', {
-    button: 0, isPrimary: true, pointerId: 2, pointerType: 'touch',
-    clientX: 10, clientY: 10, timeStamp: 100
+  held.links[0].emit("pointerdown", {
+    button: 0,
+    isPrimary: true,
+    pointerId: 2,
+    pointerType: "touch",
+    clientX: 10,
+    clientY: 10,
+    timeStamp: 100,
   });
-  held.window.emit('pointerup', { pointerId: 2, clientX: 10, clientY: 10, timeStamp: 500 });
-  held.links[0].emit('click', { detail: 1, clientX: 10, clientY: 10 });
+  held.window.emit("pointerup", { pointerId: 2, clientX: 10, clientY: 10, timeStamp: 500 });
+  held.links[0].emit("click", { detail: 1, clientX: 10, clientY: 10 });
   assert.deepEqual(held.navigations, []);
 });
 
-test('ReaderPageRenderer decorates both precise layouts and the PDF.js fallback text layer', async () => {
+test("ReaderPageRenderer decorates both precise layouts and the PDF.js fallback text layer", async () => {
   const world = createTextLayerWorld();
   const trace = [];
   world.textLayerView.createTextLayerContainer = () => new ElementStub();
-  world.textLayerView.groupWordsIntoLines = words => words;
-  world.textLayerView.renderPreciseLines = () => trace.push('precise');
-  world.textLayerView.decorateCrossReferences = (...args) => trace.push(['decorate', ...args.slice(1)]);
+  world.textLayerView.groupWordsIntoLines = (words) => words;
+  world.textLayerView.renderPreciseLines = () => trace.push("precise");
+  world.textLayerView.decorateCrossReferences = (...args) => trace.push(["decorate", ...args.slice(1)]);
   world.context.pdfjsLib.TextLayer = class {
     constructor({ container }) {
       this.container = container;
     }
 
     async render() {
-      this.container.appendText('Chapter 3');
-      trace.push('fallback');
+      this.container.appendText("Chapter 3");
+      trace.push("fallback");
     }
   };
-  vm.runInContext(rendererSource, world.context, { filename: 'ReaderPageRenderer.js', timeout: 2000 });
-  const ReaderPageRenderer = vm.runInContext('ReaderPageRenderer', world.context);
+  vm.runInContext(layerBuilderSource, world.context, { filename: "ReaderPageLayerBuilder.js", timeout: 2000 });
+  vm.runInContext(rendererSource, world.context, { filename: "ReaderPageRenderer.js", timeout: 2000 });
+  const ReaderPageRenderer = vm.runInContext("ReaderPageRenderer", world.context);
   const model = { bookId: 1, totalPages: 20, navigationMap, pdfDoc: {} };
   const callback = () => {};
   const renderer = new ReaderPageRenderer(model, null, null, null, null, {
-    onTextReferenceNavigate: callback
+    onTextReferenceNavigate: callback,
   });
   renderer.renderGeneration = 1;
 
   const createPageWrapper = () => ({
     style: { setProperty() {} },
     children: [],
-    appendChild(child) { this.children.push(child); }
+    appendChild(child) {
+      this.children.push(child);
+    },
   });
 
   await renderer.renderTextLayer(
@@ -364,16 +398,16 @@ test('ReaderPageRenderer decorates both precise layouts and the PDF.js fallback 
     200,
     { scale: 1 },
     1,
-    1
+    1,
   );
-  assert.equal(trace[0], 'fallback');
-  assert.equal(trace[1][0], 'decorate');
+  assert.equal(trace[0], "fallback");
+  assert.equal(trace[1][0], "decorate");
   assert.equal(trace[1][1], navigationMap);
   assert.equal(trace[1][2], 4);
   assert.equal(trace[1][3], callback);
 
   trace.length = 0;
-  world.context.api.getPageLayout = async () => ({ words: [{ text: 'Chapter 3' }], lines: [] });
+  world.context.api.getPageLayout = async () => ({ words: [{ text: "Chapter 3" }], lines: [] });
   await renderer.renderTextLayer(
     createPageWrapper(),
     { getTextContent: async () => ({ items: [] }) },
@@ -382,10 +416,10 @@ test('ReaderPageRenderer decorates both precise layouts and the PDF.js fallback 
     200,
     { scale: 1 },
     1,
-    1
+    1,
   );
-  assert.equal(trace[0], 'precise');
-  assert.equal(trace[1][0], 'decorate');
+  assert.equal(trace[0], "precise");
+  assert.equal(trace[1][0], "decorate");
   assert.equal(trace[1][1], navigationMap);
   assert.equal(trace[1][2], 5);
 });

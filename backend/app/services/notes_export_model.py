@@ -1,7 +1,7 @@
 import hashlib
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pymupdf
 
@@ -15,27 +15,30 @@ def note_of(annotation: Dict[str, Any]) -> str:
     c = annotation.get("comment") or ""
     return c.strip()
 
+
 def slugify(text: str) -> str:
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     text = text.lower().strip()
     text = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
     return text
 
+
 def seg(x: str, *, _slugify=slugify) -> List[str]:
-    slugify = _slugify
+    slugify_fn = _slugify
     if not x or not x.strip():
         return []
     parts = x.split(" / ")
-    res = [slugify(p) for p in parts if p.strip()]
+    res = [slugify_fn(p) for p in parts if p.strip()]
     return [r for r in res if r]
 
+
 def build_palette(colors: List[Dict[str, Any]], *, _seg=seg) -> List[Dict[str, Any]]:
-    seg = _seg
+    seg_fn = _seg
     palette = []
     seen_keys = set()
     for c in colors:
         label = c.get("name", "").strip() or c.get("id", "").strip().capitalize()
-        s = seg(label)
+        s = seg_fn(label)
         key = s[0] if s else slugify(c.get("id", "color"))
         if key in seen_keys:
             i = 2
@@ -53,6 +56,7 @@ def build_palette(colors: List[Dict[str, Any]], *, _seg=seg) -> List[Dict[str, A
         })
     return palette
 
+
 def clean_none(d: Any) -> Any:
     if isinstance(d, dict):
         return {k: clean_none(v) for k, v in d.items() if v is not None}
@@ -60,151 +64,107 @@ def clean_none(d: Any) -> Any:
         return [clean_none(v) for v in d]
     return d
 
-def build_model(
-    annotations: List[Dict[str, Any]],
-    book_info: Dict[str, Any],
-    pdf_path: Optional[str],
-    highlight_colors: List[Dict[str, Any]],
-    color_filter: Optional[str] = None,
-    exported_at: Optional[str] = None,
-    *,
-    _normalize_text=normalize_text,
-    _note_of=note_of,
-    _seg=seg,
-    _build_palette=build_palette,
-    _parse_toc_sections=parse_toc_sections,
-    _extract_reconstructed_text=extract_reconstructed_text,
-    _finalize_run=None,
-    _pymupdf=pymupdf,
-    _max_run_page_gap=MAX_RUN_PAGE_GAP,
-    _toc_y_tolerance=TOC_Y_TOLERANCE
-) -> Dict[str, Any]:
-    normalize_text = _normalize_text
-    note_of = _note_of
-    seg = _seg
-    build_palette = _build_palette
-    parse_toc_sections = _parse_toc_sections
-    extract_reconstructed_text = _extract_reconstructed_text
-    finalize_run = _finalize_run if _finalize_run is not None else globals()["finalize_run"]
-    pymupdf = _pymupdf
-    MAX_RUN_PAGE_GAP = _max_run_page_gap
-    TOC_Y_TOLERANCE = _toc_y_tolerance
-    palette = build_palette(highlight_colors)
-    palette_map_by_id = {p["id"]: p for p in palette}
 
-    doc = None
-    if pdf_path:
-        try:
-            doc = pymupdf.open(pdf_path)
-        except Exception:
-            doc = None
-
-    book_id = book_info.get("id", 0)
-    raw_sections = parse_toc_sections(doc, book_id)
-
-    processed_marks = []
-    for a in annotations:
-        a_id = a["id"]
-        color_id = a.get("color", "")
-        cat_str = a.get("category", "") or ""
-        cat_norm = normalize_text(cat_str)
-        cat_segments = seg(cat_str)
-
-        matched_entry = None
-        meaning_source = "category"
-        legacy = False
-
-        if cat_segments:
-            for p in palette:
-                if any(s in p["seg"] for s in cat_segments):
-                    matched_entry = p
-                    break
-            if matched_entry:
-                type_key = matched_entry["key"]
-                label = matched_entry["label"]
-            else:
-                type_key = cat_segments[0]
-                label = cat_norm
-                legacy = True
-        else:
-            p_color = palette_map_by_id.get(color_id)
-            if p_color:
-                matched_entry = p_color
-                type_key = p_color["key"]
-                label = p_color["label"]
-                meaning_source = "color"
-            else:
-                type_key = "uncategorized"
-                label = "Uncategorized"
-                meaning_source = "color"
-
-        slot_conflict = False
-        p_slot = palette_map_by_id.get(color_id)
-        if matched_entry and p_slot and matched_entry["id"] != p_slot["id"]:
-            slot_conflict = True
-
-        category_raw = cat_str if cat_norm != label else None
-
-        text, text_raw, text_source, order_tuple, pos_y0 = extract_reconstructed_text(
-            doc,
-            a["page"],
-            a.get("rects") or [],
-            a.get("text", "")
+def _resolve_mark_meaning(
+    color_id: str,
+    cat_norm: str,
+    cat_segments: List[str],
+    palette: List[Dict[str, Any]],
+    palette_map_by_id: Dict[str, Dict[str, Any]],
+) -> Tuple[Optional[Dict[str, Any]], str, str, str, bool]:
+    if cat_segments:
+        matched_entry = next(
+            (p for p in palette if any(s in p["seg"] for s in cat_segments)),
+            None,
         )
+        if matched_entry:
+            return matched_entry, matched_entry["key"], matched_entry["label"], "category", False
+        return None, cat_segments[0], cat_norm, "category", True
 
-        note_text = note_of(a)
+    p_color = palette_map_by_id.get(color_id)
+    if p_color:
+        return p_color, p_color["key"], p_color["label"], "color", False
+    return None, "uncategorized", "Uncategorized", "color", False
 
-        is_heading = False
-        norm_text_for_heading = re.sub(r"^(\d+(\.\d+)*\s*)", "", text).strip().lower()
-        if raw_sections:
-            for s in raw_sections:
-                if s["raw_page"] == a["page"]:
-                    norm_s_title = re.sub(r"^(\d+(\.\d+)*\s*)", "", s["title"]).strip().lower()
-                    if norm_s_title and norm_text_for_heading == norm_s_title:
-                        is_heading = True
-                        break
 
-        processed_marks.append({
-            "id": a_id,
-            "page": a["page"],
-            "color": color_id,
-            "type": type_key,
-            "label": label,
-            "text": text,
-            "text_raw": text_raw,
-            "text_source": text_source,
-            "note": note_text if note_text else None,
-            "is_heading": is_heading,
-            "category_raw": category_raw,
-            "legacy": legacy if legacy else None,
-            "slot_conflict": slot_conflict if slot_conflict else None,
-            "meaning_source": meaning_source,
-            "order": order_tuple,
-            "pos_y0": pos_y0
-        })
+def _is_heading_mark(text: str, page: int, raw_sections: List[Dict[str, Any]]) -> bool:
+    if not raw_sections:
+        return False
+    norm_text = re.sub(r"^(\d+(\.\d+)*\s*)", "", text).strip().lower()
+    for s in raw_sections:
+        if s["raw_page"] == page:
+            norm_s_title = re.sub(r"^(\d+(\.\d+)*\s*)", "", s["title"]).strip().lower()
+            if norm_s_title and norm_text == norm_s_title:
+                return True
+    return False
 
-    if doc:
-        try:
-            doc.close()
-        except Exception:
-            pass
 
-    processed_marks.sort(key=lambda m: (m["order"], m["id"]))
+def _process_single_annotation(
+    a: Dict[str, Any],
+    doc: Any,
+    palette: List[Dict[str, Any]],
+    palette_map_by_id: Dict[str, Dict[str, Any]],
+    raw_sections: List[Dict[str, Any]],
+    normalize_text_fn: Callable[[str], str],
+    seg_fn: Callable[[str], List[str]],
+    extract_reconstructed_text_fn: Callable[..., Any],
+    note_of_fn: Callable[[Dict[str, Any]], str],
+) -> Dict[str, Any]:
+    a_id = a["id"]
+    color_id = a.get("color", "")
+    cat_str = a.get("category", "") or ""
+    cat_norm = normalize_text_fn(cat_str)
+    cat_segments = seg_fn(cat_str)
 
+    matched_entry, type_key, label, meaning_source, legacy = _resolve_mark_meaning(
+        color_id, cat_norm, cat_segments, palette, palette_map_by_id
+    )
+
+    p_slot = palette_map_by_id.get(color_id)
+    slot_conflict = bool(matched_entry and p_slot and matched_entry["id"] != p_slot["id"])
+    category_raw = cat_str if cat_norm != label else None
+
+    text, text_raw, text_source, order_tuple, pos_y0 = extract_reconstructed_text_fn(
+        doc, a["page"], a.get("rects") or [], a.get("text", "")
+    )
+    note_text = note_of_fn(a)
+    is_heading = _is_heading_mark(text, a["page"], raw_sections)
+
+    return {
+        "id": a_id,
+        "page": a["page"],
+        "color": color_id,
+        "type": type_key,
+        "label": label,
+        "text": text,
+        "text_raw": text_raw,
+        "text_source": text_source,
+        "note": note_text if note_text else None,
+        "is_heading": is_heading,
+        "category_raw": category_raw,
+        "legacy": legacy if legacy else None,
+        "slot_conflict": slot_conflict if slot_conflict else None,
+        "meaning_source": meaning_source,
+        "order": order_tuple,
+        "pos_y0": pos_y0,
+    }
+
+
+def _assign_sections_to_marks(
+    processed_marks: List[Dict[str, Any]],
+    raw_sections: List[Dict[str, Any]],
+    toc_y_tolerance: float,
+) -> List[Dict[str, Any]]:
     for m in processed_marks:
         m_page = m["page"]
         m_y = m["pos_y0"]
         matched_s = None
         for s in raw_sections:
-            if (s["raw_page"] < m_page) or (s["raw_page"] == m_page and s["y"] <= m_y + TOC_Y_TOLERANCE):
+            if (s["raw_page"] < m_page) or (s["raw_page"] == m_page and s["y"] <= m_y + toc_y_tolerance):
                 matched_s = s
             elif s["raw_page"] > m_page:
                 break
-
-        if matched_s:
-            m["section_id"] = matched_s["id"]
-        else:
-            m["section_id"] = "s_default_no_index"
+        m["section_id"] = matched_s["id"] if matched_s else "s_default_no_index"
 
     has_no_index_marks = any(m["section_id"] == "s_default_no_index" for m in processed_marks)
     all_sections: List[Dict[str, Any]] = []
@@ -230,38 +190,40 @@ def build_model(
             "page_end": s["page_end"],
             "path": list(s["path"])
         })
+    return all_sections
 
-    filtered_marks = processed_marks
-    if color_filter:
-        filtered_marks = [m for m in processed_marks if m["color"] == color_filter]
 
+def _should_cut_run(
+    m: Dict[str, Any], current_run: Optional[Dict[str, Any]], max_run_page_gap: int
+) -> bool:
+    if current_run is None:
+        return True
+    if m["type"] != current_run["type"] or m["section_id"] != current_run["section"]:
+        return True
+    if (m["page"] - current_run["pages"][1]) > max_run_page_gap:
+        return True
+    return bool(m["is_heading"] or current_run["is_heading"])
+
+
+def _group_marks_into_runs(
+    filtered_marks: List[Dict[str, Any]],
+    max_run_page_gap: int,
+    finalize_run_fn: Callable[[Dict[str, Any]], Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     runs = []
     current_run: Optional[Dict[str, Any]] = None
 
     for m in filtered_marks:
-        should_cut = False
-        if current_run is None:
-            should_cut = True
-        else:
-            if m["type"] != current_run["type"]:
-                should_cut = True
-            elif m["section_id"] != current_run["section"]:
-                should_cut = True
-            elif (m["page"] - current_run["pages"][1]) > MAX_RUN_PAGE_GAP:
-                should_cut = True
-            elif m["is_heading"] or current_run["is_heading"]:
-                should_cut = True
-
-        if should_cut:
+        if _should_cut_run(m, current_run, max_run_page_gap):
             if current_run is not None:
-                runs.append(finalize_run(current_run))
+                runs.append(finalize_run_fn(current_run))
             current_run = {
                 "section": m["section_id"],
                 "type": m["type"],
                 "label": m["label"],
                 "pages": [m["page"], m["page"]],
                 "is_heading": m["is_heading"],
-                "marks": [m]
+                "marks": [m],
             }
         else:
             if current_run is None:
@@ -270,14 +232,19 @@ def build_model(
             current_run["pages"][1] = m["page"]
 
     if current_run is not None:
-        runs.append(finalize_run(current_run))
+        runs.append(finalize_run_fn(current_run))
+    return runs
 
+
+def _prune_active_sections(
+    all_sections: List[Dict[str, Any]], runs: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     sections_with_runs = {r["section"] for r in runs}
     sections_by_id = {s["id"]: s for s in all_sections}
 
     active_section_ids = set()
     for s_id in sections_with_runs:
-        curr = s_id
+        curr: Optional[str] = s_id
         while curr:
             active_section_ids.add(curr)
             curr_sec = sections_by_id.get(curr)
@@ -286,41 +253,41 @@ def build_model(
     pruned_sections = []
     for s in all_sections:
         if s["id"] in active_section_ids:
-            filtered_children = [c for c in s["children"] if c in active_section_ids]
             pruned_sections.append({
                 "id": s["id"],
                 "title": s["title"],
                 "level": s["level"],
                 "parent": s["parent"] if s["parent"] in active_section_ids else None,
-                "children": filtered_children,
+                "children": [c for c in s["children"] if c in active_section_ids],
                 "page_start": s["page_start"],
                 "page_end": s["page_end"],
-                "path": s["path"]
+                "path": s["path"],
             })
+    return pruned_sections
 
-    authors_raw = book_info.get("authors") or "Unknown"
+
+def _parse_authors_list(authors_raw: Any) -> List[str]:
     if isinstance(authors_raw, list):
-        authors_list = authors_raw
-    else:
-        authors_list = [a.strip() for a in re.split(r"&|,", str(authors_raw)) if a.strip()]
-        if not authors_list:
-            authors_list = ["Unknown"]
+        return authors_raw
+    authors_list = [a.strip() for a in re.split(r"&|,", str(authors_raw or "Unknown")) if a.strip()]
+    return authors_list or ["Unknown"]
 
-    legend = []
-    for p in palette:
-        aliases = [s for s in p["seg"][1:]]
-        legend.append({
+
+def _build_legend_and_stats(
+    palette: List[Dict[str, Any]], filtered_marks: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    legend = [
+        {
             "key": p["key"],
             "label": p["label"],
-            "aliases": aliases,
+            "aliases": list(p["seg"][1:]),
             "color_id": p["id"],
             "hex": p.get("color") or None,
-            "description": ""
-        })
-
-    by_type_stats = {}
-    for p in palette:
-        by_type_stats[p["key"]] = 0
+            "description": "",
+        }
+        for p in palette
+    ]
+    by_type_stats = {p["key"]: 0 for p in palette}
     for m in filtered_marks:
         k = m["type"]
         by_type_stats[k] = by_type_stats.get(k, 0) + 1
@@ -330,24 +297,115 @@ def build_model(
         "by_type": by_type_stats,
         "legacy": sum(1 for m in filtered_marks if m.get("legacy")),
         "uncategorized": sum(1 for m in filtered_marks if m["type"] == "uncategorized"),
-        "slot_conflict": sum(1 for m in filtered_marks if m.get("slot_conflict"))
+        "slot_conflict": sum(1 for m in filtered_marks if m.get("slot_conflict")),
     }
+    return legend, stats
 
-    model = {
+
+def build_model(
+    annotations: List[Dict[str, Any]],
+    book_info: Dict[str, Any],
+    pdf_path: Optional[str],
+    highlight_colors: List[Dict[str, Any]],
+    color_filter: Optional[str] = None,
+    exported_at: Optional[str] = None,
+    *,
+    _normalize_text=normalize_text,
+    _note_of=note_of,
+    _seg=seg,
+    _build_palette=build_palette,
+    _parse_toc_sections=parse_toc_sections,
+    _extract_reconstructed_text=extract_reconstructed_text,
+    _finalize_run=None,
+    _pymupdf=pymupdf,
+    _max_run_page_gap=MAX_RUN_PAGE_GAP,
+    _toc_y_tolerance=TOC_Y_TOLERANCE
+) -> Dict[str, Any]:
+    finalize_run_fn = _finalize_run if _finalize_run is not None else globals()["finalize_run"]
+    palette = _build_palette(highlight_colors)
+    palette_map_by_id = {p["id"]: p for p in palette}
+
+    doc = None
+    if pdf_path:
+        try:
+            doc = _pymupdf.open(pdf_path)
+        except Exception:
+            doc = None
+
+    book_id = book_info.get("id", 0)
+    raw_sections = _parse_toc_sections(doc, book_id)
+
+    try:
+        processed_marks = [
+            _process_single_annotation(
+                a, doc, palette, palette_map_by_id, raw_sections,
+                _normalize_text, _seg, _extract_reconstructed_text, _note_of
+            )
+            for a in annotations
+        ]
+    finally:
+        if doc:
+            try:
+                doc.close()
+            except Exception:
+                pass
+
+    processed_marks.sort(key=lambda m: (m["order"], m["id"]))
+    all_sections = _assign_sections_to_marks(processed_marks, raw_sections, _toc_y_tolerance)
+
+    filtered_marks = (
+        [m for m in processed_marks if m["color"] == color_filter]
+        if color_filter
+        else processed_marks
+    )
+
+    runs = _group_marks_into_runs(filtered_marks, _max_run_page_gap, finalize_run_fn)
+    pruned_sections = _prune_active_sections(all_sections, runs)
+    legend, stats = _build_legend_and_stats(palette, filtered_marks)
+
+    return {
         "schema_version": "1.0",
         "source": {
             "id": book_id,
             "title": book_info.get("title", ""),
-            "authors": authors_list,
-            "exported_at": exported_at
+            "authors": _parse_authors_list(book_info.get("authors")),
+            "exported_at": exported_at,
         },
         "legend": legend,
         "stats": stats,
         "sections": pruned_sections,
-        "runs": runs
+        "runs": runs,
     }
 
-    return model
+
+def _are_marks_contiguous(prev_order: Tuple[Any, ...], curr_order: Tuple[Any, ...]) -> bool:
+    return (
+        prev_order[0] == curr_order[0]
+        and prev_order[1] == curr_order[1]
+        and prev_order[2] == curr_order[2]
+        and (curr_order[3] - prev_order[3] <= 1)
+    )
+
+
+def _format_run_mark(m: Dict[str, Any], section_id: str) -> Dict[str, Any]:
+    rm: Dict[str, Any] = {
+        "id": m["id"],
+        "section": section_id,
+        "page": m["page"],
+        "text": m["text"],
+        "type": m["type"],
+        "text_source": m["text_source"],
+        "note": m["note"],
+        "is_heading": m["is_heading"],
+    }
+    for opt_key in ("meaning_source", "category_raw"):
+        if m.get(opt_key):
+            rm[opt_key] = m[opt_key]
+    for flag_key in ("legacy", "slot_conflict"):
+        if m.get(flag_key):
+            rm[flag_key] = True
+    return rm
+
 
 def finalize_run(run_data: Dict[str, Any]) -> Dict[str, Any]:
     marks = run_data["marks"]
@@ -355,50 +413,18 @@ def finalize_run(run_data: Dict[str, Any]) -> Dict[str, Any]:
 
     combined_parts = []
     for i, m in enumerate(marks):
-        t = m["text"]
-        if i == 0:
-            combined_parts.append(t)
-        else:
-            prev_m = marks[i - 1]
-            prev_order = prev_m["order"]
-            curr_order = m["order"]
+        if i > 0:
+            sep = " " if _are_marks_contiguous(marks[i - 1]["order"], m["order"]) else " … "
+            combined_parts.append(sep)
+        combined_parts.append(m["text"])
 
-            if prev_order[0] == curr_order[0] and prev_order[1] == curr_order[1] and prev_order[2] == curr_order[2] and (curr_order[3] - prev_order[3] <= 1):
-                combined_parts.append(" ")
-            else:
-                combined_parts.append(" … ")
-            combined_parts.append(t)
-
-    full_text = "".join(combined_parts).strip()
-
-    run_marks = []
-    for m in marks:
-        rm = {
-            "id": m["id"],
-            "section": run_data["section"],
-            "page": m["page"],
-            "text": m["text"],
-            "type": m["type"],
-            "text_source": m["text_source"],
-            "note": m["note"],
-            "is_heading": m["is_heading"]
-        }
-        if m.get("meaning_source"):
-            rm["meaning_source"] = m["meaning_source"]
-        if m.get("category_raw"):
-            rm["category_raw"] = m["category_raw"]
-        if m.get("legacy"):
-            rm["legacy"] = True
-        if m.get("slot_conflict"):
-            rm["slot_conflict"] = True
-        run_marks.append(rm)
-
+    section_id = run_data["section"]
     return {
         "id": run_id,
-        "section": run_data["section"],
+        "section": section_id,
         "type": run_data["type"],
         "label": run_data["label"],
         "pages": run_data["pages"],
-        "text": full_text,
-        "marks": run_marks
+        "text": "".join(combined_parts).strip(),
+        "marks": [_format_run_mark(m, section_id) for m in marks],
     }

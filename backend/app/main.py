@@ -24,7 +24,7 @@ logging.getLogger("asyncio").addFilter(_SuppressSocketSendErrorFilter())
 app = FastAPI(
     title="Lunabria API",
     description="Backend for Calibre with enhanced reading experience and virtual libraries",
-    version="1.13.0"
+    version="1.14.0"
 )
 
 import time
@@ -37,10 +37,18 @@ async def log_requests(request: Request, call_next):
     response = await call_next(request)
     duration_ms = round((time.time() - start_time) * 1000, 1)
 
+    req_path = request.url.path
+    has_cache_control = "cache-control" in [k.lower() for k in response.headers.keys()]
+
     # Ensure dynamic API endpoints are never cached by the browser HTTP cache
-    if request.url.path.startswith("/api/") and "cache-control" not in [k.lower() for k in response.headers.keys()]:
+    if req_path.startswith("/api/") and not has_cache_control:
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
+    elif not req_path.startswith("/api/") and not has_cache_control:
+        # Force browser HTTP revalidation on app-shell entry points, service worker, and static assets
+        # so Service Worker updates and reloads always see the latest deployed files.
+        if req_path in ("/", "/index.html", "/sw.js", "/manifest.json") or req_path.endswith((".html", ".js", ".css")):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate, max-age=0"
 
     client_ip = request.client.host if request.client else "127.0.0.1"
     http_version = request.scope.get("http_version", "1.1")

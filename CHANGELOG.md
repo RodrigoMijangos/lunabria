@@ -11,6 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-28
+
+### Changed
+- App updates now install and apply automatically without requiring a manual banner click or forced browser refresh.
+
 ## [1.13.0] - 2026-10-27
 
 ### Added
@@ -579,7 +584,8 @@ Mobile PWA, responsive reader and offline capabilities.
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.10.2...v1.11.0

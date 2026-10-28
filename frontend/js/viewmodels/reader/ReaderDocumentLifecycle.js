@@ -2,7 +2,37 @@
 class ReaderDocumentLifecycle {
   constructor(reader) {
     this.reader = reader;
-    this._reconciliationPromise = null;
+    this.reconciler = new ReaderBookReconciler(reader);
+  }
+
+  readCachedColors() {
+    return this.reconciler.readCachedColors();
+  }
+
+  resolveBookColors(isOfflineComplete) {
+    return this.reconciler.resolveBookColors(isOfflineComplete);
+  }
+
+  resolveOfflineStatus(bookId, numPages, isOfflineComplete) {
+    return this.reconciler.resolveOfflineStatus(bookId, numPages, isOfflineComplete);
+  }
+
+  resolveInitialProgress(bookId, isOfflineComplete) {
+    return this.reconciler.resolveInitialProgress(bookId, isOfflineComplete);
+  }
+
+  resolveBookAnnotations(bookId, isOfflineComplete) {
+    return this.reconciler.resolveBookAnnotations(bookId, isOfflineComplete);
+  }
+
+  async applyInitialFitScale(initialPage) {
+    const reader = this.reader;
+    if (reader.model.fitMode === "page") {
+      reader.model.setScale(await reader.nav.calculateFitPageScale(initialPage));
+    } else if (reader.model.fitMode === "width" || !reader.model.scale) {
+      reader.model.setScale(await reader.nav.calculateFitWidthScale(initialPage));
+      if (!reader.model.fitMode) reader.model.setFitMode("width");
+    }
   }
 
   async open(bookId, startPage = null) {
@@ -16,49 +46,22 @@ class ReaderDocumentLifecycle {
     reader.model.reset();
     reader.mobile?.prepareForBookOpen();
     reader.toolbar.setOfflineStatus({ pdfCached: false, layoutsCached: false });
-    reader.container.style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-    if (typeof reader.drawing?.toggleDrawMode === 'function') reader.drawing.toggleDrawMode(false);
-    if (typeof reader.drawing?.setDrawTool === 'function') reader.drawing.setDrawTool('pen', false);
+    reader.container.style.display = "flex";
+    document.body.style.overflow = "hidden";
+    reader.drawing?.toggleDrawMode?.(false);
+    reader.drawing?.setDrawTool?.("pen", false);
     reader.updateBookInfo(bookId, sequence);
 
     reader.destroyPdfResource(previousLoadingTask);
     reader.destroyPdfResource(previousDocument);
 
     try {
-      const isOfflineComplete = (typeof localDB !== 'undefined' && localDB && typeof localDB.isBookOfflineComplete === 'function')
-        ? await localDB.isBookOfflineComplete(bookId).catch(() => false)
-        : false;
+      const isOfflineComplete =
+        typeof localDB !== "undefined" && typeof localDB?.isBookOfflineComplete === "function"
+          ? await localDB.isBookOfflineComplete(bookId).catch(() => false)
+          : false;
 
-      let colors;
-      if (isOfflineComplete && typeof localStorage !== 'undefined' && localStorage) {
-        try {
-          const raw = localStorage.getItem('moon_cached_colors');
-          if (raw) colors = JSON.parse(raw);
-        } catch (_) {}
-      }
-
-      if (!colors || !Array.isArray(colors) || colors.length === 0) {
-        try {
-          colors = await api.getColors();
-          if (Array.isArray(colors) && colors.length > 0 && typeof localStorage !== 'undefined' && localStorage) {
-            try { localStorage.setItem('moon_cached_colors', JSON.stringify(colors)); } catch (_) {}
-          }
-        } catch (err) {
-          let cached = null;
-          if (typeof localStorage !== 'undefined' && localStorage) {
-            try {
-              const raw = localStorage.getItem('moon_cached_colors');
-              if (raw) cached = JSON.parse(raw);
-            } catch (_) {}
-          }
-          if (cached && Array.isArray(cached) && cached.length > 0) {
-            colors = cached;
-          } else {
-            throw err;
-          }
-        }
-      }
+      const colors = await this.resolveBookColors(isOfflineComplete);
       if (sequence !== reader.openSequence) return;
       reader.model.setColors(colors);
       reader.annotations.renderFloatingColors();
@@ -73,34 +76,15 @@ class ReaderDocumentLifecycle {
       await this.loadNavigationMap(pdfDoc, sequence);
       if (sequence !== reader.openSequence) return;
 
-      let isPdfCached = false;
-      let areLayoutsCached = false;
-      if (isOfflineComplete) {
-        isPdfCached = true;
-        areLayoutsCached = true;
-      } else {
-        [isPdfCached, areLayoutsCached] = await Promise.all([
-          localDB.isPdfCached(bookId).catch(() => false),
-          localDB.hasAllLayoutsCached(bookId, pdfDoc.numPages).catch(() => false)
-        ]);
-      }
+      const offlineStatus = await this.resolveOfflineStatus(bookId, pdfDoc.numPages, isOfflineComplete);
       if (sequence !== reader.openSequence) return;
-      reader.toolbar.setOfflineStatus({ pdfCached: isPdfCached, layoutsCached: areLayoutsCached });
+      reader.toolbar.setOfflineStatus(offlineStatus);
 
-      let initialPage = (startPage != null && startPage > 0) ? startPage : 1;
-      let progress = null;
-      if (isOfflineComplete) {
-        if (typeof localDB !== 'undefined' && localDB && typeof localDB.getLocalProgress === 'function') {
-          progress = await localDB.getLocalProgress(bookId).catch(() => null);
-        }
-      } else {
-        progress = await api.getProgress(bookId);
-      }
+      let initialPage = startPage != null && startPage > 0 ? startPage : 1;
+      const progress = await this.resolveInitialProgress(bookId, isOfflineComplete);
       if (sequence !== reader.openSequence) return;
-      if (progress && progress.current_page) {
-        if (startPage == null || progress.current_page > initialPage) {
-          initialPage = progress.current_page;
-        }
+      if (progress?.current_page && (startPage == null || progress.current_page > initialPage)) {
+        initialPage = progress.current_page;
       }
       reader.model.setCurrentPage(initialPage);
 
@@ -109,64 +93,33 @@ class ReaderDocumentLifecycle {
           await api.markBookOpened(bookId, {
             current_page: reader.model.currentPage,
             total_pages: reader.model.totalPages,
-            percentage: LibraryModel.formatReadingProgress(reader.model.currentPage, reader.model.totalPages)
+            percentage: LibraryModel.formatReadingProgress(reader.model.currentPage, reader.model.totalPages),
           });
         } catch (error) {
-          console.warn('[ReaderViewModel] Could not record opening of book:', error);
+          console.warn("[ReaderViewModel] Could not record opening of book:", error);
         }
       }
       if (sequence !== reader.openSequence) return;
 
-      let annots = [];
-      if (isOfflineComplete) {
-        if (typeof localDB !== 'undefined' && localDB && typeof localDB.getCachedAnnotations === 'function') {
-          annots = (await localDB.getCachedAnnotations(bookId).catch(() => null)) || [];
-        }
-      } else {
-        try {
-          annots = await api.getAnnotations(bookId);
-          if (!Array.isArray(annots)) throw new Error('Invalid annotations response');
-          if (typeof localDB !== 'undefined' && localDB && typeof localDB.saveCachedAnnotations === 'function') {
-            try {
-              await localDB.saveCachedAnnotations(bookId, annots);
-            } catch (cacheError) {
-              console.warn('[ReaderViewModel] Could not cache annotations:', cacheError);
-            }
-          }
-        } catch (err) {
-          console.warn('[ReaderViewModel] Failed to fetch annotations from server, trying cached annotations:', err);
-          if (typeof localDB !== 'undefined' && localDB && typeof localDB.getCachedAnnotations === 'function') {
-            annots = (await localDB.getCachedAnnotations(bookId).catch(() => null)) || [];
-          }
-        }
-      }
+      const annots = await this.resolveBookAnnotations(bookId, isOfflineComplete);
       if (sequence !== reader.openSequence) return;
       reader.model.setAnnotations(annots);
       reader.annotations.renderDrawerAnnotations();
 
-      if (reader.model.fitMode === 'page') {
-        const fitScale = await reader.nav.calculateFitPageScale(initialPage);
-        reader.model.setScale(fitScale);
-      } else if (reader.model.fitMode === 'width' || !reader.model.scale) {
-        const fitScale = await reader.nav.calculateFitWidthScale(initialPage);
-        reader.model.setScale(fitScale);
-        if (!reader.model.fitMode) reader.model.setFitMode('width');
-      }
-
+      await this.applyInitialFitScale(initialPage);
       reader.nav.syncViewModeUI();
       reader.nav.updateHUD();
       await reader.renderCurrentViewMode(initialPage);
       if (sequence !== reader.openSequence) return;
       reader.mobile?.onBookOpened();
 
-      // Reconcile offline-complete books in the background; failed requests are harmless here.
       if (isOfflineComplete) {
         this.reconcileOfflineCompleteBookInBackground(bookId, sequence, initialPage);
       }
     } catch (err) {
       if (sequence !== reader.openSequence) return;
-      console.error('[ReaderViewModel] Error opening book:', err);
-      alert('Error opening book: ' + err.message);
+      console.error("[ReaderViewModel] Error opening book:", err);
+      alert(`Error opening book: ${err.message}`);
       reader.close();
     }
   }
@@ -175,7 +128,7 @@ class ReaderDocumentLifecycle {
     const reader = this.reader;
     const navigationMap = reader.model.navigationMap;
     navigationMap.reset();
-    if (!pdfDoc || typeof pdfDoc.getOutline !== 'function') return false;
+    if (!pdfDoc || typeof pdfDoc.getOutline !== "function") return false;
 
     try {
       const outline = await pdfDoc.getOutline();
@@ -195,24 +148,24 @@ class ReaderDocumentLifecycle {
     } catch (error) {
       if (sequence === reader.openSequence) {
         navigationMap.reset();
-        console.warn('[ReaderViewModel] Could not load the PDF table of contents:', error);
+        console.warn("[ReaderViewModel] Could not load the PDF table of contents:", error);
       }
       return false;
     }
   }
 
   async createNavigationEntry(item, level, pdfDoc, destinations) {
-    if (!item || typeof item !== 'object') return null;
+    if (!item || typeof item !== "object") return null;
 
     let page = null;
     if (item.dest != null) {
       try {
         page = await this.resolveDestinationPage(pdfDoc, item.dest);
-        if (page !== null && typeof item.dest === 'string') {
+        if (page !== null && typeof item.dest === "string") {
           destinations.set(item.dest, page);
         }
       } catch (error) {
-        console.warn('[ReaderViewModel] Could not resolve a PDF outline destination:', error);
+        console.warn("[ReaderViewModel] Could not resolve a PDF outline destination:", error);
       }
     }
 
@@ -224,160 +177,39 @@ class ReaderDocumentLifecycle {
       }
     }
 
-    return {
-      title: String(item.title ?? ''),
-      page,
-      level,
-      children
-    };
+    return { title: String(item.title ?? ""), page, level, children };
   }
 
   async resolveDestinationPage(pdfDoc, destination) {
-    const resolved = typeof destination === 'string'
-      ? (typeof pdfDoc.getDestination === 'function' ? await pdfDoc.getDestination(destination) : null)
-      : destination;
+    const resolved =
+      typeof destination === "string"
+        ? typeof pdfDoc.getDestination === "function"
+          ? await pdfDoc.getDestination(destination)
+          : null
+        : destination;
     if (!Array.isArray(resolved) || resolved.length === 0) return null;
 
     const pageReference = resolved[0];
-    const pageIndex = Number.isInteger(pageReference)
-      ? pageReference
-      : await pdfDoc.getPageIndex(pageReference);
+    const pageIndex = Number.isInteger(pageReference) ? pageReference : await pdfDoc.getPageIndex(pageReference);
     if (!Number.isInteger(pageIndex) || pageIndex < 0) return null;
     if (Number.isInteger(pdfDoc.numPages) && pageIndex >= pdfDoc.numPages) return null;
     return pageIndex + 1;
   }
 
   reconcileServerConnection() {
-    const reader = this.reader;
-    const bookId = reader.model.bookId;
-    const sequence = reader.openSequence;
-    if (!bookId || reader.container?.style.display !== 'flex') return Promise.resolve(false);
-
-    const active = this._reconciliationPromise;
-    if (active?.bookId === Number(bookId) && active.sequence === sequence) return active.promise;
-
-    const operation = { bookId: Number(bookId), sequence };
-    operation.promise = this.reconcileOpenBook(bookId, sequence).finally(() => {
-      if (this._reconciliationPromise === operation) this._reconciliationPromise = null;
-    });
-    this._reconciliationPromise = operation;
-    return operation.promise;
+    return this.reconciler.reconcileServerConnection();
   }
 
-  async reconcileOpenBook(bookId, sequence) {
-    const reader = this.reader;
-    const isCurrentBook = () => sequence === reader.openSequence &&
-      Number(reader.model.bookId) === Number(bookId) && reader.container?.style.display === 'flex';
-
-    try {
-      if (typeof localDB !== 'undefined' && typeof localDB.processOutboxQueue === 'function') {
-        await localDB.processOutboxQueue();
-      }
-      if (!isCurrentBook()) return false;
-
-      const pendingOps = typeof localDB !== 'undefined' && typeof localDB.getPendingOutboxOps === 'function'
-        ? (await localDB.getPendingOutboxOps().catch(() => [])) || []
-        : [];
-      const bookOps = pendingOps.filter(op => Number(op.bookId) === Number(bookId));
-      const hasPendingAnnotations = bookOps.some(op => op.type === 'annotation');
-      const hasPendingProgress = bookOps.some(op => op.type === 'progress');
-      const [annotations, progress] = await Promise.all([
-        hasPendingAnnotations || typeof api.getAnnotations !== 'function'
-          ? null
-          : api.getAnnotations(bookId),
-        hasPendingProgress || typeof api.getProgress !== 'function'
-          ? null
-          : api.getProgress(bookId)
-      ]);
-      if (!isCurrentBook()) return false;
-
-      if (annotations !== null) {
-        if (!Array.isArray(annotations)) throw new Error('Invalid annotations response');
-        reader.model.setAnnotations(annotations);
-        if (typeof localDB !== 'undefined' && typeof localDB.saveCachedAnnotations === 'function') {
-          await localDB.saveCachedAnnotations(bookId, annotations).catch(() => {});
-        }
-        if (!isCurrentBook()) return false;
-        reader.annotations.renderDrawerAnnotations();
-        reader.annotations.refreshPageHighlights?.(reader.model.currentPage);
-        if (reader.model.viewMode === 'notes') reader.notes?.renderNotesMode();
-      }
-
-      const serverPage = Number(progress?.current_page);
-      if (serverPage > Number(reader.model.currentPage) && typeof reader.nav?.goToPage === 'function') {
-        await reader.nav.goToPage(serverPage);
-      }
-      return true;
-    } catch (error) {
-      console.warn('[ReaderViewModel] Could not reconcile the open book after reconnecting:', error);
-      return false;
-    }
+  reconcileOpenBook(bookId, sequence) {
+    return this.reconciler.reconcileOpenBook(bookId, sequence);
   }
 
   reconcileOfflineCompleteBookInBackground(bookId, sequence, initialPage) {
-    const reader = this.reader;
-    if (typeof api !== 'undefined' && api) {
-      if (typeof api.markBookOpened === 'function') {
-        api.markBookOpened(bookId, {
-          current_page: reader.model.currentPage,
-          total_pages: reader.model.totalPages,
-          percentage: LibraryModel.formatReadingProgress(reader.model.currentPage, reader.model.totalPages)
-        }).catch(() => {});
-      }
-      if (typeof api.getProgress === 'function') {
-        api.getProgress(bookId).then(progress => {
-          if (sequence !== reader.openSequence) return;
-          if (progress && progress.current_page && progress.current_page > reader.model.currentPage) {
-            reader.nav.goToPage(progress.current_page);
-          }
-        }).catch(() => {});
-      }
-      if (typeof api.getAnnotations === 'function') {
-        api.getAnnotations(bookId).then(async serverAnnots => {
-          if (sequence !== reader.openSequence) return;
-          if (Array.isArray(serverAnnots) && serverAnnots.length > 0) {
-            reader.model.setAnnotations(serverAnnots);
-            reader.annotations.renderDrawerAnnotations();
-            if (typeof localDB !== 'undefined' && localDB && typeof localDB.saveCachedAnnotations === 'function') {
-              await localDB.saveCachedAnnotations(bookId, serverAnnots).catch(() => {});
-            }
-            if (reader.annotations.refreshPageHighlights) {
-              reader.annotations.refreshPageHighlights(reader.model.currentPage);
-            }
-          }
-        }).catch(() => {});
-      }
-    }
+    return this.reconciler.reconcileOfflineCompleteBookInBackground(bookId, sequence, initialPage);
   }
 
   updateBookInfo(bookId, sequence) {
-    const reader = this.reader;
-    const titleElement = document.getElementById('reader-book-title');
-    const authorElement = document.getElementById('reader-book-author');
-    let cachedBook = window.app?.model?.getBookById(Number(bookId));
-    const fallbackTitle = `Book ${bookId}` || 'Untitled';
-
-    ReaderHUDView.updateBookInfo(titleElement, authorElement, cachedBook, fallbackTitle);
-
-    if (!cachedBook && typeof localDB !== 'undefined' && localDB && typeof localDB.open === 'function') {
-      localDB.open().then(db => {
-        const tx = db.transaction('cached_books', 'readonly');
-        const store = tx.objectStore('cached_books');
-        const req = store.get(Number(bookId));
-        req.onsuccess = () => {
-          if (req.result && sequence === reader.openSequence && !cachedBook) {
-            ReaderHUDView.updateBookInfo(titleElement, authorElement, req.result, fallbackTitle);
-          }
-        };
-      }).catch(() => {});
-    }
-
-    api.getBook(bookId).then(book => {
-      if (sequence !== reader.openSequence) return;
-      ReaderHUDView.updateBookInfo(titleElement, authorElement, book, fallbackTitle);
-    }).catch(error => {
-      console.warn('[ReaderViewModel] Could not load book metadata:', error);
-    });
+    return this.reconciler.updateBookInfo(bookId, sequence);
   }
 
   async loadPdfDocument(bookId, sequence) {
@@ -385,7 +217,7 @@ class ReaderDocumentLifecycle {
     let cachedBlob = null;
     let isComplete = false;
     try {
-      if (typeof localDB !== 'undefined' && localDB && typeof localDB.isBookOfflineComplete === 'function') {
+      if (typeof localDB !== "undefined" && typeof localDB?.isBookOfflineComplete === "function") {
         isComplete = await localDB.isBookOfflineComplete(bookId);
       }
     } catch (_) {}
@@ -406,7 +238,7 @@ class ReaderDocumentLifecycle {
     } catch (networkError) {
       reader.destroyPdfResource(task);
       if (sequence !== reader.openSequence) throw networkError;
-      cachedBlob = cachedBlob || await localDB.getPdfBlob(bookId).catch(() => null);
+      cachedBlob = cachedBlob || (await localDB.getPdfBlob(bookId).catch(() => null));
       if (!cachedBlob) throw networkError;
 
       task = pdfjsLib.getDocument({ data: new Uint8Array(await cachedBlob.arrayBuffer()) });
@@ -416,15 +248,12 @@ class ReaderDocumentLifecycle {
   }
 
   destroyPdfResource(resource) {
-    const reader = this.reader;
-    if (!resource || typeof resource.destroy !== 'function') return;
+    if (!resource || typeof resource.destroy !== "function") return;
     try {
       const result = resource.destroy();
-      if (result && typeof result.catch === 'function') {
-        result.catch(error => console.warn('[ReaderViewModel] Error liberando recursos PDF:', error));
-      }
+      result?.catch?.((error) => console.warn("[ReaderViewModel] Error liberando recursos PDF:", error));
     } catch (error) {
-      console.warn('[ReaderViewModel] Error liberando recursos PDF:', error);
+      console.warn("[ReaderViewModel] Error liberando recursos PDF:", error);
     }
   }
 
@@ -437,20 +266,18 @@ class ReaderDocumentLifecycle {
     reader.loadingTask = null;
 
     reader.mobile?.exitFullscreen();
-    if (typeof reader.drawing?.toggleDrawMode === 'function') reader.drawing.toggleDrawMode(false);
-    if (typeof reader.drawing?.setDrawTool === 'function') reader.drawing.setDrawTool('pen', false);
-    reader.container.style.display = 'none';
-    document.body.style.overflow = '';
+    reader.drawing?.toggleDrawMode?.(false);
+    reader.drawing?.setDrawTool?.("pen", false);
+    reader.container.style.display = "none";
+    document.body.style.overflow = "";
     reader.mobile?.onBookClosed();
 
-    // 1. Immediately persist locally
     await reader.persistProgressNow();
 
-    // 2. Guarantee synchronization to server upon book close
     try {
-      await api.syncPendingProgress('book close');
+      await api.syncPendingProgress("book close");
     } catch (e) {
-      console.warn('[ReaderViewModel] Failed to sync progress on close:', e);
+      console.warn("[ReaderViewModel] Failed to sync progress on close:", e);
     }
 
     reader.renderer.resetViewportDOM();
@@ -458,11 +285,10 @@ class ReaderDocumentLifecycle {
     reader.destroyPdfResource(loadingTask);
     reader.destroyPdfResource(pdfDoc);
 
-    if (window.app && typeof window.app.loadHome === 'function') {
+    if (typeof window.app?.loadHome === "function") {
       await window.app.loadHome();
     }
   }
-
 }
 
 window.ReaderDocumentLifecycle = ReaderDocumentLifecycle;

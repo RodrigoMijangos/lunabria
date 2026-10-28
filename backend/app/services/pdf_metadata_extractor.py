@@ -152,8 +152,7 @@ def score_candidate(
     """Computes relevance score for an ISBN candidate based on context and page location."""
     score = 10
     if from_metadata:
-        score += 20
-        return score
+        return score + 20
 
     # Location scoring
     if page_index < 6:
@@ -239,6 +238,67 @@ def extract_candidate_isbns_from_text(
     return candidates
 
 
+def _scan_metadata_isbns(meta: Dict[str, Any], total_pages: int, isbn_scores: Dict[str, int]) -> None:
+    for field in ("subject", "keywords", "description"):
+        val = meta.get(field)
+        if val and isinstance(val, str):
+            for can, sc in extract_candidate_isbns_from_text(val, 0, total_pages):
+                isbn_scores[can] = max(isbn_scores.get(can, 0), sc + 10)
+
+
+def _get_pages_to_scan(total_pages: int) -> List[int]:
+    if total_pages <= 20:
+        return list(range(total_pages))
+    first_pages = list(range(min(15, total_pages)))
+    last_pages = list(range(max(15, total_pages - 5), total_pages))
+    return sorted(set(first_pages + last_pages))
+
+
+def _scan_document_pages_for_isbns(
+    doc: Any, total_pages: int, path_obj: Path, isbn_scores: Dict[str, int]
+) -> None:
+    for p_num in _get_pages_to_scan(total_pages):
+        try:
+            text = doc[p_num].get_text()
+            if text:
+                for can, sc in extract_candidate_isbns_from_text(text, p_num, total_pages):
+                    isbn_scores[can] = max(isbn_scores.get(can, 0), sc)
+        except Exception as page_err:
+            logger.debug("Error extracting text from page %d of %s: %s", p_num, path_obj, page_err)
+
+
+def _find_largest_span_candidate_in_blocks(blocks: List[Dict[str, Any]]) -> str:
+    max_size = 0.0
+    best_candidate = ""
+    for block in blocks:
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            line_text = "".join(span.get("text", "") for span in spans).strip()
+            for span in spans:
+                span_text = span.get("text", "").strip()
+                span_size = span.get("size", 0.0)
+                if span_size > max_size and len(span_text) >= 3:
+                    max_size = span_size
+                    best_candidate = line_text if len(line_text) <= 120 else span_text
+    return best_candidate
+
+
+def _extract_typographical_title(doc: Any, total_pages: int, path_obj: Path) -> Optional[str]:
+    if total_pages <= 0:
+        return None
+    try:
+        for p_num in range(min(2, total_pages)):
+            blocks = doc[p_num].get_text("dict").get("blocks", [])
+            best_candidate = _find_largest_span_candidate_in_blocks(blocks)
+            if best_candidate and len(best_candidate) <= 120:
+                candidate_clean = clean_pdf_title(best_candidate)
+                if candidate_clean:
+                    return candidate_clean
+    except Exception as typo_err:
+        logger.debug("Error extracting typographical title from %s: %s", path_obj, typo_err)
+    return None
+
+
 def extract_pdf_metadata(
     file_path: Union[str, Path],
     max_isbn_candidates: int = 3,
@@ -251,10 +311,6 @@ def extract_pdf_metadata(
     if not path_obj.is_file():
         return {"isbns": [], "title": None, "author": None}
 
-    isbn_scores: Dict[str, int] = {}
-    extracted_title: Optional[str] = None
-    extracted_author: Optional[str] = None
-
     try:
         doc = pymupdf.open(str(path_obj))
     except Exception as err:
@@ -265,68 +321,22 @@ def extract_pdf_metadata(
         )
         return {"isbns": [], "title": None, "author": None}
 
+    isbn_scores: Dict[str, int] = {}
+    extracted_title: Optional[str] = None
+    extracted_author: Optional[str] = None
+
     try:
         total_pages = len(doc)
         meta = doc.metadata or {}
 
-        # 1. Document title and author from metadata
         extracted_title = clean_pdf_title(meta.get("title"))
         extracted_author = clean_pdf_author(meta.get("author"))
 
-        # Check metadata fields for potential ISBNs
-        for field in ("subject", "keywords", "description"):
-            val = meta.get(field)
-            if val and isinstance(val, str):
-                for can, sc in extract_candidate_isbns_from_text(val, 0, total_pages):
-                    isbn_scores[can] = max(isbn_scores.get(can, 0), sc + 10)
+        _scan_metadata_isbns(meta, total_pages, isbn_scores)
+        _scan_document_pages_for_isbns(doc, total_pages, path_obj, isbn_scores)
 
-        # 2. Text scanning (pages 0-14 and last 5 pages)
-        pages_to_scan: List[int] = []
-        if total_pages <= 20:
-            pages_to_scan = list(range(total_pages))
-        else:
-            first_pages = list(range(min(15, total_pages)))
-            last_pages = list(range(max(15, total_pages - 5), total_pages))
-            pages_to_scan = sorted(set(first_pages + last_pages))
-
-        for p_num in pages_to_scan:
-            try:
-                page = doc[p_num]
-                text = page.get_text()
-                if text:
-                    for can, sc in extract_candidate_isbns_from_text(text, p_num, total_pages):
-                        isbn_scores[can] = max(isbn_scores.get(can, 0), sc)
-            except Exception as page_err:
-                logger.debug("Error extracting text from page %d of %s: %s", p_num, path_obj, page_err)
-
-        # 3. Typographical title fallback if title not yet found
-        if not extracted_title and total_pages > 0:
-            try:
-                for p_num in range(min(2, total_pages)):
-                    page = doc[p_num]
-                    blocks = page.get_text("dict").get("blocks", [])
-                    max_size = 0.0
-                    best_candidate = ""
-                    for block in blocks:
-                        if "lines" not in block:
-                            continue
-                        for line in block["lines"]:
-                            line_text = "".join(span.get("text", "") for span in line.get("spans", [])).strip()
-                            for span in line.get("spans", []):
-                                span_text = span.get("text", "").strip()
-                                span_size = span.get("size", 0.0)
-                                if span_size > max_size and len(span_text) >= 3:
-                                    max_size = span_size
-                                    best_candidate = line_text if len(line_text) <= 120 else span_text
-
-                    if best_candidate and len(best_candidate) <= 120:
-                        candidate_clean = clean_pdf_title(best_candidate)
-                        if candidate_clean:
-                            extracted_title = candidate_clean
-                            break
-            except Exception as typo_err:
-                logger.debug("Error extracting typographical title from %s: %s", path_obj, typo_err)
-
+        if not extracted_title:
+            extracted_title = _extract_typographical_title(doc, total_pages, path_obj)
     finally:
         try:
             doc.close()

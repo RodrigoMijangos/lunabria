@@ -143,7 +143,7 @@ Tailored mobile touch reading experience featuring a single-row compact topbar, 
 - **Full Offline PWA:** Cached books appear in the library immediately on startup without network timeouts. Download books, their cover art, and pre-buffered page layouts into IndexedDB.
 - **Offline Banner:** Clear indicator communicating connectivity status and the number of books available offline.
 - **Persistent Outbox Annotation Sync:** Highlights, notes, freehand drawings, and reading progress created without a connection are queued locally in an outbox and synchronize automatically once network access returns.
-- **In-App Update Notification:** In-app banner alerts readers whenever an updated version of the application is available for one-click reload.
+- **Seamless App Updates:** Service worker and application updates install and apply automatically in the background without requiring manual reload prompts, deferring safely while reading or uploading.
 
 ### 4. Book Ingestion & Calibre Metadata Management
 - **Asynchronous Book Ingestion:** Import books through a compact dropzone; uploads and Calibre processing continue in the background with live progress in a dock while you browse, search, or read.

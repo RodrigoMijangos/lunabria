@@ -69,16 +69,23 @@ function createEnvironment(getBooks, apiOverrides = {}) {
     ModalView: { open() {}, close() {} },
     alert() {}
   });
-  vm.runInContext(
-    fs.readFileSync(path.join(__dirname, '../js/services/LunabriaQueryCompiler.js'), 'utf8'),
-    context,
-    { filename: 'LunabriaQueryCompiler.js' }
-  );
-  vm.runInContext(
-    fs.readFileSync(path.join(__dirname, '../js/viewmodels/library/VirtualLibraryManager.js'), 'utf8'),
-    context,
-    { filename: 'VirtualLibraryManager.js' }
-  );
+  const scripts = [
+    ['../js/services/LunabriaQueryCompiler.js', 'LunabriaQueryCompiler.js'],
+    ['../js/viewmodels/library/VirtualLibraryTokenRenderer.js', 'VirtualLibraryTokenRenderer.js'],
+    ['../js/viewmodels/library/VirtualLibraryQueryBuilder.js', 'VirtualLibraryQueryBuilder.js'],
+    ['../js/viewmodels/library/VirtualLibraryManageModal.js', 'VirtualLibraryManageModal.js'],
+    ['../js/viewmodels/library/VirtualLibraryManager.js', 'VirtualLibraryManager.js']
+  ];
+  for (const [relPath, filename] of scripts) {
+    vm.runInContext(
+      fs.readFileSync(path.join(__dirname, relPath), 'utf8'),
+      context,
+      { filename }
+    );
+  }
+  context.VirtualLibraryTokenRenderer = window.VirtualLibraryTokenRenderer;
+  context.VirtualLibraryQueryBuilder = window.VirtualLibraryQueryBuilder;
+  context.VirtualLibraryManageModal = window.VirtualLibraryManageModal;
   return { document, window, VirtualLibraryManager: window.VirtualLibraryManager };
 }
 

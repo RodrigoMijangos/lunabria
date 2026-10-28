@@ -3,8 +3,12 @@
  * Creates textLayer container and renders precise typographical lines for text selection.
  */
 const TextLayerView = {
-  _round2(value) { return Math.round(value * 100) / 100; },
-  _round4(value) { return Math.round(value * 10000) / 10000; },
+  _round2(value) {
+    return Math.round(value * 100) / 100;
+  },
+  _round4(value) {
+    return Math.round(value * 10000) / 10000;
+  },
 
   // Lazily created 2D context used to measure text without touching layout.
   // `null` = not probed yet, `false` = unavailable (DOM measurement fallback).
@@ -13,12 +17,10 @@ const TextLayerView = {
   _minFontSize: null,
 
   _ensureSelectionStyles() {
-    if (typeof document === 'undefined' || !document.head || typeof document.head.appendChild !== 'function') return;
-    if (document.getElementById('lunabria-precise-selection-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'lunabria-precise-selection-styles';
-    // Inherited typography is neutralised so the DOM glyph run has exactly the
-    // width measured on the canvas (same font, no extra spacing or transforms).
+    if (typeof document === "undefined" || !document.head || typeof document.head.appendChild !== "function") return;
+    if (document.getElementById("lunabria-precise-selection-styles")) return;
+    const style = document.createElement("style");
+    style.id = "lunabria-precise-selection-styles";
     style.textContent = `
       .textLayer {
         opacity: 0.42 !important;
@@ -83,11 +85,11 @@ const TextLayerView = {
 
   createTextLayerContainer(width, height, scale) {
     this._ensureSelectionStyles();
-    const div = document.createElement('div');
-    div.className = 'textLayer';
+    const div = document.createElement("div");
+    div.className = "textLayer";
     div.style.width = `${width}px`;
     div.style.height = `${height}px`;
-    div.style.setProperty('--scale-factor', scale);
+    div.style.setProperty("--scale-factor", scale);
     return div;
   },
 
@@ -95,58 +97,47 @@ const TextLayerView = {
     if (this._measureCtx !== null) return this._measureCtx || null;
     let ctx = false;
     try {
-      if (typeof OffscreenCanvas === 'function') {
-        ctx = new OffscreenCanvas(1, 1).getContext('2d') || false;
+      if (typeof OffscreenCanvas === "function") {
+        ctx = new OffscreenCanvas(1, 1).getContext("2d") || false;
       }
-      if (!ctx && typeof document !== 'undefined' && typeof document.createElement === 'function') {
-        const canvas = document.createElement('canvas');
-        ctx = (canvas && typeof canvas.getContext === 'function' && canvas.getContext('2d')) || false;
+      if (!ctx && typeof document !== "undefined" && typeof document.createElement === "function") {
+        const canvas = document.createElement("canvas");
+        ctx = (canvas && typeof canvas.getContext === "function" && canvas.getContext("2d")) || false;
       }
-    } catch (error) {
+    } catch (_error) {
       ctx = false;
     }
     this._measureCtx = ctx;
     return ctx || null;
   },
 
-  /**
-   * Browsers with a minimum font size setting silently enlarge tiny text (low zoom,
-   * footnotes), which would invalidate any width measured for the requested size.
-   * Same probe as PDF.js: a 1px "X" with line-height 1 reports the clamped size.
-   */
   _browserMinFontSize() {
     if (this._minFontSize !== null) return this._minFontSize;
     let minFontSize = 1;
     try {
-      const body = typeof document !== 'undefined' ? document.body : null;
-      if (body && typeof body.appendChild === 'function') {
-        const probe = document.createElement('div');
-        probe.style.position = 'absolute';
-        probe.style.visibility = 'hidden';
-        probe.style.fontFamily = 'sans-serif';
-        probe.style.fontSize = '1px';
-        probe.style.lineHeight = '1';
-        probe.style.whiteSpace = 'pre';
-        probe.textContent = 'X';
+      const body = typeof document !== "undefined" ? document.body : null;
+      if (body && typeof body.appendChild === "function") {
+        const probe = document.createElement("div");
+        probe.style.position = "absolute";
+        probe.style.visibility = "hidden";
+        probe.style.fontFamily = "sans-serif";
+        probe.style.fontSize = "1px";
+        probe.style.lineHeight = "1";
+        probe.style.whiteSpace = "pre";
+        probe.textContent = "X";
         body.appendChild(probe);
         const height = probe.getBoundingClientRect().height;
-        if (typeof probe.remove === 'function') probe.remove();
-        else if (typeof body.removeChild === 'function') body.removeChild(probe);
+        if (typeof probe.remove === "function") probe.remove();
+        else if (typeof body.removeChild === "function") body.removeChild(probe);
         if (Number.isFinite(height) && height > 1 && height <= 72) minFontSize = height;
       }
-    } catch (error) {
+    } catch (_error) {
       minFontSize = 1;
     }
     this._minFontSize = minFontSize;
     return minFontSize;
   },
 
-  /**
-   * Natural (unscaled) width of `text` rendered at `fontSize` px sans-serif.
-   * Canvas measurement works on detached nodes (single/dual page wrappers are built
-   * off-DOM) and avoids one forced reflow per word. DOM measurement is only a fallback
-   * and is skipped for detached nodes, where it would report 0.
-   */
   _naturalTextWidth(span, text, fontSize) {
     const ctx = this._measureContext();
     if (ctx) {
@@ -154,16 +145,11 @@ const TextLayerView = {
       const width = ctx.measureText(text).width;
       if (Number.isFinite(width) && width > 0) return width;
     }
-    if (span.isConnected === false || typeof span.getBoundingClientRect !== 'function') return 0;
+    if (span.isConnected === false || typeof span.getBoundingClientRect !== "function") return 0;
     const width = span.getBoundingClientRect().width;
     return Number.isFinite(width) ? width : 0;
   },
 
-  /**
-   * Sizes `span` so its glyph run covers exactly `targetWidth` x `boxHeight` CSS px.
-   * Selection rectangles, caret hit-testing and saved highlights all derive from the
-   * glyph run, so it must match the PDF word box drawn on the canvas.
-   */
   _fitTextToBox(span, text, targetWidth, boxHeight) {
     const requestedFont = this._round2(boxHeight * 0.88);
     const renderFont = Math.max(requestedFont, this._browserMinFontSize());
@@ -173,300 +159,65 @@ const TextLayerView = {
     span.style.fontSize = `${renderFont}px`;
     span.style.height = `${layoutHeight}px`;
     span.style.lineHeight = `${layoutHeight}px`;
-    span.style.transform = '';
+    span.style.transform = "";
 
     const naturalWidth = this._round2(this._naturalTextWidth(span, text, renderFont));
     if (naturalWidth > 0 && targetWidth > 0) {
       const scaleX = targetWidth / naturalWidth;
       if (scaleX > 0.05 && scaleX < 20) {
         span.style.width = `${naturalWidth}px`;
-        span.style.transform = yScale < 1
-          ? `scale(${this._round4(scaleX)}, ${this._round4(yScale)})`
-          : `scaleX(${this._round4(scaleX)})`;
-        span.style.transformOrigin = '0% 0%';
+        span.style.transform =
+          yScale < 1 ? `scale(${this._round4(scaleX)}, ${this._round4(yScale)})` : `scaleX(${this._round4(scaleX)})`;
+        span.style.transformOrigin = "0% 0%";
         return;
       }
     }
     span.style.width = `${this._round2(Math.max(0, targetWidth))}px`;
     if (yScale < 1) {
       span.style.transform = `scale(1, ${this._round4(yScale)})`;
-      span.style.transformOrigin = '0% 0%';
+      span.style.transformOrigin = "0% 0%";
     }
   },
 
   _normalizeReferenceText(value) {
-    let normalized = '';
-    let offsets = [];
-    let previousWasSpace = false;
-    const text = String(value || '');
-
-    for (let offset = 0; offset < text.length; offset += 1) {
-      const folded = text[offset].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-      for (const character of folded) {
-        if (/\s/.test(character)) {
-          if (!previousWasSpace) {
-            normalized += ' ';
-            offsets.push(offset);
-          }
-          previousWasSpace = true;
-        } else {
-          normalized += character;
-          offsets.push(offset);
-          previousWasSpace = false;
-        }
-      }
-    }
-
-    return { text: normalized, offsets };
+    return TextLayerCrossReferenceDecorator._normalizeReferenceText(value);
   },
 
   _canonicalReferenceNumber(value) {
-    if (/^\d+(?:\.\d+)*$/.test(value)) {
-      return value.split('.').map(part => part.replace(/^0+(?=\d)/, '')).join('.');
-    }
-    if (!/^[ivxlcdm]+$/.test(value)) return null;
-
-    const roman = value.toUpperCase();
-    if (!/^(?=.)M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/.test(roman)) return null;
-    const values = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
-    let total = 0;
-    for (let index = 0; index < roman.length; index += 1) {
-      const current = values[roman[index]];
-      const next = values[roman[index + 1]] || 0;
-      total += current < next ? -current : current;
-    }
-    return String(total);
+    return TextLayerCrossReferenceDecorator._canonicalReferenceNumber(value);
   },
 
   _referenceNumberFromTitle(title, kind, depth) {
-    const normalized = this._normalizeReferenceText(title).text.trim();
-    const labelPattern = kind === 'chapter'
-      ? /^(?:chapter|chap(?:ter)?\.?|capitulo)\s+(\d+(?:\.\d+)*|[ivxlcdm]+)(?=$|[\s:.)-])/
-      : /^(?:section|sec(?:tion)?\.?|seccion)\s+(\d+(?:\.\d+)*|[ivxlcdm]+)(?=$|[\s:.)-])/;
-    const labeledMatch = normalized.match(labelPattern);
-    if (labeledMatch) {
-      if (kind === 'section' && /[ivxlcdm]/.test(labeledMatch[1])) return null;
-      return this._canonicalReferenceNumber(labeledMatch[1]);
-    }
-
-    const bareMatch = normalized.match(/^(\d+(?:\.\d+)*|[ivxlcdm]+)(?=$|[\s:.)-])/);
-    if (!bareMatch) return null;
-    if (kind === 'chapter' && (depth !== 0 || bareMatch[1].includes('.'))) return null;
-    if (kind === 'section' &&
-        ((depth === 0 && !bareMatch[1].includes('.')) || /[ivxlcdm]/.test(bareMatch[1]))) return null;
-    return this._canonicalReferenceNumber(bareMatch[1]);
+    return TextLayerCrossReferenceDecorator._referenceNumberFromTitle(title, kind, depth);
   },
 
   _findReferencePage(navigationMap, kind, identifier) {
-    const canonicalIdentifier = this._canonicalReferenceNumber(identifier);
-    if (!canonicalIdentifier || !Array.isArray(navigationMap?.toc)) return null;
-
-    const entries = [];
-    const visit = (items, depth = 0) => {
-      for (const item of items) {
-        if (!item || typeof item !== 'object') continue;
-        if (Number.isInteger(item.page) && item.page > 0 && typeof item.title === 'string') {
-          entries.push({ item, depth });
-        }
-        if (Array.isArray(item.children)) visit(item.children, depth + 1);
-      }
-    };
-    visit(navigationMap.toc);
-
-    const match = entries.find(({ item, depth }) =>
-      this._referenceNumberFromTitle(item.title, kind, depth) === canonicalIdentifier);
-    return match ? match.item.page : null;
+    return TextLayerCrossReferenceDecorator._findReferencePage(navigationMap, kind, identifier);
   },
 
   findCrossReferences(text, navigationMap) {
-    const searchable = this._normalizeReferenceText(text);
-    const references = [];
-    const pattern = /\b(chapter|chap(?:ter)?\.?|capitulo|section|sec(?:tion)?\.?|seccion)\s+(\d+(?:\.\d+)*|[ivxlcdm]+)\b/g;
-    let match;
-
-    while ((match = pattern.exec(searchable.text)) !== null) {
-      const kind = /^(?:section|sec|seccion)/.test(match[1]) ? 'section' : 'chapter';
-      const targetPage = this._findReferencePage(navigationMap, kind, match[2]);
-      const start = searchable.offsets[match.index];
-      const lastOffset = searchable.offsets[match.index + match[0].length - 1];
-      if (!targetPage || !Number.isInteger(start) || !Number.isInteger(lastOffset)) continue;
-
-      references.push({
-        start,
-        end: lastOffset + 1,
-        text: String(text || '').slice(start, lastOffset + 1).replace(/\s+/g, ' ').trim(),
-        kind,
-        targetPage
-      });
-    }
-    return references;
+    return TextLayerCrossReferenceDecorator.findCrossReferences(text, navigationMap);
   },
 
   _collectTextNodes(container) {
-    const nodes = [];
-    const visit = node => {
-      if (node?.nodeType === 3) {
-        if (node.textContent) nodes.push(node);
-        return;
-      }
-      if (node?.classList?.contains('reader-reference-link')) return;
-      for (const child of Array.from(node?.childNodes || [])) visit(child);
-    };
-    visit(container);
-    return nodes;
+    return TextLayerCrossReferenceDecorator._collectTextNodes(container);
   },
 
   _hasNativePdfLinkAtPoint(container, event) {
-    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return false;
-    const pageWrapper = container.closest?.('.pdf-page-wrapper');
-    const links = pageWrapper?.querySelectorAll?.('.pdf-internal-link') || [];
-    return Array.from(links).some(link => {
-      const rect = link.getBoundingClientRect?.();
-      return rect && event.clientX >= rect.left && event.clientX <= rect.right &&
-        event.clientY >= rect.top && event.clientY <= rect.bottom;
-    });
+    return TextLayerCrossReferenceDecorator._hasNativePdfLinkAtPoint(container, event);
   },
 
   _guardReferenceGesture(link) {
-    let activePointer = null;
-    let suppressNextPointerClick = false;
-    let suppressionTimer = null;
-    const removeWindowListeners = () => {
-      window.removeEventListener('pointermove', onMove, true);
-      window.removeEventListener('pointerup', onEnd, true);
-      window.removeEventListener('pointercancel', onCancel, true);
-    };
-    const suppressClick = () => {
-      suppressNextPointerClick = true;
-      clearTimeout(suppressionTimer);
-      suppressionTimer = setTimeout(() => {
-        suppressNextPointerClick = false;
-        suppressionTimer = null;
-      }, 0);
-    };
-    const onMove = event => {
-      if (!activePointer || (activePointer.id != null && event.pointerId !== activePointer.id)) return;
-      const distance = Math.hypot(event.clientX - activePointer.x, event.clientY - activePointer.y);
-      activePointer.maxDistance = Math.max(activePointer.maxDistance, distance);
-    };
-    const onEnd = event => {
-      if (!activePointer || (activePointer.id != null && event.pointerId !== activePointer.id)) return;
-      const pointer = activePointer;
-      const duration = Math.max(0, (Number.isFinite(event.timeStamp) ? event.timeStamp : Date.now()) - pointer.startedAt);
-      const distance = Math.max(pointer.maxDistance, Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y));
-      activePointer = null;
-      removeWindowListeners();
-      if (distance > 8 || (pointer.type === 'touch' && duration >= 400)) suppressClick();
-    };
-    const onCancel = event => {
-      if (!activePointer || (activePointer.id != null && event.pointerId !== activePointer.id)) return;
-      activePointer = null;
-      removeWindowListeners();
-      suppressClick();
-    };
-
-    link.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || event.isPrimary === false) return;
-      activePointer = {
-        id: event.pointerId,
-        type: event.pointerType || 'mouse',
-        x: event.clientX,
-        y: event.clientY,
-        startedAt: Number.isFinite(event.timeStamp) ? event.timeStamp : Date.now(),
-        maxDistance: 0
-      };
-      window.addEventListener('pointermove', onMove, true);
-      window.addEventListener('pointerup', onEnd, true);
-      window.addEventListener('pointercancel', onCancel, true);
-    });
-
-    return () => suppressNextPointerClick;
+    return TextLayerCrossReferenceDecorator._guardReferenceGesture(link);
   },
 
   decorateCrossReferences(container, navigationMap, sourcePage, onNavigate) {
-    if (!container || typeof onNavigate !== 'function' ||
-        !Number.isInteger(sourcePage) || sourcePage < 1) return 0;
-    if (container.dataset?.crossReferencesProcessed === 'true') return 0;
-    if (container.dataset) container.dataset.crossReferencesProcessed = 'true';
-
-    const textNodes = this._collectTextNodes(container);
-    const nodeRanges = [];
-    const rawParts = [];
-    let textLength = 0;
-    for (let nodeIndex = 0; nodeIndex < textNodes.length; nodeIndex += 1) {
-      const node = textNodes[nodeIndex];
-      const text = node.textContent || '';
-      rawParts.push(text);
-      nodeRanges.push({ node, nodeIndex, start: textLength, end: textLength + text.length });
-      textLength += text.length;
-    }
-
-    const references = this.findCrossReferences(rawParts.join(''), navigationMap);
-    const operations = [];
-    for (const reference of references) {
-      const segments = nodeRanges.flatMap(range => {
-        const start = Math.max(reference.start, range.start);
-        const end = Math.min(reference.end, range.end);
-        return start < end
-          ? [{ node: range.node, nodeIndex: range.nodeIndex, start: start - range.start, end: end - range.start }]
-          : [];
-      });
-
-      const visibleSegments = segments.filter(segment =>
-        segment.node.textContent.slice(segment.start, segment.end).trim());
-      visibleSegments.forEach((segment, index) => operations.push({
-        ...segment,
-        reference,
-        isPrimary: index === 0
-      }));
-    }
-
-    operations.sort((a, b) => b.nodeIndex - a.nodeIndex || b.start - a.start);
-    let decorated = 0;
-    for (const operation of operations) {
-      const { node, start, end, reference, isPrimary } = operation;
-      const parent = node.parentNode;
-      if (!parent || typeof node.splitText !== 'function' || typeof parent.replaceChild !== 'function') continue;
-
-      try {
-        node.splitText(end);
-        const selectedText = node.splitText(start);
-        const link = document.createElement('a');
-        link.className = 'reader-reference-link';
-        link.setAttribute('href', `#pdf-page-${reference.targetPage}`);
-        link.setAttribute('title', `Go to page ${reference.targetPage}`);
-        link.setAttribute('data-target-page', reference.targetPage);
-        if (isPrimary) {
-          link.tabIndex = 0;
-          link.setAttribute('aria-label', `Go to ${reference.text}, page ${reference.targetPage}`);
-        } else {
-          link.tabIndex = -1;
-          link.setAttribute('aria-hidden', 'true');
-        }
-        const isPointerGestureRejected = this._guardReferenceGesture(link);
-        link.addEventListener('click', event => {
-          event.preventDefault();
-          if (event.detail > 0) {
-            const selection = typeof window.getSelection === 'function' ? window.getSelection() : null;
-            if (isPointerGestureRejected() || this._hasNativePdfLinkAtPoint(container, event) ||
-                (selection && !selection.isCollapsed)) return;
-          }
-          onNavigate(reference.targetPage, sourcePage);
-        });
-        parent.replaceChild(link, selectedText);
-        link.appendChild(selectedText);
-        decorated += 1;
-      } catch (error) {
-        console.warn('[TextLayerView] Could not make a chapter reference interactive:', error);
-      }
-    }
-    return decorated;
+    return TextLayerCrossReferenceDecorator.decorateCrossReferences(container, navigationMap, sourcePage, onNavigate);
   },
 
   groupWordsIntoLines(words) {
     if (!words || !words.length) return [];
 
-    // Sort words primarily by y0, secondarily by x0 to preserve true reading order
     const sortedWords = [...words].sort((a, b) => {
       const dy = a.y0 - b.y0;
       return Math.abs(dy) > 4 ? dy : a.x0 - b.x0;
@@ -480,14 +231,14 @@ const TextLayerView = {
       const wH = Math.max(1, wY1 - wY0);
       let matched = null;
       for (const group of lineGroups) {
-        const gY0 = Math.min(...group.map(i => i.y0));
-        const gY1 = Math.max(...group.map(i => i.y1));
+        const gY0 = Math.min(...group.map((i) => i.y0));
+        const gY1 = Math.max(...group.map((i) => i.y1));
         const gMidY = group.reduce((sum, item) => sum + (item.y0 + item.y1) / 2, 0) / group.length;
         const gH = Math.max(1, gY1 - gY0);
 
         const overlap = Math.min(wY1, gY1) - Math.max(wY0, gY0);
         const minH = Math.min(wH, gH);
-        const overlapRatio = minH > 0 ? (overlap / minH) : 0;
+        const overlapRatio = minH > 0 ? overlap / minH : 0;
         const midDist = Math.abs(wMidY - gMidY);
 
         if (overlapRatio >= 0.35 || midDist <= Math.max(wH, gH) * 0.45 || (overlap > 0 && midDist <= minH * 0.75)) {
@@ -495,24 +246,21 @@ const TextLayerView = {
           break;
         }
       }
-      if (matched) {
-        matched.push(w);
-      } else {
-        lineGroups.push([w]);
-      }
+      if (matched) matched.push(w);
+      else lineGroups.push([w]);
     }
 
-    const lines = lineGroups.map(group => {
+    const lines = lineGroups.map((group) => {
       group.sort((a, b) => a.x0 - b.x0);
       return {
         block: group[0].block,
         line: group[0].line,
-        x0: Math.min(...group.map(x => x.x0)),
-        y0: Math.min(...group.map(x => x.y0)),
-        x1: Math.max(...group.map(x => x.x1)),
-        y1: Math.max(...group.map(x => x.y1)),
-        text: group.map(x => x.text).join(' '),
-        words: group
+        x0: Math.min(...group.map((x) => x.x0)),
+        y0: Math.min(...group.map((x) => x.y0)),
+        x1: Math.max(...group.map((x) => x.x1)),
+        y1: Math.max(...group.map((x) => x.y1)),
+        text: group.map((x) => x.text).join(" "),
+        words: group,
       };
     });
 
@@ -524,13 +272,13 @@ const TextLayerView = {
   },
 
   renderPreciseLines(container, lines, scale) {
-    container.innerHTML = '';
+    container.innerHTML = "";
     if (!lines || !lines.length) return;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const lineSpan = document.createElement('span');
-      lineSpan.className = 'precise-line';
+      const lineSpan = document.createElement("span");
+      lineSpan.className = "precise-line";
 
       lineSpan.dataset.x0 = line.x0;
       lineSpan.dataset.y0 = line.y0;
@@ -548,27 +296,23 @@ const TextLayerView = {
       lineSpan.style.height = `${this._round2(height)}px`;
       lineSpan.style.fontSize = `${this._round2(height * 0.88)}px`;
       lineSpan.style.lineHeight = `${this._round2(height)}px`;
-      lineSpan.style.fontFamily = 'sans-serif';
-      lineSpan.style.display = 'inline-block';
-      lineSpan.style.position = 'absolute';
+      lineSpan.style.fontFamily = "sans-serif";
+      lineSpan.style.display = "inline-block";
+      lineSpan.style.position = "absolute";
 
-      // Attach before measuring so the DOM fallback measures a connected node.
       container.appendChild(lineSpan);
 
       const words = Array.isArray(line.words) && line.words.length > 0 ? line.words : null;
-
       if (!words) {
-        // Fallback for legacy layout objects without words array
         lineSpan.textContent = line.text;
-        this._fitTextToBox(lineSpan, line.text || '', width, height);
+        this._fitTextToBox(lineSpan, line.text || "", width, height);
         continue;
       }
 
-      // Phase 1: Render Word and Token layouts with exact subpixel scaling
       for (let j = 0; j < words.length; j++) {
         const w = words[j];
-        const wordSpan = document.createElement('span');
-        wordSpan.className = 'precise-word';
+        const wordSpan = document.createElement("span");
+        wordSpan.className = "precise-word";
         wordSpan.textContent = w.text;
 
         wordSpan.dataset.x0 = w.x0;
@@ -583,54 +327,48 @@ const TextLayerView = {
 
         wordSpan.style.left = `${this._round2(wRelLeft)}px`;
         wordSpan.style.top = `${this._round2(wRelTop)}px`;
-        wordSpan.style.fontFamily = 'sans-serif';
-        wordSpan.style.display = 'inline-block';
-        wordSpan.style.position = 'absolute';
-        wordSpan.style.whiteSpace = 'pre';
+        wordSpan.style.fontFamily = "sans-serif";
+        wordSpan.style.display = "inline-block";
+        wordSpan.style.position = "absolute";
+        wordSpan.style.whiteSpace = "pre";
 
         lineSpan.appendChild(wordSpan);
+        this._fitTextToBox(wordSpan, w.text || "", wWidth, wHeight);
 
-        // Subpixel scale calibration per-word
-        this._fitTextToBox(wordSpan, w.text || '', wWidth, wHeight);
-
-        // Phase 2: Render Inter-word Space layouts
         if (j < words.length - 1) {
           const nextW = words[j + 1];
           const gap = nextW.x0 - w.x1;
-          const spaceSpan = document.createElement('span');
-          spaceSpan.className = 'precise-space';
-          spaceSpan.textContent = ' ';
-          spaceSpan.setAttribute('role', 'presentation');
+          const spaceSpan = document.createElement("span");
+          spaceSpan.className = "precise-space";
+          spaceSpan.textContent = " ";
+          spaceSpan.setAttribute("role", "presentation");
 
           const sRelLeft = (w.x1 - line.x0) * scale;
           const sWidth = Math.max(0, gap * scale);
           spaceSpan.style.left = `${this._round2(sRelLeft)}px`;
           spaceSpan.style.top = `${this._round2(wRelTop)}px`;
-          spaceSpan.style.fontFamily = 'sans-serif';
-          spaceSpan.style.display = 'inline-block';
-          spaceSpan.style.position = 'absolute';
-          spaceSpan.style.whiteSpace = 'pre';
+          spaceSpan.style.fontFamily = "sans-serif";
+          spaceSpan.style.display = "inline-block";
+          spaceSpan.style.position = "absolute";
+          spaceSpan.style.whiteSpace = "pre";
 
           lineSpan.appendChild(spaceSpan);
-          // The space glyph must fill the gap exactly: a natural-width space would
-          // leave holes in the selection bar or overlap the next word.
-          this._fitTextToBox(spaceSpan, ' ', sWidth, wHeight);
+          this._fitTextToBox(spaceSpan, " ", sWidth, wHeight);
         }
       }
 
-      // Phase 3: Line break delimiter for clean paragraph text copying
-      const breakSpan = document.createElement('span');
-      breakSpan.className = 'precise-linebreak';
-      breakSpan.style.position = 'absolute';
+      const breakSpan = document.createElement("span");
+      breakSpan.className = "precise-linebreak";
+      breakSpan.style.position = "absolute";
       breakSpan.style.left = `${this._round2(width)}px`;
-      breakSpan.style.top = '0px';
-      breakSpan.style.width = '0px';
+      breakSpan.style.top = "0px";
+      breakSpan.style.width = "0px";
       breakSpan.style.height = `${this._round2(height)}px`;
-      breakSpan.style.whiteSpace = 'pre';
-      breakSpan.textContent = '\n';
+      breakSpan.style.whiteSpace = "pre";
+      breakSpan.textContent = "\n";
       lineSpan.appendChild(breakSpan);
     }
-  }
+  },
 };
 
 window.TextLayerView = TextLayerView;

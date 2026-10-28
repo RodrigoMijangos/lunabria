@@ -1,7 +1,6 @@
 from app.services.query_compiler import compile_lunabria_query
 import asyncio
 import logging
-from collections.abc import Mapping
 from uuid import uuid4
 from pathlib import Path
 from typing import Any, Dict, Optional, List, Literal
@@ -24,6 +23,63 @@ from app.models import BookBase, PaginatedBooksResponse
 
 router = APIRouter(prefix="/api/books", tags=["Books"])
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_pdf_filename(filename: str) -> bool:
+    return bool(
+        filename
+        and filename.lower().endswith(".pdf")
+        and not any(ord(character) < 32 for character in filename)
+    )
+
+
+async def _prepare_upload_jobs(
+    files: List[UploadFile],
+    metadata_fetch_enabled: bool,
+    isbn_list: List[str],
+) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    for index, upload_file in enumerate(files):
+        filename = (upload_file.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+        if not _is_valid_pdf_filename(filename):
+            for prior_file in files:
+                await prior_file.close()
+            raise HTTPException(status_code=400, detail="Only valid PDF filenames can be uploaded.")
+
+        job_id = uuid4().hex
+        staged_path = UPLOAD_DIR / "staging" / f"{job_id}.pdf"
+        prepared.append({
+            "job_id": job_id,
+            "filename": filename,
+            "staging_path": str(staged_path),
+            "auto_fetch_metadata": metadata_fetch_enabled,
+            "isbn": isbn_list[index] if index < len(isbn_list) else None,
+            "upload_file": upload_file,
+        })
+    return prepared
+
+
+async def _rollback_failed_uploads(
+    staged_paths: List[Path],
+    job_records: List[Dict[str, Any]],
+    records_created: bool,
+) -> None:
+    for staged_path in staged_paths:
+        try:
+            staged_path.unlink(missing_ok=True)
+        except OSError:
+            logger.exception("Could not remove rejected staged upload %s", staged_path)
+    if records_created:
+        for job in job_records:
+            try:
+                await asyncio.to_thread(
+                    database.update_upload_job,
+                    job["job_id"],
+                    "failed",
+                    "The upload could not be added to the background queue.",
+                )
+            except Exception:
+                logger.exception("Could not record rejected upload job %s", job["job_id"])
 
 
 @router.get("", response_model=PaginatedBooksResponse)
@@ -54,12 +110,14 @@ def list_books(
         "page_size": page_size
     }
 
+
 @router.get("/{book_id}", response_model=BookBase)
 def get_book(book_id: int):
     book = calibre_service.get_book(book_id)
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     return book
+
 
 @router.post("/upload", status_code=202)
 async def upload_books(
@@ -76,28 +134,7 @@ async def upload_books(
     form_data = await request.form()
     metadata_fetch_enabled = _auto_fetch_metadata_enabled(form_data, auto_fetch_metadata)
     isbn_list = [value.strip() for value in (isbns or "").split(",") if value.strip()]
-    prepared: List[Dict[str, Any]] = []
-    for index, upload_file in enumerate(files):
-        filename = (upload_file.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
-        if (
-            not filename
-            or not filename.lower().endswith(".pdf")
-            or any(ord(character) < 32 for character in filename)
-        ):
-            for prior_file in files:
-                await prior_file.close()
-            raise HTTPException(status_code=400, detail="Only valid PDF filenames can be uploaded.")
-
-        job_id = uuid4().hex
-        staged_path = UPLOAD_DIR / "staging" / f"{job_id}.pdf"
-        prepared.append({
-            "job_id": job_id,
-            "filename": filename,
-            "staging_path": str(staged_path),
-            "auto_fetch_metadata": metadata_fetch_enabled,
-            "isbn": isbn_list[index] if index < len(isbn_list) else None,
-            "upload_file": upload_file,
-        })
+    prepared = await _prepare_upload_jobs(files, metadata_fetch_enabled, isbn_list)
 
     staged_paths: List[Path] = []
     job_records: List[Dict[str, Any]] = [
@@ -129,25 +166,7 @@ async def upload_books(
     except HTTPException:
         raise
     except Exception as error:
-        for staged_path in staged_paths:
-            try:
-                staged_path.unlink(missing_ok=True)
-            except OSError:
-                logger.exception("Could not remove rejected staged upload %s", staged_path)
-        if records_created:
-            for job in job_records:
-                try:
-                    await asyncio.to_thread(
-                        database.update_upload_job,
-                        job["job_id"],
-                        "failed",
-                        "The upload could not be added to the background queue.",
-                    )
-                except Exception:
-                    logger.exception(
-                        "Could not record rejected upload job %s",
-                        job["job_id"],
-                    )
+        await _rollback_failed_uploads(staged_paths, job_records, records_created)
         logger.exception("Could not queue uploaded books")
         raise HTTPException(status_code=503, detail="The uploaded books could not be queued.") from error
     finally:
@@ -200,10 +219,10 @@ def get_page_layouts_batch(book_id: int, start_page: int = 1, end_page: int = 10
 @router.get("/{book_id}/pages/{page_number}/layout")
 def get_page_layout(book_id: int, page_number: int):
     """
-    Returns exact bounding box coordinates for each word on the page via PyMuPDF.
-    Allows pixel-perfect text selection and highlighting on the client.
+    Returns exact word and line bounding boxes for a specific page.
+    Used for precision line-by-line highlighting without space gaps.
     """
     layout = calibre_service.get_page_layout(book_id, page_number)
     if not layout:
-        raise HTTPException(status_code=404, detail="Could not extract page layout")
+        raise HTTPException(status_code=404, detail="Could not extract layout for this page")
     return layout

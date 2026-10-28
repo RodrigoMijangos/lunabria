@@ -1,11 +1,11 @@
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const test = require('node:test');
-const vm = require('node:vm');
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const vm = require("node:vm");
 
-const frontend = path.join(__dirname, '..');
-const read = file => fs.readFileSync(path.join(frontend, file), 'utf8');
+const frontend = path.join(__dirname, "..");
+const read = (file) => fs.readFileSync(path.join(frontend, file), "utf8");
 
 class FakeXHR {
   static last;
@@ -31,7 +31,7 @@ class FakeXHR {
 
   respond(status, body, headers = {}) {
     this.status = status;
-    this.responseText = typeof body === 'string' ? body : JSON.stringify(body);
+    this.responseText = typeof body === "string" ? body : JSON.stringify(body);
     this.responseHeaders = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
     this.onload();
   }
@@ -42,55 +42,57 @@ function createBooksApi(fetch = async () => ({ ok: true, json: async () => [] })
     FormData,
     XMLHttpRequest: FakeXHR,
     fetch,
-    console
+    console,
   });
-  vm.runInContext(read('js/services/books.js'), context);
-  return vm.runInContext('createBooksApiService()', context);
+  vm.runInContext(read("js/services/books.js"), context);
+  return vm.runInContext("createBooksApiService()", context);
 }
 
-test('uploadBookWithProgress reports byte progress and accepts an asynchronous job', async () => {
+test("uploadBookWithProgress reports byte progress and accepts an asynchronous job", async () => {
   const api = createBooksApi();
-  const file = new Blob(['%PDF-1.7'], { type: 'application/pdf' });
-  Object.defineProperty(file, 'name', { value: 'moon.pdf' });
+  const file = new Blob(["%PDF-1.7"], { type: "application/pdf" });
+  Object.defineProperty(file, "name", { value: "moon.pdf" });
   const progress = [];
   const pending = api.uploadBookWithProgress(file, {
     autoFetchMetadata: true,
-    onProgress: value => progress.push(value)
+    onProgress: (value) => progress.push(value),
   });
   const xhr = FakeXHR.last;
 
-  assert.equal(xhr.method, 'POST');
-  assert.equal(xhr.url, '/api/books/upload');
-  assert.equal(xhr.body.get('files').name, 'moon.pdf');
-  assert.equal(xhr.body.get('auto_fetch_metadata'), 'true');
+  assert.equal(xhr.method, "POST");
+  assert.equal(xhr.url, "/api/books/upload");
+  assert.equal(xhr.body.get("files").name, "moon.pdf");
+  assert.equal(xhr.body.get("auto_fetch_metadata"), "true");
   xhr.upload.onprogress({ lengthComputable: true, loaded: 25, total: 100 });
   xhr.upload.onprogress({ lengthComputable: false, loaded: 50, total: 0 });
-  xhr.respond(202, { job_id: 'job-1', status: 'queued' });
+  xhr.respond(202, { job_id: "job-1", status: "queued" });
 
   const response = await pending;
   assert.deepEqual(progress, [25]);
-  assert.equal(response.job_id, 'job-1');
-  assert.equal(response.status, 'queued');
+  assert.equal(response.job_id, "job-1");
+  assert.equal(response.status, "queued");
 });
 
-test('uploadBookWithProgress surfaces the backend error detail', async () => {
+test("uploadBookWithProgress surfaces the backend error detail", async () => {
   const api = createBooksApi();
-  const file = new Blob(['invalid'], { type: 'text/plain' });
-  Object.defineProperty(file, 'name', { value: 'invalid.txt' });
+  const file = new Blob(["invalid"], { type: "text/plain" });
+  Object.defineProperty(file, "name", { value: "invalid.txt" });
   const pending = api.uploadBookWithProgress(file);
-  FakeXHR.last.respond(400, { detail: 'Only PDF files are supported.' });
+  FakeXHR.last.respond(400, { detail: "Only PDF files are supported." });
 
   await assert.rejects(pending, /Only PDF files are supported/);
 });
 
-test('uploadBookWithProgress diagnoses 413, 504, 502, 408, and Nginx HTML 400 as reverse proxy errors', async () => {
+test("uploadBookWithProgress diagnoses 413, 504, 502, 408, and Nginx HTML 400 as reverse proxy errors", async () => {
   const api = createBooksApi();
-  const file = new Blob(['%PDF-1.7'], { type: 'application/pdf' });
-  Object.defineProperty(file, 'name', { value: 'large.pdf' });
+  const file = new Blob(["%PDF-1.7"], { type: "application/pdf" });
+  Object.defineProperty(file, "name", { value: "large.pdf" });
 
   // 1. HTTP 413 - Payload Too Large (client_max_body_size)
   let pending = api.uploadBookWithProgress(file);
-  FakeXHR.last.respond(413, '<html><body><h1>413 Request Entity Too Large</h1><center>nginx</center></body></html>', { 'server': 'nginx' });
+  FakeXHR.last.respond(413, "<html><body><h1>413 Request Entity Too Large</h1><center>nginx</center></body></html>", {
+    server: "nginx",
+  });
   await assert.rejects(pending, (err) => {
     assert.equal(err.isProxyError, true);
     assert.match(err.message, /client_max_body_size 500M/);
@@ -99,7 +101,7 @@ test('uploadBookWithProgress diagnoses 413, 504, 502, 408, and Nginx HTML 400 as
 
   // 2. HTTP 504 - Gateway Timeout
   pending = api.uploadBookWithProgress(file);
-  FakeXHR.last.respond(504, '<html><head><title>504 Gateway Time-out</title></head></html>');
+  FakeXHR.last.respond(504, "<html><head><title>504 Gateway Time-out</title></head></html>");
   await assert.rejects(pending, (err) => {
     assert.equal(err.isProxyError, true);
     assert.match(err.message, /proxy_request_buffering off/);
@@ -108,7 +110,11 @@ test('uploadBookWithProgress diagnoses 413, 504, 502, 408, and Nginx HTML 400 as
 
   // 3. HTTP 400 Bad Request generated by Nginx (HTML instead of Lunabria JSON)
   pending = api.uploadBookWithProgress(file);
-  FakeXHR.last.respond(400, '<html><head><title>400 Bad Request</title></head><body><center>nginx</center></body></html>', { 'server': 'nginx/1.22.1' });
+  FakeXHR.last.respond(
+    400,
+    "<html><head><title>400 Bad Request</title></head><body><center>nginx</center></body></html>",
+    { server: "nginx/1.22.1" },
+  );
   await assert.rejects(pending, (err) => {
     assert.equal(err.isProxyError, true);
     assert.match(err.message, /proxy_request_buffering off/);
@@ -127,31 +133,28 @@ test('uploadBookWithProgress diagnoses 413, 504, 502, 408, and Nginx HTML 400 as
   });
 });
 
-test('upload status service methods use the active-list and per-job endpoints', async () => {
+test("upload status service methods use the active-list and per-job endpoints", async () => {
   const calls = [];
-  const api = createBooksApi(async url => {
+  const api = createBooksApi(async (url) => {
     calls.push(url);
     return {
       ok: true,
-      json: async () => url.endsWith('/jobs') ? [{ job_id: 'job-1' }] : { job_id: 'job/2' }
+      json: async () => (url.endsWith("/jobs") ? [{ job_id: "job-1" }] : { job_id: "job/2" }),
     };
   });
 
   const active = await api.getActiveUploadJobs();
-  const job = await api.getUploadJob('job/2');
-  assert.equal(active[0].job_id, 'job-1');
-  assert.equal(job.job_id, 'job/2');
-  assert.deepEqual(calls, [
-    '/api/books/upload/jobs',
-    '/api/books/upload/jobs/job%2F2'
-  ]);
+  const job = await api.getUploadJob("job/2");
+  assert.equal(active[0].job_id, "job-1");
+  assert.equal(job.job_id, "job/2");
+  assert.deepEqual(calls, ["/api/books/upload/jobs", "/api/books/upload/jobs/job%2F2"]);
 });
 
-test('upload manager limits transfers to two and closing the modal does not cancel them', async () => {
+test("upload manager limits transfers to two and closing the modal does not cancel them", async () => {
   const elements = new Map();
-  const element = id => {
+  const element = (id) => {
     if (!elements.has(id)) {
-      elements.set(id, { id, style: {}, disabled: false, textContent: '' });
+      elements.set(id, { id, style: {}, disabled: false, textContent: "" });
     }
     return elements.get(id);
   };
@@ -163,70 +166,80 @@ test('upload manager limits transfers to two and closing the modal does not canc
     uploadBookWithProgress(file) {
       active += 1;
       maxActive = Math.max(maxActive, active);
-      return new Promise(resolve => deferred.push({
-        file,
-        resolve: result => {
-          active -= 1;
-          resolve(result);
-        }
-      }));
-    }
+      return new Promise((resolve) =>
+        deferred.push({
+          file,
+          resolve: (result) => {
+            active -= 1;
+            resolve(result);
+          },
+        }),
+      );
+    },
   };
   const context = vm.createContext({
     document: { getElementById: element },
     window: {},
-    ModalView: { close: modal => closed.push(modal) },
+    ModalView: { close: (modal) => closed.push(modal) },
     UploadModalView: { renderQueue() {} },
     ToastView: { show() {} },
     api,
     console,
     setTimeout,
-    clearTimeout
+    clearTimeout,
   });
-  vm.runInContext(read('js/viewmodels/library/BookUploadManager.js'), context);
-  const UploadManager = vm.runInContext('BookUploadManager', context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadTransferController.js"), context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadManager.js"), context);
+  const UploadManager = vm.runInContext("BookUploadManager", context);
   const queue = Array.from({ length: 3 }, (_, index) => ({
     id: `item-${index}`,
     file: { name: `book-${index}.pdf` },
     name: `book-${index}.pdf`,
     size: 100,
-    status: 'pending',
-    progress: 0
+    status: "pending",
+    progress: 0,
   }));
   const model = {
     uploadQueue: queue,
-    clearUploadQueue() { this.uploadQueue = []; },
-    removeUploadItem(id) { this.uploadQueue = this.uploadQueue.filter(item => item.id !== id); }
+    clearUploadQueue() {
+      this.uploadQueue = [];
+    },
+    removeUploadItem(id) {
+      this.uploadQueue = this.uploadQueue.filter((item) => item.id !== id);
+    },
   };
   const manager = new UploadManager(model, null);
   manager.scheduleJobPolling = () => {};
 
   const batch = manager.startUploadBatch();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(deferred.length, 2);
   assert.equal(maxActive, 2);
 
   manager.closeUploadModal();
-  assert.equal(closed[0], element('upload-modal'));
+  assert.equal(closed[0], element("upload-modal"));
   assert.equal(model.uploadQueue.length, 3);
 
-  deferred[0].resolve({ job_id: 'job-0', status: 'queued' });
-  await new Promise(resolve => setImmediate(resolve));
+  deferred[0].resolve({ job_id: "job-0", status: "queued" });
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(deferred.length, 3);
-  deferred[1].resolve({ job_id: 'job-1', status: 'queued' });
-  deferred[2].resolve({ job_id: 'job-2', status: 'queued' });
+  deferred[1].resolve({ job_id: "job-1", status: "queued" });
+  deferred[2].resolve({ job_id: "job-2", status: "queued" });
   await batch;
 
   assert.equal(maxActive, 2);
   assert.equal(manager.isUploading, false);
-  assert.deepEqual(queue.map(item => item.status), ['queued', 'queued', 'queued']);
+  assert.deepEqual(
+    queue.map((item) => item.status),
+    ["queued", "queued", "queued"],
+  );
 });
 
-test('upload manager releases transfer slot as soon as item is sent so next file starts uploading', async () => {
+test("upload manager releases transfer slot as soon as item is sent so next file starts uploading", async () => {
   const elements = new Map();
-  const element = id => {
+  const element = (id) => {
     if (!elements.has(id)) {
-      elements.set(id, { id, style: {}, disabled: false, textContent: '' });
+      elements.set(id, { id, style: {}, disabled: false, textContent: "" });
     }
     return elements.get(id);
   };
@@ -235,74 +248,87 @@ test('upload manager releases transfer slot as soon as item is sent so next file
     uploadBookWithProgress(file, options) {
       let onSent = options?.onSent;
       let resolvePromise;
-      const promise = new Promise(resolve => {
+      const promise = new Promise((resolve) => {
         resolvePromise = resolve;
       });
       uploads.push({ file, onSent, resolve: resolvePromise });
       return promise;
-    }
+    },
   };
   const context = vm.createContext({
     document: { getElementById: element },
     window: {},
     ModalView: { close() {} },
-    UploadModalView: { renderQueue() {}, updateItemProgress() { return true; } },
+    UploadModalView: {
+      renderQueue() {},
+      updateItemProgress() {
+        return true;
+      },
+    },
     ToastView: { show() {} },
     api,
     console,
     setTimeout,
-    clearTimeout
+    clearTimeout,
   });
-  vm.runInContext(read('js/viewmodels/library/BookUploadManager.js'), context);
-  const UploadManager = vm.runInContext('BookUploadManager', context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadTransferController.js"), context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadManager.js"), context);
+  const UploadManager = vm.runInContext("BookUploadManager", context);
   const queue = Array.from({ length: 3 }, (_, index) => ({
     id: `item-${index}`,
     file: { name: `book-${index}.pdf` },
     name: `book-${index}.pdf`,
     size: 100,
-    status: 'pending',
-    progress: 0
+    status: "pending",
+    progress: 0,
   }));
   const model = {
     uploadQueue: queue,
-    clearUploadQueue() { this.uploadQueue = []; },
-    removeUploadItem(id) { this.uploadQueue = this.uploadQueue.filter(item => item.id !== id); }
+    clearUploadQueue() {
+      this.uploadQueue = [];
+    },
+    removeUploadItem(id) {
+      this.uploadQueue = this.uploadQueue.filter((item) => item.id !== id);
+    },
   };
   const manager = new UploadManager(model, null);
   manager.scheduleJobPolling = () => {};
 
   const batch = manager.startUploadBatch();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(uploads.length, 2);
-  assert.equal(queue[0].status, 'uploading');
-  assert.equal(queue[1].status, 'uploading');
-  assert.equal(queue[2].status, 'pending');
+  assert.equal(queue[0].status, "uploading");
+  assert.equal(queue[1].status, "uploading");
+  assert.equal(queue[2].status, "pending");
 
   // First file completes byte upload over the wire (calls onSent)
   uploads[0].onSent();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
 
   // First file is now 'sent' (awaiting 202 from server)
-  assert.equal(queue[0].status, 'sent');
+  assert.equal(queue[0].status, "sent");
   // Crucially, transfer slot is released, so the third file started uploading immediately!
   assert.equal(uploads.length, 3);
-  assert.equal(queue[2].status, 'uploading');
+  assert.equal(queue[2].status, "uploading");
 
   // Now resolve first file with 202
-  uploads[0].resolve({ job_id: 'job-0', status: 'queued' });
-  uploads[1].resolve({ job_id: 'job-1', status: 'queued' });
-  uploads[2].resolve({ job_id: 'job-2', status: 'queued' });
+  uploads[0].resolve({ job_id: "job-0", status: "queued" });
+  uploads[1].resolve({ job_id: "job-1", status: "queued" });
+  uploads[2].resolve({ job_id: "job-2", status: "queued" });
   await batch;
 
   assert.equal(manager.isUploading, false);
-  assert.deepEqual(queue.map(item => item.status), ['queued', 'queued', 'queued']);
+  assert.deepEqual(
+    queue.map((item) => item.status),
+    ["queued", "queued", "queued"],
+  );
 });
 
-test('upload manager auto-re-enqueues item on proxy/connection interruption in sent state', async () => {
+test("upload manager auto-re-enqueues item on proxy/connection interruption in sent state", async () => {
   const elements = new Map();
-  const element = id => {
+  const element = (id) => {
     if (!elements.has(id)) {
-      elements.set(id, { id, style: {}, disabled: false, textContent: '' });
+      elements.set(id, { id, style: {}, disabled: false, textContent: "" });
     }
     return elements.get(id);
   };
@@ -320,59 +346,92 @@ test('upload manager auto-re-enqueues item on proxy/connection interruption in s
           reject(err);
         } else {
           // Retry attempt succeeds with 202
-          resolve({ job_id: 'job-retry', status: 'queued' });
+          resolve({ job_id: "job-retry", status: "queued" });
         }
       });
-    }
+    },
   };
   const context = vm.createContext({
     document: { getElementById: element },
     window: {},
     ModalView: { close() {} },
-    UploadModalView: { renderQueue() {}, updateItemProgress() { return true; } },
-    ToastView: { show(msg, type) { toasts.push({ msg, type }); } },
+    UploadModalView: {
+      renderQueue() {},
+      updateItemProgress() {
+        return true;
+      },
+    },
+    ToastView: {
+      show(msg, type) {
+        toasts.push({ msg, type });
+      },
+    },
     api,
     console,
     setTimeout,
-    clearTimeout
+    clearTimeout,
   });
-  vm.runInContext(read('js/viewmodels/library/BookUploadManager.js'), context);
-  const UploadManager = vm.runInContext('BookUploadManager', context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadTransferController.js"), context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadManager.js"), context);
+  const UploadManager = vm.runInContext("BookUploadManager", context);
   const queue = [
-    { id: 'item-drop', file: { name: 'buffered.pdf' }, name: 'buffered.pdf', size: 100, status: 'pending', progress: 0 }
+    {
+      id: "item-drop",
+      file: { name: "buffered.pdf" },
+      name: "buffered.pdf",
+      size: 100,
+      status: "pending",
+      progress: 0,
+    },
   ];
   const model = {
     uploadQueue: queue,
-    clearUploadQueue() { this.uploadQueue = []; },
-    removeUploadItem(id) { this.uploadQueue = this.uploadQueue.filter(item => item.id !== id); }
+    clearUploadQueue() {
+      this.uploadQueue = [];
+    },
+    removeUploadItem(id) {
+      this.uploadQueue = this.uploadQueue.filter((item) => item.id !== id);
+    },
   };
   const manager = new UploadManager(model, null);
   manager.scheduleJobPolling = () => {};
 
   await manager.startUploadBatch();
   assert.equal(attempts, 2);
-  assert.equal(queue[0].status, 'queued');
-  assert.equal(toasts.some(t => t.type === 'warning' && t.msg.includes('Reintentando')), true);
+  assert.equal(queue[0].status, "queued");
+  assert.equal(
+    toasts.some((t) => t.type === "warning" && t.msg.includes("Reintentando")),
+    true,
+  );
 });
 
-test('UploadModalView renders progress bar track and updateItemProgress mutates existing row', () => {
+test("UploadModalView renders progress bar track and updateItemProgress mutates existing row", () => {
   class FakeNode {
     constructor(tag) {
       this.tagName = tag;
       this.children = [];
       this.dataset = {};
       this.style = {};
-      this.className = '';
-      this.textContent = '';
+      this.className = "";
+      this.textContent = "";
     }
-    appendChild(child) { this.children.push(child); return child; }
-    append(...children) { this.children.push(...children); }
-    replaceChildren(...children) { this.children = [...children]; }
-    setAttribute(name, value) { this[name] = value; }
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    }
+    append(...children) {
+      this.children.push(...children);
+    }
+    replaceChildren(...children) {
+      this.children = [...children];
+    }
+    setAttribute(name, value) {
+      this[name] = value;
+    }
     querySelector(selector) {
-      if (selector.startsWith('[data-queue-id=')) {
+      if (selector.startsWith("[data-queue-id=")) {
         const id = selector.match(/data-queue-id="([^"]+)"/)?.[1];
-        return this.children.find(child => child.dataset?.queueId === id) || null;
+        return this.children.find((child) => child.dataset?.queueId === id) || null;
       }
       const findClass = (node, className) => {
         if (node.className?.includes(className)) return node;
@@ -382,86 +441,86 @@ test('UploadModalView renders progress bar track and updateItemProgress mutates 
         }
         return null;
       };
-      if (selector === '.upload-queue-label') return findClass(this, 'upload-queue-label');
-      if (selector === '.upload-queue-progress-fill') return findClass(this, 'upload-queue-progress-fill');
+      if (selector === ".upload-queue-label") return findClass(this, "upload-queue-label");
+      if (selector === ".upload-queue-progress-fill") return findClass(this, "upload-queue-progress-fill");
       return null;
     }
   }
 
   const context = vm.createContext({
     document: {
-      createElement: tag => new FakeNode(tag),
-      createElementNS: (_ns, tag) => new FakeNode(tag)
+      createElement: (tag) => new FakeNode(tag),
+      createElementNS: (_ns, tag) => new FakeNode(tag),
     },
-    LibraryModel: { formatFileSize: size => `${size} B` },
-    window: {}
+    LibraryModel: { formatFileSize: (size) => `${size} B` },
+    window: {},
   });
 
-  vm.runInContext(read('js/views/library/UploadModalView.js'), context);
-  const View = vm.runInContext('UploadModalView', context);
+  vm.runInContext(read("js/views/library/UploadModalView.js"), context);
+  const View = vm.runInContext("UploadModalView", context);
 
-  const container = new FakeNode('div');
-  const queue = [{ id: 'q-1', name: 'guide.pdf', size: 1024, status: 'uploading', progress: 15 }];
+  const container = new FakeNode("div");
+  const queue = [{ id: "q-1", name: "guide.pdf", size: 1024, status: "uploading", progress: 15 }];
   View.renderQueue(container, queue);
 
   assert.equal(container.children.length, 1);
   const row = container.children[0];
-  assert.equal(row.dataset.queueId, 'q-1');
-  const label = row.querySelector('.upload-queue-label');
-  assert.equal(label.textContent, 'Uploading 15%');
-  const fill = row.querySelector('.upload-queue-progress-fill');
-  assert.equal(fill.style.width, '15%');
+  assert.equal(row.dataset.queueId, "q-1");
+  const label = row.querySelector(".upload-queue-label");
+  assert.equal(label.textContent, "Uploading 15%");
+  const fill = row.querySelector(".upload-queue-progress-fill");
+  assert.equal(fill.style.width, "15%");
 
   queue[0].progress = 60;
   const updated = View.updateItemProgress(container, queue[0]);
   assert.equal(updated, true);
-  assert.equal(label.textContent, 'Uploading 60%');
-  assert.equal(fill.style.width, '60%');
+  assert.equal(label.textContent, "Uploading 60%");
+  assert.equal(fill.style.width, "60%");
 
   // Verify staging on server display at 100%
   queue[0].progress = 100;
   View.updateItemProgress(container, queue[0]);
-  assert.equal(label.textContent, 'Staging on server...');
-  assert.equal(fill.style.width, '100%');
+  assert.equal(label.textContent, "Staging on server...");
+  assert.equal(fill.style.width, "100%");
 
   // Verify sent state display
-  queue[0].status = 'sent';
+  queue[0].status = "sent";
   View.updateItemProgress(container, queue[0]);
-  assert.equal(label.textContent, 'Sent, awaiting server...');
-  assert.equal(fill.style.width, '100%');
+  assert.equal(label.textContent, "Sent, awaiting server...");
+  assert.equal(fill.style.width, "100%");
 });
 
-test('LibraryModel addFilesToUploadQueue filters out non-PDF files and flags rejections', () => {
+test("LibraryModel addFilesToUploadQueue filters out non-PDF files and flags rejections", () => {
   const context = vm.createContext({
     localStorage: { getItem: () => null, setItem: () => {} },
-    window: {}
+    window: {},
   });
-  vm.runInContext(read('js/models/LibraryModel.js'), context);
-  const ModelClass = vm.runInContext('LibraryModel', context);
+  vm.runInContext(read("js/models/LibraryModel.js"), context);
+  const ModelClass = vm.runInContext("LibraryModel", context);
   const model = new ModelClass();
 
   const files = [
-    { name: 'valid_book.pdf', size: 1024 },
-    { name: 'document.EPUB', size: 2048 },
-    { name: 'another_valid.PDF', size: 4096 },
-    { name: 'image.jpg', size: 512 }
+    { name: "valid_book.pdf", size: 1024 },
+    { name: "document.EPUB", size: 2048 },
+    { name: "another_valid.PDF", size: 4096 },
+    { name: "image.jpg", size: 512 },
   ];
 
   const result = model.addFilesToUploadQueue(files);
   assert.equal(model.uploadQueue.length, 2);
-  assert.equal(model.uploadQueue[0].name, 'valid_book.pdf');
-  assert.equal(model.uploadQueue[1].name, 'another_valid.PDF');
+  assert.equal(model.uploadQueue[0].name, "valid_book.pdf");
+  assert.equal(model.uploadQueue[1].name, "another_valid.PDF");
   assert.equal(result.accepted.length, 2);
   assert.equal(result.rejected.length, 2);
-  assert.equal(result.rejected[0].name, 'document.EPUB');
-  assert.equal(result.rejected[1].name, 'image.jpg');
+  assert.equal(result.rejected[0].name, "document.EPUB");
+  assert.equal(result.rejected[1].name, "image.jpg");
 });
 
-test('BookUploadManager allows removing pending items and cancelling active uploads with XHR abort', async () => {
+test("BookUploadManager allows removing pending items and cancelling active uploads with XHR abort", async () => {
   const elements = new Map();
-  const element = id => {
+  const element = (id) => {
     if (!elements.has(id)) {
-      elements.set(id, { id, style: {}, disabled: false, textContent: '' });
+      elements.set(id, { id, style: {}, disabled: false, textContent: "" });
     }
     return elements.get(id);
   };
@@ -470,16 +529,16 @@ test('BookUploadManager allows removing pending items and cancelling active uplo
   const activeXhr = {
     abort() {
       abortCalled = true;
-    }
+    },
   };
   const toasts = [];
   const api = {
     uploadBookWithProgress(file, options) {
-      if (typeof options.onXhrCreated === 'function') {
+      if (typeof options.onXhrCreated === "function") {
         options.onXhrCreated(activeXhr);
       }
       return new Promise(() => {}); // never resolves
-    }
+    },
   };
   const context = vm.createContext({
     document: { getElementById: element },
@@ -488,55 +547,83 @@ test('BookUploadManager allows removing pending items and cancelling active uplo
     UploadModalView: {
       renderQueue(container, queue, onRemove) {
         renderQueueCallback = onRemove;
-      }
+      },
     },
     ToastView: {
       show(msg, type) {
         toasts.push({ msg, type });
-      }
+      },
     },
     api,
     console,
     setTimeout,
-    clearTimeout
+    clearTimeout,
   });
 
-  vm.runInContext(read('js/viewmodels/library/BookUploadManager.js'), context);
-  const UploadManager = vm.runInContext('BookUploadManager', context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadTransferController.js"), context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadManager.js"), context);
+  const UploadManager = vm.runInContext("BookUploadManager", context);
   const queue = [
-    { id: 'item-uploading', file: { name: 'active.pdf' }, name: 'active.pdf', size: 100, status: 'pending', progress: 0 },
-    { id: 'item-pending', file: { name: 'waiting.pdf' }, name: 'waiting.pdf', size: 200, status: 'pending', progress: 0 }
+    {
+      id: "item-uploading",
+      file: { name: "active.pdf" },
+      name: "active.pdf",
+      size: 100,
+      status: "pending",
+      progress: 0,
+    },
+    {
+      id: "item-pending",
+      file: { name: "waiting.pdf" },
+      name: "waiting.pdf",
+      size: 200,
+      status: "pending",
+      progress: 0,
+    },
   ];
   const model = {
     uploadQueue: queue,
-    clearUploadQueue() { this.uploadQueue = []; },
-    removeUploadItem(id) { this.uploadQueue = this.uploadQueue.filter(item => item.id !== id); }
+    clearUploadQueue() {
+      this.uploadQueue = [];
+    },
+    removeUploadItem(id) {
+      this.uploadQueue = this.uploadQueue.filter((item) => item.id !== id);
+    },
   };
   const manager = new UploadManager(model, null);
   manager.scheduleJobPolling = () => {};
 
   manager.startUploadBatch();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(manager.isUploading, true);
-  assert.equal(queue[0].status, 'uploading');
+  assert.equal(queue[0].status, "uploading");
 
   // 1. Remove pending item while upload is in progress (must not be blocked!)
-  renderQueueCallback('item-pending');
-  assert.equal(model.uploadQueue.some(item => item.id === 'item-pending'), false);
+  renderQueueCallback("item-pending");
+  assert.equal(
+    model.uploadQueue.some((item) => item.id === "item-pending"),
+    false,
+  );
 
   // 2. Cancel active uploading item (must abort XHR and remove from queue)
-  renderQueueCallback('item-uploading');
+  renderQueueCallback("item-uploading");
   assert.equal(abortCalled, true);
-  assert.equal(model.uploadQueue.some(item => item.id === 'item-uploading'), false);
-  assert.equal(toasts.some(t => t.msg.includes('Subida cancelada')), true);
+  assert.equal(
+    model.uploadQueue.some((item) => item.id === "item-uploading"),
+    false,
+  );
+  assert.equal(
+    toasts.some((t) => t.msg.includes("Subida cancelada")),
+    true,
+  );
 });
 
-test('BookUploadManager cancelAllUploads aborts active XHRs and resets uploading state', async () => {
+test("BookUploadManager cancelAllUploads aborts active XHRs and resets uploading state", async () => {
   const elements = new Map();
-  const element = id => {
+  const element = (id) => {
     if (!elements.has(id)) {
-      elements.set(id, { id, style: {}, disabled: false, textContent: '' });
+      elements.set(id, { id, style: {}, disabled: false, textContent: "" });
     }
     return elements.get(id);
   };
@@ -544,15 +631,15 @@ test('BookUploadManager cancelAllUploads aborts active XHRs and resets uploading
   const fakeXhr = {
     abort() {
       aborted = true;
-    }
+    },
   };
   const api = {
     uploadBookWithProgress(file, options) {
-      if (typeof options.onXhrCreated === 'function') {
+      if (typeof options.onXhrCreated === "function") {
         options.onXhrCreated(fakeXhr);
       }
       return new Promise(() => {}); // never resolves
-    }
+    },
   };
   const context = vm.createContext({
     document: { getElementById: element },
@@ -563,25 +650,30 @@ test('BookUploadManager cancelAllUploads aborts active XHRs and resets uploading
     api,
     console,
     setTimeout,
-    clearTimeout
+    clearTimeout,
   });
 
-  vm.runInContext(read('js/viewmodels/library/BookUploadManager.js'), context);
-  const UploadManager = vm.runInContext('BookUploadManager', context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadTransferController.js"), context);
+  vm.runInContext(read("js/viewmodels/library/BookUploadManager.js"), context);
+  const UploadManager = vm.runInContext("BookUploadManager", context);
   const queue = [
-    { id: 'item-1', file: { name: 'first.pdf' }, name: 'first.pdf', size: 100, status: 'pending', progress: 0 },
-    { id: 'item-2', file: { name: 'second.pdf' }, name: 'second.pdf', size: 100, status: 'pending', progress: 0 }
+    { id: "item-1", file: { name: "first.pdf" }, name: "first.pdf", size: 100, status: "pending", progress: 0 },
+    { id: "item-2", file: { name: "second.pdf" }, name: "second.pdf", size: 100, status: "pending", progress: 0 },
   ];
   const model = {
     uploadQueue: queue,
-    clearUploadQueue() { this.uploadQueue = []; },
-    removeUploadItem(id) { this.uploadQueue = this.uploadQueue.filter(item => item.id !== id); }
+    clearUploadQueue() {
+      this.uploadQueue = [];
+    },
+    removeUploadItem(id) {
+      this.uploadQueue = this.uploadQueue.filter((item) => item.id !== id);
+    },
   };
   const manager = new UploadManager(model, null);
   manager.scheduleJobPolling = () => {};
 
   manager.startUploadBatch();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(manager.isUploading, true);
 
   manager.cancelAllUploads();

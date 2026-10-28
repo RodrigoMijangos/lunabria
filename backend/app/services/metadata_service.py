@@ -7,10 +7,76 @@ import tempfile
 import xml.etree.ElementTree as ET
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.config import FETCH_METADATA_BIN
 from app.database import get_db
+
+_DC_NS = "{http://purl.org/dc/elements/1.1/}"
+_OPF_NS = "{http://www.idpf.org/2007/opf}"
+
+
+def _build_unmatched_metadata(
+    isbn: Optional[str], title: Optional[str], authors: Optional[str]
+) -> Dict[str, Any]:
+    return {
+        "title": title,
+        "authors": [authors] if authors else [],
+        "isbn": isbn,
+        "publisher": None,
+        "tags": [],
+        "comments": None,
+        "has_cover": False,
+        "cover_data_base64": None,
+        "matched": False,
+    }
+
+
+def _find_dc_text(metadata_elem: ET.Element, tag: str) -> Optional[str]:
+    elem = metadata_elem.find(f"{_DC_NS}{tag}")
+    return elem.text if elem is not None and elem.text else None
+
+
+def _find_dc_list(metadata_elem: ET.Element, tag: str) -> List[str]:
+    return [elem.text for elem in metadata_elem.findall(f"{_DC_NS}{tag}") if elem.text]
+
+
+def _extract_isbn_from_opf(metadata_elem: ET.Element, fallback_isbn: Optional[str]) -> Optional[str]:
+    parsed_isbn = fallback_isbn
+    for ident in metadata_elem.findall(f"{_DC_NS}identifier"):
+        scheme = ident.attrib.get(f"{_OPF_NS}scheme", "").lower()
+        if scheme == "isbn" or "isbn" in ident.attrib.values():
+            parsed_isbn = ident.text
+    return parsed_isbn
+
+
+def _parse_opf_metadata_xml(
+    output_xml: str, fallback_isbn: Optional[str]
+) -> Tuple[Optional[str], List[str], Optional[str], Optional[str], List[str], Optional[str]]:
+    root = ET.fromstring(output_xml)
+    metadata_elem = root.find(f"{_OPF_NS}metadata")
+    if metadata_elem is None:
+        metadata_elem = root.find("metadata")
+    if metadata_elem is None:
+        return None, [], None, None, [], fallback_isbn
+
+    return (
+        _find_dc_text(metadata_elem, "title"),
+        _find_dc_list(metadata_elem, "creator"),
+        _find_dc_text(metadata_elem, "publisher"),
+        _find_dc_text(metadata_elem, "description"),
+        _find_dc_list(metadata_elem, "subject"),
+        _extract_isbn_from_opf(metadata_elem, fallback_isbn),
+    )
+
+
+def _read_cover_base64(cover_path: str) -> Tuple[bool, Optional[str]]:
+    path_obj = Path(cover_path)
+    if not path_obj.exists() or path_obj.stat().st_size <= 0:
+        return False, None
+    with open(cover_path, "rb") as cf:
+        return True, base64.b64encode(cf.read()).decode("utf-8")
+
 
 class MetadataService:
     """
@@ -100,6 +166,23 @@ class MetadataService:
         }
 
     @classmethod
+    def _build_fetch_cmd(
+        cls,
+        cover_path: str,
+        isbn: Optional[str],
+        title: Optional[str],
+        authors: Optional[str],
+    ) -> List[str]:
+        selected_sources = cls.get_source_preferences()["selected_sources"]
+        cmd = [FETCH_METADATA_BIN, "--opf", "--cover", cover_path]
+        for source in selected_sources:
+            cmd.extend(["--allowed-plugin", source])
+        for flag, val in (("--isbn", isbn), ("--title", title), ("--author", authors)):
+            if val and val.strip():
+                cmd.extend([flag, val.strip()])
+        return cmd
+
+    @classmethod
     def fetch_online_metadata(
         cls,
         isbn: Optional[str] = None,
@@ -110,78 +193,27 @@ class MetadataService:
         Uses Calibre's fetch-ebook-metadata CLI to scrape online metadata by ISBN or title/authors.
         Returns parsed title, authors, publisher, tags, comments/synopsis, and cover if available.
         """
-        selected_sources = cls.get_source_preferences()["selected_sources"]
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as cover_file:
             cover_path = cover_file.name
 
-        cmd = [FETCH_METADATA_BIN, "--opf", "--cover", cover_path]
-        for source in selected_sources:
-            cmd.extend(["--allowed-plugin", source])
-        if isbn and isbn.strip():
-            cmd.extend(["--isbn", isbn.strip()])
-        if title and title.strip():
-            cmd.extend(["--title", title.strip()])
-        if authors and authors.strip():
-            cmd.extend(["--author", authors.strip()])
+        cmd = cls._build_fetch_cmd(cover_path, isbn, title, authors)
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=35, check=False)
             output_xml = result.stdout
             if not output_xml or "<package" not in output_xml:
-                return {
-                    "title": title,
-                    "authors": [authors] if authors else [],
-                    "isbn": isbn,
-                    "publisher": None,
-                    "tags": [],
-                    "comments": None,
-                    "has_cover": False,
-                    "cover_data_base64": None,
-                    "matched": False,
-                }
+                return _build_unmatched_metadata(isbn, title, authors)
 
-            root = ET.fromstring(output_xml)
-            metadata_elem = root.find('{http://www.idpf.org/2007/opf}metadata')
-            if metadata_elem is None:
-                metadata_elem = root.find('metadata')
+            (
+                parsed_title,
+                parsed_authors,
+                parsed_publisher,
+                parsed_comments,
+                parsed_tags,
+                parsed_isbn,
+            ) = _parse_opf_metadata_xml(output_xml, isbn)
 
-            parsed_title = None
-            parsed_authors = []
-            parsed_publisher = None
-            parsed_comments = None
-            parsed_tags = []
-            parsed_isbn = isbn
-
-            if metadata_elem is not None:
-                title_elem = metadata_elem.find('{http://purl.org/dc/elements/1.1/}title')
-                if title_elem is not None and title_elem.text:
-                    parsed_title = title_elem.text
-
-                for creator in metadata_elem.findall('{http://purl.org/dc/elements/1.1/}creator'):
-                    if creator.text:
-                        parsed_authors.append(creator.text)
-
-                pub_elem = metadata_elem.find('{http://purl.org/dc/elements/1.1/}publisher')
-                if pub_elem is not None and pub_elem.text:
-                    parsed_publisher = pub_elem.text
-
-                desc_elem = metadata_elem.find('{http://purl.org/dc/elements/1.1/}description')
-                if desc_elem is not None and desc_elem.text:
-                    parsed_comments = desc_elem.text
-
-                for subject in metadata_elem.findall('{http://purl.org/dc/elements/1.1/}subject'):
-                    if subject.text:
-                        parsed_tags.append(subject.text)
-
-                for ident in metadata_elem.findall('{http://purl.org/dc/elements/1.1/}identifier'):
-                    if ident.attrib.get('{http://www.idpf.org/2007/opf}scheme', '').lower() == 'isbn' or 'isbn' in ident.attrib.values():
-                        parsed_isbn = ident.text
-
-            has_cover = Path(cover_path).exists() and Path(cover_path).stat().st_size > 0
-            cover_b64 = None
-            if has_cover:
-                with open(cover_path, "rb") as cf:
-                    cover_b64 = base64.b64encode(cf.read()).decode("utf-8")
+            has_cover, cover_b64 = _read_cover_base64(cover_path)
 
             return {
                 "title": parsed_title or title,
@@ -196,25 +228,13 @@ class MetadataService:
             }
         except Exception as e:
             print(f"Warning in fetch_metadata: {e}")
-            return {
-                "title": title,
-                "authors": [authors] if authors else [],
-                "isbn": isbn,
-                "publisher": None,
-                "tags": [],
-                "comments": None,
-                "has_cover": False,
-                "cover_data_base64": None,
-                "matched": False,
-            }
+            return _build_unmatched_metadata(isbn, title, authors)
         finally:
             if os.path.exists(cover_path):
                 try:
                     os.remove(cover_path)
                 except OSError:
                     pass
-
-
 
     @classmethod
     def fetch_metadata_cascade(
@@ -231,16 +251,13 @@ class MetadataService:
         3. Clean filename (clean_title)
         If none match or an error occurs, returns matched: False with fallback values.
         """
-        # 1. Try candidate ISBNs sequentially
         if candidate_isbns:
             for isbn in candidate_isbns[:3]:
-                if not isbn or not str(isbn).strip():
-                    continue
-                result = cls.fetch_online_metadata(isbn=str(isbn).strip())
-                if result.get("matched"):
-                    return result
+                if isbn and str(isbn).strip():
+                    result = cls.fetch_online_metadata(isbn=str(isbn).strip())
+                    if result.get("matched"):
+                        return result
 
-        # 2. Try book title from PDF
         if pdf_title and pdf_title.strip():
             result = cls.fetch_online_metadata(
                 title=pdf_title.strip(),
@@ -249,14 +266,12 @@ class MetadataService:
             if result.get("matched"):
                 return result
 
-        # 3. Try filename clean title
         if clean_title and clean_title.strip():
             if not pdf_title or clean_title.strip().lower() != pdf_title.strip().lower():
                 result = cls.fetch_online_metadata(title=clean_title.strip())
                 if result.get("matched"):
                     return result
 
-        # 4. Safe fallback: no match found
         return {
             "title": clean_title or pdf_title,
             "authors": [pdf_author] if pdf_author else [],
@@ -268,5 +283,6 @@ class MetadataService:
             "cover_data_base64": None,
             "matched": False,
         }
+
 
 metadata_service = MetadataService()

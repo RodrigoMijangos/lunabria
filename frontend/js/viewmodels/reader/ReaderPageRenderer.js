@@ -16,22 +16,21 @@ class ReaderPageRenderer {
     this.renderGeneration = 0;
     this.renderedScale = 1.0;
     this.renderTasks = new Set();
+    this.layerBuilder = new ReaderPageLayerBuilder(this);
   }
 
   prepareNewRender() {
     this.renderGeneration += 1;
-    if (this.intersectionObserver) {
-      this.intersectionObserver.disconnect();
-      this.intersectionObserver = null;
-    }
-    if (this.pageObserver) {
-      this.pageObserver.disconnect();
-      this.pageObserver = null;
-    }
+    this.intersectionObserver?.disconnect();
+    this.intersectionObserver = null;
+    this.pageObserver?.disconnect();
+    this.pageObserver = null;
     this.visibleFlowPages.clear();
-    this.renderTasks.forEach(task => {
-      try { task.cancel(); } catch (error) {}
-    });
+    for (const task of this.renderTasks) {
+      try {
+        task.cancel();
+      } catch (_) {}
+    }
     this.renderTasks.clear();
     return this.renderGeneration;
   }
@@ -39,53 +38,61 @@ class ReaderPageRenderer {
   resetViewportDOM() {
     this.prepareNewRender();
     this.renderedScale = this.model.scale || 1.0;
-    this.viewportEl.innerHTML = '';
+    this.viewportEl.innerHTML = "";
+  }
+
+  clearViewportTransform() {
+    if (!this.viewportEl?.style) return;
+    this.viewportEl.style.transform = "";
+    this.viewportEl.style.transformOrigin = "";
+    this.viewportEl.style.willChange = "";
   }
 
   calculateZoomAnchor(focalPoint) {
     if (!focalPoint || !this.bodyEl || !this.viewportEl) return null;
     const bodyRect = this.bodyEl.getBoundingClientRect();
-    const savedTransform = this.viewportEl.style ? this.viewportEl.style.transform : "";
-    const savedOrigin = this.viewportEl.style ? this.viewportEl.style.transformOrigin : "";
-    if (savedTransform && this.viewportEl.style) {
-      this.viewportEl.style.transform = "";
-      this.viewportEl.style.transformOrigin = "";
+    const style = this.viewportEl.style;
+    const savedTransform = style ? style.transform : "";
+    const savedOrigin = style ? style.transformOrigin : "";
+    if (savedTransform && style) {
+      style.transform = "";
+      style.transformOrigin = "";
     }
     const viewportRect = this.viewportEl.getBoundingClientRect();
-    if (savedTransform && this.viewportEl.style) {
-      this.viewportEl.style.transform = savedTransform;
-      this.viewportEl.style.transformOrigin = savedOrigin;
+    if (savedTransform && style) {
+      style.transform = savedTransform;
+      style.transformOrigin = savedOrigin;
     }
     if (!bodyRect.width || !bodyRect.height) return null;
 
-    const cx = (typeof focalPoint.clientX === 'number')
-      ? focalPoint.clientX
-      : (bodyRect.left + bodyRect.width / 2);
-    const cy = (typeof focalPoint.clientY === 'number')
-      ? focalPoint.clientY
-      : (bodyRect.top + bodyRect.height / 2);
+    const cx = typeof focalPoint.clientX === "number" ? focalPoint.clientX : bodyRect.left + bodyRect.width / 2;
+    const cy = typeof focalPoint.clientY === "number" ? focalPoint.clientY : bodyRect.top + bodyRect.height / 2;
 
-    const baseScale = this.renderedScale || this.model.scale || 1.0;
     return {
       cx,
       cy,
       originX: cx - viewportRect.left,
       originY: cy - viewportRect.top,
-      baseScale,
-      targetScale: this.model.scale
+      baseScale: this.renderedScale || this.model.scale || 1.0,
+      targetScale: this.model.scale,
     };
   }
 
   applyZoomAnchor(zoomAnchor) {
     if (!zoomAnchor || !this.bodyEl || !this.viewportEl) return;
     const newViewportRect = this.viewportEl.getBoundingClientRect();
-    const ratio = zoomAnchor.baseScale > 0 ? (zoomAnchor.targetScale / zoomAnchor.baseScale) : 1;
-    const currentPointScreenX = newViewportRect.left + (zoomAnchor.originX * ratio);
-    const currentPointScreenY = newViewportRect.top + (zoomAnchor.originY * ratio);
-    const deltaX = currentPointScreenX - zoomAnchor.cx;
-    const deltaY = currentPointScreenY - zoomAnchor.cy;
-    this.bodyEl.scrollLeft += deltaX;
-    this.bodyEl.scrollTop += deltaY;
+    const ratio = zoomAnchor.baseScale > 0 ? zoomAnchor.targetScale / zoomAnchor.baseScale : 1;
+    this.bodyEl.scrollLeft += newViewportRect.left + zoomAnchor.originX * ratio - zoomAnchor.cx;
+    this.bodyEl.scrollTop += newViewportRect.top + zoomAnchor.originY * ratio - zoomAnchor.cy;
+  }
+
+  applyPostRenderScroll(zoomAnchor) {
+    if (zoomAnchor) {
+      this.applyZoomAnchor(zoomAnchor);
+    } else if (this.bodyEl) {
+      this.bodyEl.scrollTop = 0;
+      this.bodyEl.scrollLeft = 0;
+    }
   }
 
   isCurrentGeneration(generation) {
@@ -100,21 +107,10 @@ class ReaderPageRenderer {
     const pageWrapper = await this.createAndPopulatePageWrapper(pageNumber, null, generation);
     if (!this.isCurrentGeneration(generation)) return;
 
-    if (this.viewportEl && this.viewportEl.style) {
-      this.viewportEl.style.transform = "";
-      this.viewportEl.style.transformOrigin = "";
-      this.viewportEl.style.willChange = "";
-    }
-
+    this.clearViewportTransform();
     this.viewportEl.replaceChildren(pageWrapper);
     this.renderedScale = this.model.scale;
-
-    if (zoomAnchor) {
-      this.applyZoomAnchor(zoomAnchor);
-    } else if (this.bodyEl) {
-      this.bodyEl.scrollTop = 0;
-      this.bodyEl.scrollLeft = 0;
-    }
+    this.applyPostRenderScroll(zoomAnchor);
   }
 
   async renderDualPage(pageNumber, focalPoint = null) {
@@ -122,12 +118,10 @@ class ReaderPageRenderer {
     const zoomAnchor = this.calculateZoomAnchor(focalPoint);
     const generation = this.prepareNewRender();
 
-    const p1 = (pageNumber % 2 === 1) ? pageNumber : pageNumber - 1;
+    const p1 = pageNumber % 2 === 1 ? pageNumber : pageNumber - 1;
     const p2 = p1 + 1;
 
-    const wrapperPromises = [
-      this.createAndPopulatePageWrapper(p1, null, generation)
-    ];
+    const wrapperPromises = [this.createAndPopulatePageWrapper(p1, null, generation)];
     if (p2 <= this.model.totalPages) {
       wrapperPromises.push(this.createAndPopulatePageWrapper(p2, null, generation));
     }
@@ -135,22 +129,11 @@ class ReaderPageRenderer {
     const wrappers = await Promise.all(wrapperPromises);
     if (!this.isCurrentGeneration(generation)) return;
 
-    if (this.viewportEl && this.viewportEl.style) {
-      this.viewportEl.style.transform = "";
-      this.viewportEl.style.transformOrigin = "";
-      this.viewportEl.style.willChange = "";
-    }
-
+    this.clearViewportTransform();
     this.viewportEl.replaceChildren(...wrappers);
     this.renderedScale = this.model.scale;
     this.model.setCurrentPage(p1);
-
-    if (zoomAnchor) {
-      this.applyZoomAnchor(zoomAnchor);
-    } else if (this.bodyEl) {
-      this.bodyEl.scrollTop = 0;
-      this.bodyEl.scrollLeft = 0;
-    }
+    this.applyPostRenderScroll(zoomAnchor);
   }
 
   async renderFlowMode(onPageObserved, initialPage = this.model.currentPage, focalPoint = null) {
@@ -162,31 +145,25 @@ class ReaderPageRenderer {
     if (!this.isCurrentGeneration(generation)) return;
     const referenceViewport = referencePage.getViewport({ scale: this.model.scale });
     const fragment = document.createDocumentFragment();
+    const widthPx = `${Math.floor(referenceViewport.width)}px`;
+    const heightPx = `${Math.floor(referenceViewport.height)}px`;
 
     for (let p = 1; p <= this.model.totalPages; p++) {
-      const pageWrapper = document.createElement('div');
-      pageWrapper.className = 'pdf-page-wrapper';
+      const pageWrapper = document.createElement("div");
+      pageWrapper.className = "pdf-page-wrapper";
       pageWrapper.id = `pdf-page-${p}`;
       pageWrapper.dataset.page = p;
-      pageWrapper.style.width = `${Math.floor(referenceViewport.width)}px`;
-      pageWrapper.style.height = `${Math.floor(referenceViewport.height)}px`;
+      pageWrapper.style.width = widthPx;
+      pageWrapper.style.height = heightPx;
       fragment.appendChild(pageWrapper);
     }
 
-    if (this.viewportEl && this.viewportEl.style) {
-      this.viewportEl.style.transform = "";
-      this.viewportEl.style.transformOrigin = "";
-      this.viewportEl.style.willChange = "";
-    }
-
+    this.clearViewportTransform();
     this.viewportEl.replaceChildren(fragment);
     this.renderedScale = this.model.scale;
 
-    if (zoomAnchor) {
-      this.applyZoomAnchor(zoomAnchor);
-    } else {
-      this.scrollFlowToPage(targetPage);
-    }
+    if (zoomAnchor) this.applyZoomAnchor(zoomAnchor);
+    else this.scrollFlowToPage(targetPage);
     this.initFlowIntersectionObserver(onPageObserved, generation);
   }
 
@@ -195,299 +172,108 @@ class ReaderPageRenderer {
     if (!pageWrapper) return;
     const bodyRect = this.bodyEl.getBoundingClientRect();
     const pageRect = pageWrapper.getBoundingClientRect();
-    const topPadding = parseFloat(getComputedStyle(this.bodyEl).paddingTop) || 0;
+    const topPadding = Number.parseFloat(getComputedStyle(this.bodyEl).paddingTop) || 0;
     this.bodyEl.scrollTop += pageRect.top - bodyRect.top - topPadding;
   }
 
   initFlowIntersectionObserver(onPageObserved, generation) {
-    if (this.intersectionObserver) this.intersectionObserver.disconnect();
-    if (this.pageObserver) this.pageObserver.disconnect();
+    this.intersectionObserver?.disconnect();
+    this.pageObserver?.disconnect();
 
-    this.intersectionObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (!entry.isIntersecting || !this.isCurrentGeneration(generation)) return;
-        const p = Number(entry.target.dataset.page);
-        if (!entry.target.dataset.renderState) {
-          entry.target.dataset.renderState = 'loading';
+    this.intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting || !this.isCurrentGeneration(generation)) continue;
+          const p = Number(entry.target.dataset.page);
+          if (entry.target.dataset.renderState) continue;
+          entry.target.dataset.renderState = "loading";
           this.populatePageWrapper(entry.target, p, null, generation)
-            .then(rendered => {
+            .then((rendered) => {
               if (this.isCurrentGeneration(generation)) {
-                entry.target.dataset.renderState = rendered ? 'rendered' : 'error';
+                entry.target.dataset.renderState = rendered ? "rendered" : "error";
               }
             })
-            .catch(error => {
+            .catch((error) => {
               if (this.isCurrentGeneration(generation)) {
-                entry.target.dataset.renderState = 'error';
+                entry.target.dataset.renderState = "error";
                 console.error(`[ReaderPageRenderer] Could not render page ${p}:`, error);
               }
             });
         }
-      });
-    }, { root: this.bodyEl, rootMargin: '300px 0px' });
+      },
+      { root: this.bodyEl, rootMargin: "300px 0px" },
+    );
 
-    this.pageObserver = new IntersectionObserver((entries) => {
-      if (!onPageObserved || !this.isCurrentGeneration(generation)) return;
-      entries.forEach(entry => {
-        const page = Number(entry.target.dataset.page);
-        if (entry.isIntersecting) this.visibleFlowPages.set(page, entry.target);
-        else this.visibleFlowPages.delete(page);
-      });
+    this.pageObserver = new IntersectionObserver(
+      (entries) => {
+        if (!onPageObserved || !this.isCurrentGeneration(generation)) return;
+        for (const entry of entries) {
+          const page = Number(entry.target.dataset.page);
+          if (entry.isIntersecting) this.visibleFlowPages.set(page, entry.target);
+          else this.visibleFlowPages.delete(page);
+        }
 
-      const rootRect = this.bodyEl.getBoundingClientRect();
-      const rootCenter = rootRect.top + rootRect.height / 2;
-      const visiblePage = [...this.visibleFlowPages.entries()]
-        .map(([page, wrapper]) => ({ page, rect: wrapper.getBoundingClientRect() }))
-        .sort((a, b) => Math.abs(a.rect.top + a.rect.height / 2 - rootCenter) - Math.abs(b.rect.top + b.rect.height / 2 - rootCenter))[0];
-      if (visiblePage) onPageObserved(visiblePage.page);
-    }, { root: this.bodyEl, rootMargin: '0px' });
+        const rootRect = this.bodyEl.getBoundingClientRect();
+        const rootCenter = rootRect.top + rootRect.height / 2;
+        const visiblePage = [...this.visibleFlowPages.entries()]
+          .map(([page, wrapper]) => ({ page, rect: wrapper.getBoundingClientRect() }))
+          .sort(
+            (a, b) =>
+              Math.abs(a.rect.top + a.rect.height / 2 - rootCenter) -
+              Math.abs(b.rect.top + b.rect.height / 2 - rootCenter),
+          )[0];
+        if (visiblePage) onPageObserved(visiblePage.page);
+      },
+      { root: this.bodyEl, rootMargin: "0px" },
+    );
 
-    this.viewportEl.querySelectorAll('.pdf-page-wrapper').forEach(wrapper => {
+    for (const wrapper of this.viewportEl.querySelectorAll(".pdf-page-wrapper")) {
       this.intersectionObserver.observe(wrapper);
       this.pageObserver.observe(wrapper);
-    });
+    }
   }
 
   async createAndPopulatePageWrapper(pageNumber, customScale = null, generation = this.renderGeneration) {
-    const pageWrapper = document.createElement('div');
+    const pageWrapper = document.createElement("div");
     await this.populatePageWrapper(pageWrapper, pageNumber, customScale, generation);
     return pageWrapper;
   }
 
-  async populatePageWrapper(pageWrapper, pageNumber, customScale = null, generation = this.renderGeneration) {
-    if (!this.isCurrentGeneration(generation) || pageNumber < 1 || pageNumber > this.model.totalPages) return false;
-    pageWrapper.className = 'pdf-page-wrapper';
-    pageWrapper.dataset.page = pageNumber;
-    pageWrapper.id = `pdf-page-${pageNumber}`;
-
-    const effectiveScale = customScale || this.model.scale;
-    const page = await this.model.pdfDoc.getPage(pageNumber);
-    if (!this.isCurrentGeneration(generation)) return false;
-    const viewport = page.getViewport({ scale: effectiveScale });
-
-    const pageWidth = Math.floor(viewport.width);
-    const pageHeight = Math.floor(viewport.height);
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    const maxCanvasPixels = 16 * 1024 * 1024;
-    const maxCanvasDimension = 8192;
-    const scaleByPixels = Math.sqrt(maxCanvasPixels / Math.max(1, pageWidth * pageHeight));
-    const scaleByDim = Math.min(maxCanvasDimension / Math.max(1, pageWidth), maxCanvasDimension / Math.max(1, pageHeight));
-    const outputScale = Math.max(0.1, Math.min(devicePixelRatio, scaleByPixels, scaleByDim));
-
-    pageWrapper.innerHTML = '';
-    pageWrapper.style.width = `${pageWidth}px`;
-    pageWrapper.style.height = `${pageHeight}px`;
-
-    // 1. PDF Pixel-Perfect Canvas Layer
-    const canvas = PDFPageView.createPageCanvas(pageNumber, pageWidth, pageHeight, outputScale);
-    pageWrapper.appendChild(canvas);
-    const renderTask = PDFPageView.renderPDFPageToCanvas(page, canvas, viewport, outputScale);
-    this.renderTasks.add(renderTask);
-    let renderSuccess = false;
-    try {
-      await renderTask.promise;
-      renderSuccess = true;
-    } catch (error) {
-      if (error?.name === 'RenderingCancelledException') return false;
-      console.error(`[ReaderPageRenderer] Diagnostic render failure: Book ${this.model.bookId || 'unknown'}, Page ${pageNumber}, Cause: ${error?.name || 'Error'} (${error?.message || 'render failed'})`);
-    } finally {
-      this.renderTasks.delete(renderTask);
-    }
-    if (!this.isCurrentGeneration(generation)) return false;
-
-    if (!renderSuccess) {
-      this.renderPageErrorState(pageWrapper, pageNumber, effectiveScale, generation);
-      return false;
-    }
-
-    // 2. Exact Word Text Layer
-    await this.renderTextLayer(pageWrapper, page, pageNumber, pageWidth, pageHeight, viewport, effectiveScale, generation);
-    if (!this.isCurrentGeneration(generation)) return false;
-
-    await this.renderInternalLinks(pageWrapper, page, viewport, pageNumber, generation);
-    if (!this.isCurrentGeneration(generation)) return false;
-
-    // 4. Highlight Layer
-    const highlightLayer = HighlightOverlayView.createHighlightLayerContainer();
-    pageWrapper.appendChild(highlightLayer);
-    if (this.annotationCoordinator) {
-      this.annotationCoordinator.renderPageHighlights(highlightLayer, pageNumber);
-    }
-
-    // 5. Freehand Ink & Drawing Canvas Layer
-    const drawCanvas = DrawingCanvasView.createDrawingCanvas(pageNumber, pageWidth, pageHeight, outputScale);
-    pageWrapper.appendChild(drawCanvas);
-    if (this.drawingCoordinator) {
-      await this.drawingCoordinator.setupDrawingLayer(drawCanvas, pageWrapper, pageNumber, effectiveScale, outputScale);
-    }
-    return this.isCurrentGeneration(generation);
+  computeOutputScale(pageWidth, pageHeight) {
+    return this.layerBuilder.computeOutputScale(pageWidth, pageHeight);
   }
 
-  async renderInternalLinks(pageWrapper, page, viewport, pageNumber, generation) {
-    if (typeof page.getAnnotations !== 'function') {
-      console.error(`[ReaderPageRenderer] PDF.js annotations are unavailable for page ${pageNumber}.`);
-      return;
-    }
-
-    let annotations;
-    try {
-      annotations = await page.getAnnotations({ intent: 'display' });
-    } catch (error) {
-      console.error(`[ReaderPageRenderer] Could not read PDF links for page ${pageNumber}:`, error);
-      return;
-    }
-    if (!Array.isArray(annotations)) {
-      console.error(`[ReaderPageRenderer] Invalid PDF annotations response for page ${pageNumber}.`);
-      return;
-    }
-    if (!this.isCurrentGeneration(generation)) return;
-
-    const internalLinks = annotations.filter(annotation =>
-      annotation?.subtype === 'Link' &&
-      !annotation.url &&
-      !annotation.unsafeUrl &&
-      (!annotation.action || annotation.action === 'GoTo') &&
-      Array.isArray(annotation.rect) &&
-      annotation.rect.length === 4 &&
-      annotation.rect.every(Number.isFinite) &&
-      annotation.dest != null
-    );
-    const links = await Promise.all(internalLinks.map(async annotation => {
-      try {
-        const targetPage = await this.resolveLinkDestination(annotation.dest);
-        if (!targetPage) {
-          console.warn(`[ReaderPageRenderer] Ignoring an unresolved internal PDF link on page ${pageNumber}.`);
-          return null;
-        }
-        return {
-          targetPage,
-          rect: annotation.rect,
-          label: String(annotation.title || annotation.contents || `Go to page ${targetPage}`)
-        };
-      } catch (error) {
-        console.warn(`[ReaderPageRenderer] Could not resolve an internal PDF link on page ${pageNumber}:`, error);
-        return null;
-      }
-    }));
-    if (!this.isCurrentGeneration(generation)) return;
-
-    const layer = new LinkOverlayView(
-      pageWrapper,
-      links.filter(Boolean),
-      viewport,
-      this.model,
-      this.drawingCoordinator,
-      this.linkCallbacks.onInternalLinkNavigate
-    ).render();
-    if (layer) pageWrapper.appendChild(layer);
+  populatePageWrapper(pageWrapper, pageNumber, customScale = null, generation = this.renderGeneration) {
+    return this.layerBuilder.populatePageWrapper(pageWrapper, pageNumber, customScale, generation);
   }
 
-  async resolveLinkDestination(destination) {
-    const pdfDoc = this.model.pdfDoc;
-    const pageCount = this.model.totalPages || pdfDoc.numPages;
-    if (!Number.isInteger(pageCount) || pageCount < 1) return null;
+  isValidInternalLinkAnnotation(annotation) {
+    return this.layerBuilder.isValidInternalLinkAnnotation(annotation);
+  }
 
-    const knownPage = this.model.navigationMap?.resolveDestination(destination);
-    if (Number.isInteger(knownPage) && knownPage > 0 && knownPage <= pageCount) return knownPage;
+  renderInternalLinks(pageWrapper, page, viewport, pageNumber, generation) {
+    return this.layerBuilder.renderInternalLinks(pageWrapper, page, viewport, pageNumber, generation);
+  }
 
-    const resolved = typeof destination === 'string'
-      ? (typeof pdfDoc.getDestination === 'function' ? await pdfDoc.getDestination(destination) : null)
-      : destination;
-    if (!Array.isArray(resolved) || resolved.length === 0) return null;
-
-    const pageReference = resolved[0];
-    const pageIndex = Number.isInteger(pageReference)
-      ? pageReference
-      : (typeof pdfDoc.getPageIndex === 'function' ? await pdfDoc.getPageIndex(pageReference) : null);
-    if (!Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= pageCount) return null;
-    return pageIndex + 1;
+  resolveLinkDestination(destination) {
+    return this.layerBuilder.resolveLinkDestination(destination);
   }
 
   renderPageErrorState(pageWrapper, pageNumber, effectiveScale, generation) {
-    pageWrapper.innerHTML = '';
-    const errContainer = document.createElement('div');
-    errContainer.className = 'pdf-page-render-error';
-    errContainer.style.display = 'flex';
-    errContainer.style.flexDirection = 'column';
-    errContainer.style.alignItems = 'center';
-    errContainer.style.justifyContent = 'center';
-    errContainer.style.padding = '24px';
-    errContainer.style.textAlign = 'center';
-    errContainer.style.color = 'var(--text-secondary, #64748b)';
-    errContainer.style.width = '100%';
-    errContainer.style.height = '100%';
-    errContainer.style.minHeight = '280px';
-    errContainer.style.background = 'var(--bg-secondary, rgba(0, 0, 0, 0.03))';
-    errContainer.style.borderRadius = '8px';
-
-    const iconWrap = document.createElement('div');
-    iconWrap.style.marginBottom = '8px';
-    iconWrap.innerHTML = '<svg class="ui-icon" aria-hidden="true" focusable="false" style="width:32px;height:32px;"><use href="./icons.svg#warning"></use></svg>';
-
-    const msg = document.createElement('p');
-    msg.textContent = `No se pudo dibujar la página ${pageNumber}.`;
-    msg.style.margin = '0 0 12px 0';
-    msg.style.fontWeight = '500';
-
-    const retryBtn = document.createElement('button');
-    retryBtn.type = 'button';
-    retryBtn.className = 'btn btn-secondary retry-page-render-btn';
-    retryBtn.textContent = 'Reintentar página';
-    retryBtn.style.cursor = 'pointer';
-    retryBtn.onclick = (e) => {
-      e.stopPropagation();
-      delete pageWrapper.dataset.renderState;
-      this.populatePageWrapper(pageWrapper, pageNumber, effectiveScale, this.renderGeneration);
-    };
-
-    errContainer.appendChild(iconWrap);
-    errContainer.appendChild(msg);
-    errContainer.appendChild(retryBtn);
-    pageWrapper.appendChild(errContainer);
+    return this.layerBuilder.renderPageErrorState(pageWrapper, pageNumber, effectiveScale, generation);
   }
 
-  async renderTextLayer(pageWrapper, page, pageNumber, width, height, viewport, effectiveScale, generation) {
-    const textLayerDiv = TextLayerView.createTextLayerContainer(width, height, viewport.scale);
-    pageWrapper.style.setProperty('--scale-factor', viewport.scale);
-    pageWrapper.appendChild(textLayerDiv);
-
-    let layoutData = null;
-    try {
-      layoutData = await api.getPageLayout(this.model.bookId, pageNumber, this.model.totalPages);
-    } catch (e) {
-      layoutData = null;
-    }
-
-    if (!this.isCurrentGeneration(generation)) return;
-    if (layoutData && layoutData.words && layoutData.words.length > 0) {
-      const lines = (layoutData.lines && layoutData.lines.length > 0 && Array.isArray(layoutData.lines[0].words))
-        ? layoutData.lines
-        : TextLayerView.groupWordsIntoLines(layoutData.words);
-      TextLayerView.renderPreciseLines(textLayerDiv, lines, effectiveScale);
-    } else {
-      const textContent = await page.getTextContent();
-      if (pdfjsLib.TextLayer) {
-        const textLayer = new pdfjsLib.TextLayer({
-          textContentSource: textContent,
-          container: textLayerDiv,
-          viewport: viewport
-        });
-        await textLayer.render();
-      }
-    }
-
-    if (this.isCurrentGeneration(generation) &&
-        typeof this.linkCallbacks.onTextReferenceNavigate === 'function') {
-      try {
-        TextLayerView.decorateCrossReferences(
-          textLayerDiv,
-          this.model.navigationMap,
-          pageNumber,
-          this.linkCallbacks.onTextReferenceNavigate
-        );
-      } catch (error) {
-        console.error(`[ReaderPageRenderer] Could not link text references on page ${pageNumber}:`, error);
-      }
-    }
+  renderTextLayer(pageWrapper, page, pageNumber, width, height, viewport, effectiveScale, generation) {
+    return this.layerBuilder.renderTextLayer(
+      pageWrapper,
+      page,
+      pageNumber,
+      width,
+      height,
+      viewport,
+      effectiveScale,
+      generation,
+    );
   }
 }
 

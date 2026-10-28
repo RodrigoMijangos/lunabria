@@ -99,6 +99,9 @@ test('reader export options distinguish one page, inclusive ranges, and exact se
     window: {},
     document: { getElementById: () => null }
   });
+  vm.runInContext(read('js/viewmodels/reader/ReaderExportSectionPicker.js'), context);
+  vm.runInContext(read('js/viewmodels/reader/ReaderExportController.js'), context);
+  vm.runInContext(read('js/viewmodels/reader/ReaderKeyboardWheelController.js'), context);
   vm.runInContext(read('js/viewmodels/reader/ReaderToolbarManager.js'), context);
   const manager = new context.window.ReaderToolbarManager(
     { bookId: 7, currentPage: 2, totalPages: 8, selectedAnnotationIds: new Set(['note-a', 'note-c']) },
@@ -166,6 +169,9 @@ test('annotation selection checkboxes update the exact-ID count and enable selec
     window: { addEventListener() {} },
     document: { getElementById: id => ids.get(id) || null }
   });
+  vm.runInContext(read('js/viewmodels/reader/ReaderExportSectionPicker.js'), context);
+  vm.runInContext(read('js/viewmodels/reader/ReaderExportController.js'), context);
+  vm.runInContext(read('js/viewmodels/reader/ReaderKeyboardWheelController.js'), context);
   vm.runInContext(read('js/viewmodels/reader/ReaderToolbarManager.js'), context);
   const model = {
     currentPage: 1,

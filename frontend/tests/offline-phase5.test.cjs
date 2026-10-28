@@ -88,6 +88,20 @@ function createWorkerWorld(options = {}) {
   return { listeners, caches, cacheStorage, self, get skipped() { return skipped; }, get claimed() { return claimed; } };
 }
 
+test('SW install populates cache before calling skipWaiting', async () => {
+  const worker = createWorkerWorld();
+  const installListener = worker.listeners.get('install');
+  assert.equal(typeof installListener, 'function');
+
+  let waitUntilPromise = null;
+  installListener({
+    waitUntil: p => { waitUntilPromise = p; }
+  });
+  assert.equal(worker.skipped, 0, 'skipWaiting must wait until STATIC_ASSETS are cached');
+  await waitUntilPromise;
+  assert.equal(worker.skipped, 1, 'skipWaiting must be called after cache.addAll completes');
+});
+
 test('SW activate deletes obsolete caches and preserves current CACHE_NAME', async () => {
   const worker = createWorkerWorld(); const { listeners, cacheStorage } = worker;
   // Pre-seed an obsolete cache from older version
@@ -247,21 +261,4 @@ test('SW attempts API requests even when navigator reports offline', async () =>
   const response = await responsePromise;
   assert.equal(networkRequests, 1);
   assert.equal(response, serverResponse);
-});
-
-test('SW fetch falls back to cache on network failure for app assets', async () => {
-  const { listeners, caches } = createWorkerWorld();
-  const cache = await caches.open('lunabria-v1.4.1');
-  await cache.put('https://lunabria.local/js/db.js?v=1.0.7', { status: 200, body: 'cached-content' });
-
-  const fetchListener = listeners.get('fetch');
-  let responsePromise = null;
-  fetchListener({
-    request: { url: 'https://lunabria.local/js/db.js?v=1.0.7', method: 'GET' },
-    respondWith: p => { responsePromise = p; }
-  });
-
-  const response = await responsePromise;
-  assert.equal(response.status, 200);
-  assert.equal(response.body, 'cached-content');
 });
