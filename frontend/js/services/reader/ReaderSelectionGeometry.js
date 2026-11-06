@@ -16,6 +16,7 @@ class ReaderSelectionGeometry {
     const vMatch = vOverlap > 0 || (midY >= sr.top - 6 && midY <= sr.bottom + 6);
     if (!vMatch) return null;
     const hOverlap = Math.min(cr.right, sr.right) - Math.max(cr.left, sr.left);
+    if (hOverlap <= 0) return null;
     return vOverlap * 10 + Math.max(0, hOverlap);
   }
 
@@ -32,7 +33,21 @@ class ReaderSelectionGeometry {
       const x0 = Math.max(lineX0, Math.min(lineX1, selLeft));
       const x1 = Math.min(lineX1, Math.max(lineX0, selRight));
 
-      const vBounds = ReaderSelectionGeometry.calculateLineVerticalBounds(lineY0, lineY1);
+      let selectionY0 = lineY0;
+      let selectionY1 = lineY1;
+      const lineHeight = lineY1 - lineY0;
+      const isVertical = lineData.isVertical === "true" || lineData.is_vertical === true;
+      if (isVertical || lineHeight > 50) {
+        const selectedTop = (cr.top - pageRect.top) / currentScale;
+        const selectedBottom = (cr.bottom - pageRect.top) / currentScale;
+        const clippedTop = Math.max(lineY0, selectedTop);
+        const clippedBottom = Math.min(lineY1, selectedBottom);
+        if (clippedBottom > clippedTop) {
+          selectionY0 = clippedTop;
+          selectionY1 = clippedBottom;
+        }
+      }
+      const vBounds = ReaderSelectionGeometry.calculateLineVerticalBounds(selectionY0, selectionY1);
 
       return {
         x0: Math.round(x0 * 100) / 100,

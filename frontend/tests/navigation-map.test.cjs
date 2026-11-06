@@ -69,6 +69,36 @@ function createReader(context, offline, pdfDoc) {
   return { reader, rendered };
 }
 
+test("ReaderDocumentLifecycle configures PDF.js for on-demand range requests", async () => {
+  const { context } = createContext();
+  let documentOptions;
+  const task = { promise: Promise.resolve({ numPages: 1 }) };
+  const reader = {
+    openSequence: 1,
+    loadingTask: null,
+  };
+  Object.assign(context, {
+    pdfjsLib: {
+      getDocument(options) {
+        documentOptions = options;
+        return task;
+      },
+    },
+    localDB: { isBookOfflineComplete: async () => false },
+  });
+
+  await new context.window.ReaderDocumentLifecycle(reader).loadPdfDocument(7, 1);
+
+  assert.deepEqual(plain(documentOptions), {
+    url: "/api/books/7/pdf",
+    disableAutoFetch: true,
+    disableStream: true,
+    disableRange: false,
+    rangeChunkSize: 131072,
+  });
+  assert.equal(reader.loadingTask, task);
+});
+
 test("ReaderNavigationMap initializes, resolves destinations and resets with ReaderModel", () => {
   const { context } = createContext();
   const model = new context.window.ReaderModel();
@@ -101,6 +131,30 @@ test("ReaderNavigationMap initializes, resolves destinations and resets with Rea
   assert.equal(navigationMap.hasJumpHistory(), false);
 });
 
+test("ReaderDocumentLifecycle.open renders while outline destinations are still loading", async () => {
+  const { context } = createContext();
+  let resolveDestination;
+  const destinationPage = new Promise((resolve) => { resolveDestination = resolve; });
+  const pdfDoc = {
+    numPages: 2,
+    getOutline: async () => [{ title: "Far page", dest: "far", items: [] }],
+    getDestination: async () => [{ name: "far" }, "XYZ", null, null],
+    getPageIndex: () => destinationPage,
+  };
+  const { reader, rendered } = createReader(context, false, pdfDoc);
+  const lifecycle = new context.window.ReaderDocumentLifecycle(reader);
+
+  await lifecycle.open(10, 1);
+  assert.deepEqual(rendered, [1], "the first page should render without waiting for outline lookups");
+  assert.deepEqual(plain(reader.model.navigationMap.toc), []);
+
+  resolveDestination(1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(plain(reader.model.navigationMap.toc), [
+    { title: "Far page", page: 2, level: 0, children: [] },
+  ]);
+});
+
 test("ReaderDocumentLifecycle.open extracts nested outlines online and offline and tolerates broken outlines", async () => {
   for (const offline of [false, true]) {
     const { context, warnings } = createContext();
@@ -125,6 +179,7 @@ test("ReaderDocumentLifecycle.open extracts nested outlines online and offline a
     const lifecycle = new context.window.ReaderDocumentLifecycle(reader);
 
     await lifecycle.open(11, 1);
+    await new Promise((resolve) => setImmediate(resolve));
 
     assert.deepEqual(plain(reader.model.navigationMap.toc), [
       {
@@ -149,6 +204,7 @@ test("ReaderDocumentLifecycle.open extracts nested outlines online and offline a
   };
   const { reader, rendered } = createReader(context, false, pdfDoc);
   await new context.window.ReaderDocumentLifecycle(reader).open(12, 1);
+  await new Promise((resolve) => setImmediate(resolve));
 
   assert.deepEqual(plain(reader.model.navigationMap.toc), []);
   assert.deepEqual(rendered, [1]);

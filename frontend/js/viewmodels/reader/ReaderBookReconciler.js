@@ -165,9 +165,16 @@ class ReaderBookReconciler {
       })
       .catch(() => {});
 
-    api
-      .getAnnotations?.(bookId)
-      .then(async (serverAnnots) => {
+    const syncAnnotations = async () => {
+      try {
+        if (typeof localDB !== "undefined" && typeof localDB.getPendingOutboxOps === "function") {
+          const pendingOps = (await localDB.getPendingOutboxOps().catch(() => [])) || [];
+          const hasPendingAnnots = pendingOps.some(
+            (op) => Number(op.bookId) === Number(bookId) && op.type === "annotation"
+          );
+          if (hasPendingAnnots) return;
+        }
+        const serverAnnots = await api.getAnnotations?.(bookId);
         if (sequence !== reader.openSequence || !Array.isArray(serverAnnots) || !serverAnnots.length) {
           return;
         }
@@ -177,8 +184,9 @@ class ReaderBookReconciler {
           await localDB.saveCachedAnnotations(bookId, serverAnnots).catch(() => {});
         }
         reader.annotations.refreshPageHighlights?.(reader.model.currentPage);
-      })
-      .catch(() => {});
+      } catch (_) {}
+    };
+    syncAnnotations();
   }
 
   updateBookInfo(bookId, sequence) {

@@ -150,7 +150,33 @@ test('SW fetch handles /api/ by returning 503 JSON response when offline', async
   assert.equal(data.offline, true);
 });
 
-test('SW allows slower API responses while keeping longer transfer timeout', async () => {
+test('SW lets PDF range requests bypass API timeouts and synthetic offline responses', async () => {
+  const delays = [];
+  let networkRequests = 0;
+  const { listeners } = createWorkerWorld({
+    fetch: async () => {
+      networkRequests++;
+      return { status: 206 };
+    },
+    setTimeout: (_callback, delay) => {
+      delays.push(delay);
+      return delays.length;
+    }
+  });
+
+  for (const request of [
+    { url: 'https://lunabria.local/api/books/42/pdf', method: 'GET' },
+    { url: 'https://lunabria.local/api/books/42/pdf', method: 'GET', headers: { get: () => 'bytes=0-131071' } }
+  ]) {
+    let intercepted = false;
+    listeners.get('fetch')({ request, respondWith: () => { intercepted = true; } });
+    assert.equal(intercepted, false);
+  }
+  assert.deepEqual(delays, []);
+  assert.equal(networkRequests, 0, 'the service worker should leave native PDF fetches untouched');
+});
+
+test('SW keeps standard API requests on their existing timeout', async () => {
   const delays = [];
   const response = { status: 200 };
   const { listeners } = createWorkerWorld({
@@ -162,10 +188,7 @@ test('SW allows slower API responses while keeping longer transfer timeout', asy
     clearTimeout: () => {}
   });
 
-  for (const url of [
-    'https://lunabria.local/api/books',
-    'https://lunabria.local/api/books/42/pdf'
-  ]) {
+  for (const url of ['https://lunabria.local/api/books']) {
     let responsePromise = null;
     listeners.get('fetch')({
       request: { url, method: 'GET' },
@@ -174,7 +197,7 @@ test('SW allows slower API responses while keeping longer transfer timeout', asy
     assert.equal(await responsePromise, response);
   }
 
-  assert.deepEqual(delays, [10000, 60000]);
+  assert.deepEqual(delays, [10000]);
 });
 
 test('SW does not apply an API timeout to book upload requests and leaves transfer native', async () => {

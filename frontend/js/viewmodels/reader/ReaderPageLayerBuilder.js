@@ -37,7 +37,6 @@ class ReaderPageLayerBuilder {
     pageWrapper.style.height = `${pageHeight}px`;
 
     const canvas = PDFPageView.createPageCanvas(pageNumber, pageWidth, pageHeight, outputScale);
-    pageWrapper.appendChild(canvas);
     const renderTask = PDFPageView.renderPDFPageToCanvas(page, canvas, viewport, outputScale);
     renderer.renderTasks.add(renderTask);
     let renderSuccess = false;
@@ -59,6 +58,7 @@ class ReaderPageLayerBuilder {
       return false;
     }
 
+    pageWrapper.appendChild(canvas);
     await renderer.renderTextLayer(
       pageWrapper,
       page,
@@ -234,9 +234,9 @@ class ReaderPageLayerBuilder {
     if (!renderer.isCurrentGeneration(generation)) return;
     if (layoutData?.words?.length > 0) {
       const lines =
-        layoutData.lines?.length > 0 && Array.isArray(layoutData.lines[0].words)
-          ? layoutData.lines
-          : TextLayerView.groupWordsIntoLines(layoutData.words);
+        typeof TextLayerView.groupWordsIntoLines === "function"
+          ? TextLayerView.groupWordsIntoLines(layoutData.words)
+          : layoutData.lines || [];
       TextLayerView.renderPreciseLines(textLayerDiv, lines, effectiveScale);
     } else {
       const textContent = await page.getTextContent();

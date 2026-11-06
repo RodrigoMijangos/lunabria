@@ -131,7 +131,7 @@ test("ReaderDocumentLifecycle.loadPdfDocument uses cached blob first when isBook
 
   const fakePdfjsLib = {
     getDocument: (arg) => {
-      trace.push(["pdfjsLib.getDocument", typeof arg === "string" ? arg : "data-buffer"]);
+      trace.push(["pdfjsLib.getDocument", typeof arg === "string" ? arg : arg.data ? "data-buffer" : arg.url]);
       return { promise: Promise.resolve({ numPages: 10 }) };
     },
   };
@@ -175,6 +175,64 @@ test("ReaderDocumentLifecycle.loadPdfDocument uses cached blob first when isBook
     ["isBookOfflineComplete", 99],
     ["pdfjsLib.getDocument", "/api/books/99/pdf"],
   ]);
+});
+
+test("ReaderPageRenderer keeps a page canvas detached until PDF.js finishes painting", async () => {
+  const { Element, document } = createDOM();
+  let finishRendering;
+  let notifyRenderStarted;
+  const renderStarted = new Promise((resolve) => { notifyRenderStarted = resolve; });
+  const pageWrapper = new Element("div");
+  pageWrapper.style.setProperty = () => {};
+  const canvas = new Element("canvas");
+  const context = vm.createContext({
+    document,
+    window: { devicePixelRatio: 1 },
+    PDFPageView: {
+      createPageCanvas: () => canvas,
+      renderPDFPageToCanvas: () => {
+        notifyRenderStarted();
+        return { promise: new Promise((resolve) => { finishRendering = resolve; }) };
+      },
+    },
+    TextLayerView: {
+      createTextLayerContainer: () => new Element("div"),
+      renderPreciseLines() {},
+    },
+    LinkOverlayView: class { render() { return null; } },
+    HighlightOverlayView: { createHighlightLayerContainer: () => new Element("div") },
+    DrawingCanvasView: { createDrawingCanvas: () => new Element("canvas") },
+    api: { getPageLayout: async () => ({ words: [{}], lines: [{ words: [] }] }) },
+    console: { error() {}, warn() {} },
+  });
+  vm.runInContext(source("viewmodels/reader/ReaderPageLayerBuilder.js"), context);
+  vm.runInContext(source("viewmodels/reader/ReaderPageRenderer.js"), context);
+  const ReaderPageRenderer = vm.runInContext("ReaderPageRenderer", context);
+  const renderer = new ReaderPageRenderer(
+    {
+      bookId: 42,
+      totalPages: 1,
+      scale: 1,
+      pdfDoc: {
+        getPage: async () => ({
+          getViewport: () => ({ width: 600, height: 800, scale: 1 }),
+          getAnnotations: async () => [],
+        }),
+      },
+    },
+    new Element("div"),
+    new Element("div"),
+    null,
+    null,
+  );
+
+  const rendering = renderer.populatePageWrapper(pageWrapper, 1);
+  await renderStarted;
+  assert.deepEqual(pageWrapper.children, [], "an unpainted canvas should not be visible in the page wrapper");
+
+  finishRendering();
+  assert.equal(await rendering, true);
+  assert.equal(pageWrapper.children.includes(canvas), true);
 });
 
 test("ReaderPageRenderer renders error state with retry button on canvas render failure and logs diagnostics", async () => {

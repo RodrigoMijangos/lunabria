@@ -72,17 +72,49 @@ class ReaderNativeSelectionLoupeController {
   bindEvents() {
     const targetContainer = this.bodyEl || this.viewportEl;
 
-    targetContainer.addEventListener("pointerdown", (event) => this.startSelection(event), true);
-    targetContainer.addEventListener("mousedown", (event) => this.handleMouseDown(event), true);
+    if (typeof window.PointerEvent === "function") {
+      targetContainer.addEventListener("pointerdown", (event) => this.startSelection(event), true);
+      window.addEventListener("pointermove", (event) => this.updateSelection(event), true);
+      window.addEventListener("pointerup", (event) => this.endSelection(event), true);
+      window.addEventListener("pointercancel", (event) => this.endSelection(event), true);
+    } else {
+      targetContainer.addEventListener("mousedown", (event) => this.handleMouseDown(event), true);
+      window.addEventListener("mousemove", (event) => this.updateSelection(event), true);
+      window.addEventListener("mouseup", (event) => this.endSelection(event), true);
+    }
     targetContainer.addEventListener("click", (event) => this.handleDoubleClick(event), true);
 
-    window.addEventListener("pointermove", (event) => this.updateSelection(event), true);
-    window.addEventListener("mousemove", (event) => this.updateSelection(event), true);
-    window.addEventListener("pointerup", (event) => this.endSelection(event), true);
-    window.addEventListener("mouseup", (event) => this.endSelection(event), true);
-    window.addEventListener("pointercancel", (event) => this.endSelection(event), true);
     window.addEventListener("blur", () => this.cancelSelection());
     targetContainer.addEventListener("dragstart", (event) => event.preventDefault(), true);
+  }
+
+  beginSelection(event, targetInfo, pageWrapper) {
+    this.anchor = targetInfo;
+    this.pageWrapper = pageWrapper;
+    this.clickDetail = event.detail || 1;
+    this.anchorWord = this.getWordBoundaries(targetInfo);
+    this.startX = event.clientX;
+    this.startY = event.clientY;
+    this.isMouseDown = true;
+    this.isSelecting = false;
+    this.didDrag = false;
+    this.completedSelectionDrag = false;
+
+    event.preventDefault?.();
+    const selection = window.getSelection();
+    if (!selection) return;
+    try {
+      if (this.clickDetail === 2 && this.anchorWord) {
+        selection.setBaseAndExtent(
+          this.anchorWord.startNode,
+          this.anchorWord.startOffset,
+          this.anchorWord.endNode,
+          this.anchorWord.endOffset,
+        );
+      } else if (this.clickDetail === 1) {
+        selection.collapse(targetInfo.node, targetInfo.offset);
+      }
+    } catch (_) {}
   }
 
   handleMouseDown(event) {
@@ -102,32 +134,7 @@ class ReaderNativeSelectionLoupeController {
       return;
     }
 
-    this.anchor = targetInfo;
-    this.pageWrapper = pageWrapper;
-    this.clickDetail = event.detail || 1;
-    this.anchorWord = this.getWordBoundaries(targetInfo);
-    this.startX = event.clientX;
-    this.startY = event.clientY;
-    this.isMouseDown = true;
-    this.isSelecting = false;
-    this.didDrag = false;
-    this.completedSelectionDrag = false;
-
-    event.preventDefault();
-    const selection = window.getSelection();
-    if (!selection) return;
-    try {
-      if (this.clickDetail === 2 && this.anchorWord) {
-        selection.setBaseAndExtent(
-          this.anchorWord.startNode,
-          this.anchorWord.startOffset,
-          this.anchorWord.endNode,
-          this.anchorWord.endOffset,
-        );
-      } else if (this.clickDetail === 1) {
-        selection.collapse(targetInfo.node, targetInfo.offset);
-      }
-    } catch (_) {}
+    this.beginSelection(event, targetInfo, pageWrapper);
   }
 
   handleDoubleClick(event) {
@@ -153,12 +160,34 @@ class ReaderNativeSelectionLoupeController {
     } catch (_) {}
   }
 
-  findTextTargetWithinGap(clientX, clientY, textLayer, gapX = Infinity, gapY = Infinity, isDragging = false) {
-    return ReaderTextTargetGeometry.findTextTargetWithinGap(clientX, clientY, textLayer, gapX, gapY, isDragging);
+  findTextTargetWithinGap(
+    clientX,
+    clientY,
+    textLayer,
+    gapX = Infinity,
+    gapY = Infinity,
+    isDragging = false,
+    anchor = null,
+  ) {
+    return ReaderTextTargetGeometry.findTextTargetWithinGap(
+      clientX,
+      clientY,
+      textLayer,
+      gapX,
+      gapY,
+      isDragging,
+      anchor,
+    );
   }
 
   startSelection(event) {
-    if (this.model.isDrawMode || event.pointerType === "pen" || event.isPrimary === false || event.button !== 0) {
+    if (
+      this.model.isDrawMode ||
+      event.pointerType === "touch" ||
+      event.pointerType === "pen" ||
+      event.isPrimary === false ||
+      event.button !== 0
+    ) {
       return;
     }
     this.completedSelectionDrag = false;
@@ -173,19 +202,13 @@ class ReaderNativeSelectionLoupeController {
       this.directWordTarget(event.target, event.clientX, event.clientY) ||
       this.findTextTargetWithinGap(event.clientX, event.clientY, textLayer, 80, 40, false);
     if (!targetInfo) {
+      event.preventDefault?.();
       this.cancelSelection();
       return;
     }
 
     this.pointerId = event.pointerId;
-    this.pageWrapper = pageWrapper;
-    this.anchor = targetInfo;
-    this.clickDetail = event.detail || 1;
-    this.anchorWord = this.getWordBoundaries(targetInfo);
-    this.startX = event.clientX;
-    this.startY = event.clientY;
-    this.isMouseDown = true;
-    this.isSelecting = false;
+    this.beginSelection(event, targetInfo, pageWrapper);
   }
 
   isPointerOverText(clientX, clientY, _textElement) {
@@ -196,6 +219,7 @@ class ReaderNativeSelectionLoupeController {
   }
 
   updateSelection(event) {
+    if (event.pointerType === "touch") return;
     if (this.model.isDrawMode || !this.pageWrapper?.isConnected) {
       this.cancelSelection();
       return;
@@ -210,7 +234,15 @@ class ReaderNativeSelectionLoupeController {
     const textLayer = activeWrapper?.querySelector(".textLayer") || this.pageWrapper.querySelector(".textLayer");
     if (!textLayer) return;
 
-    const focus = this.findTextTargetWithinGap(event.clientX, event.clientY, textLayer, Infinity, Infinity, true);
+    const focus = this.findTextTargetWithinGap(
+      event.clientX,
+      event.clientY,
+      textLayer,
+      Infinity,
+      Infinity,
+      true,
+      this.anchor,
+    );
     if (!focus?.node) return;
 
     this.applySelectionExtent(focus);
@@ -264,6 +296,7 @@ class ReaderNativeSelectionLoupeController {
   }
 
   endSelection(_event) {
+    if (_event?.pointerType === "touch") return;
     this.completedSelectionDrag = this.completedSelectionDrag || this.didDrag;
     this.didDrag = false;
     this.isMouseDown = false;

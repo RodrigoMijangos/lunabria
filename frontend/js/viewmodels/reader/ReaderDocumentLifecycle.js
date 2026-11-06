@@ -73,7 +73,6 @@ class ReaderDocumentLifecycle {
       }
       reader.loadingTask = null;
       reader.model.setBook(bookId, pdfDoc, pdfDoc.numPages);
-      await this.loadNavigationMap(pdfDoc, sequence);
       if (sequence !== reader.openSequence) return;
 
       const offlineStatus = await this.resolveOfflineStatus(bookId, pdfDoc.numPages, isOfflineComplete);
@@ -112,6 +111,8 @@ class ReaderDocumentLifecycle {
       await reader.renderCurrentViewMode(initialPage);
       if (sequence !== reader.openSequence) return;
       reader.mobile?.onBookOpened();
+      // Outline destinations can trigger distant range requests; start them after the first page renders.
+      void this.loadNavigationMap(pdfDoc, sequence);
 
       if (isOfflineComplete) {
         this.reconcileOfflineCompleteBookInBackground(bookId, sequence, initialPage);
@@ -231,7 +232,13 @@ class ReaderDocumentLifecycle {
       }
     }
 
-    let task = pdfjsLib.getDocument(`/api/books/${bookId}/pdf`);
+    let task = pdfjsLib.getDocument({
+      url: `/api/books/${bookId}/pdf`,
+      disableAutoFetch: true,
+      disableStream: true,
+      disableRange: false,
+      rangeChunkSize: 131072,
+    });
     reader.loadingTask = task;
     try {
       return await task.promise;

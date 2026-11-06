@@ -119,6 +119,16 @@ class ReaderAnnotationViewModel {
 
   async refreshAnnotations() {
     try {
+      if (typeof localDB !== "undefined" && typeof localDB.getPendingOutboxOps === "function") {
+        const pendingOps = (await localDB.getPendingOutboxOps().catch(() => [])) || [];
+        const hasPendingAnnots = pendingOps.some(
+          (op) => Number(op.bookId) === Number(this.model.bookId) && op.type === "annotation",
+        );
+        if (hasPendingAnnots) {
+          return this.model.annotations || [];
+        }
+      }
+
       const annots = await api.getAnnotations(this.model.bookId);
       if (!Array.isArray(annots)) throw new Error("Invalid annotations response");
       this.model.setAnnotations(annots);
@@ -226,9 +236,29 @@ class ReaderAnnotationViewModel {
     this.refreshPageHighlights(targetPage);
   }
 
-  async deleteAnnotationItem(annot) {
+  async deleteAnnotationItem(annotOrId) {
+    const annot =
+      typeof annotOrId === "object" && annotOrId !== null
+        ? annotOrId
+        : (this.model.annotations || []).find((a) => String(a.id) === String(annotOrId)) || { id: annotOrId };
+
+    if (!annot || !annot.id) return;
+
+    if (this.highlightActionMenu) this.highlightActionMenu.style.display = "none";
+    if (this.model.activeHighlight && String(this.model.activeHighlight.id) === String(annot.id)) {
+      this.model.activeHighlight = null;
+    }
+
     this.model.setAnnotations((this.model.annotations || []).filter((a) => String(a.id) !== String(annot.id)));
-    this._persistCachedAnnotations(this.model.annotations).catch(() => {});
+    if (annot.page !== undefined && annot.page !== null) {
+      this.refreshPageHighlights(annot.page);
+    }
+    this.renderDrawerAnnotations();
+
+    try {
+      await this._persistCachedAnnotations(this.model.annotations);
+    } catch (_) {}
+
     await this._enqueueAnnotationOp({
       id: `op_del_${annot.id}`,
       type: "annotation",
@@ -236,8 +266,7 @@ class ReaderAnnotationViewModel {
       bookId: this.model.bookId,
       entityId: annot.id,
     });
-    this.renderDrawerAnnotations();
-    this.refreshPageHighlights(annot.page);
+
     try {
       await api.deleteAnnotation(annot.id);
       await this._removeAnnotationOp(`op_del_${annot.id}`);
@@ -245,7 +274,9 @@ class ReaderAnnotationViewModel {
     } catch (delErr) {
       console.warn("[ReaderAnnotationViewModel] Delete failed, queued in outbox:", delErr);
     }
-    this.refreshPageHighlights(annot.page);
+    if (annot.page !== undefined && annot.page !== null) {
+      this.refreshPageHighlights(annot.page);
+    }
   }
 
   detectAndHighlightWordAtPoint(clientX, clientY, drawCanvas) {

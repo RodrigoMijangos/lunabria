@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from app.services.pdf_linearizer import linearize_pdf
+
 
 class SourceConversionError(RuntimeError):
     """Raised when Calibre cannot turn a particular source file into a PDF."""
@@ -56,6 +58,7 @@ def convert_to_pdf(
                 raise SourceConversionError(
                     f"Calibre did not generate a valid PDF when converting {source_format}."
                 )
+            linearize_pdf(temp_path)
             temp_path.replace(cache_path)
         except FileNotFoundError as error:
             raise RuntimeError(

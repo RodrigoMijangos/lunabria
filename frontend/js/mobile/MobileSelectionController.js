@@ -327,7 +327,7 @@ class MobileSelectionController {
   updateSelectionToPoint(clientX, clientY, pageWrapper) {
     if (!this.anchorTarget || !pageWrapper) return;
     const currentPos =
-      this.getTextPositionAt(clientX, clientY, pageWrapper) ||
+      this.getTextPositionAt(clientX, clientY, pageWrapper, true) ||
       this.findNearbyTarget(clientX, clientY, pageWrapper, 52, 36);
     if (!currentPos?.node) return;
 
@@ -366,8 +366,8 @@ class MobileSelectionController {
     return ReaderTextTargetGeometry.comparePositions(nodeA, offsetA, nodeB, offsetB);
   }
 
-  getTextPositionAt(clientX, clientY, pageWrapper) {
-    return MobileSelectionTargetResolver.getTextPositionAt(this, clientX, clientY, pageWrapper);
+  getTextPositionAt(clientX, clientY, pageWrapper, isDragging = false) {
+    return MobileSelectionTargetResolver.getTextPositionAt(this, clientX, clientY, pageWrapper, isDragging);
   }
 
   getPageWrapperAt(clientX, clientY) {

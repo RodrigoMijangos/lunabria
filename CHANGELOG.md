@@ -11,6 +11,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-11-06
+
+### Added
+- Large PDFs load pages on demand without showing partially painted canvases; interrupted offline downloads can resume.
+
+### Fixed
+- Change on the selection logic for multi column selection support on journal files.
+- Deleting and editing annotations now updates the reader immediately, gives priority to local changes, and synchronizes in the background.
+
 ## [1.14.0] - 2026-10-28
 
 ### Changed
@@ -584,7 +593,8 @@ Mobile PWA, responsive reader and offline capabilities.
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.11.0...v1.12.0

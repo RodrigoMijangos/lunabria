@@ -66,6 +66,7 @@ class TestPdfByteRanges(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 206)
         self.assertEqual(response.headers["content-range"], "bytes 2-5/10")
+        self.assertTrue(response.headers["x-file-version"].startswith('"a-'))
         self.assertEqual(response.headers["content-length"], "4")
         self.assertEqual(await self.read_response(response), b"2345")
 

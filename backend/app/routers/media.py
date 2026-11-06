@@ -17,7 +17,9 @@ def range_requests_response(
     Handles HTTP Range requests (RFC 7233) for efficient PDF chunk streaming over HTTP/2.
     Allows instant page rendering without downloading entire files.
     """
-    file_size = file_path.stat().st_size
+    file_stats = file_path.stat()
+    file_size = file_stats.st_size
+    file_version = f'"{file_size:x}-{file_stats.st_mtime_ns:x}"'
     range_header = request.headers.get("range")
 
     if not range_header:
@@ -26,6 +28,7 @@ def range_requests_response(
             media_type=content_type,
             headers={
                 "Accept-Ranges": "bytes",
+                "X-File-Version": file_version,
                 "Cache-Control": "public, max-age=3600"
             }
         )
@@ -90,6 +93,7 @@ def range_requests_response(
     headers = {
         "Content-Range": f"bytes {start}-{end}/{file_size}",
         "Accept-Ranges": "bytes",
+        "X-File-Version": file_version,
         "Content-Length": str(chunk_length),
         "Cache-Control": "public, max-age=3600"
     }

@@ -174,7 +174,7 @@ function world(original = false) {
     TextDecoder,
     pdfjsLib: {
       getDocument: (arg) => {
-        trace.push(["get-document", typeof arg === "string" ? arg : Array.from(arg.data)]);
+        trace.push(["get-document", typeof arg === "string" ? arg : arg.data ? Array.from(arg.data) : arg.url]);
         return { promise: Promise.resolve(pdf), destroy: () => trace.push(["destroy-task"]) };
       },
     },
@@ -718,7 +718,7 @@ test("PDF loading checks the server even when navigator reports offline and fall
   onlineServer.trace.length = 0;
   onlineServer.context.navigator.onLine = false;
   onlineServer.context.pdfjsLib.getDocument = (arg) => {
-    onlineServer.trace.push(["get-document", typeof arg === "string" ? arg : Array.from(arg.data)]);
+    onlineServer.trace.push(["get-document", typeof arg === "string" ? arg : arg.data ? Array.from(arg.data) : arg.url]);
     return { promise: Promise.resolve(onlineServer.pdf), destroy() {} };
   };
   const onlineResult = await onlineServer.reader.loadPdfDocument(42, 0);
@@ -733,9 +733,9 @@ test("PDF loading checks the server even when navigator reports offline and fall
     return { arrayBuffer: async () => Uint8Array.from([37, 80, 68, 70, 45]).buffer };
   };
   offlineServer.context.pdfjsLib.getDocument = (arg) => {
-    offlineServer.trace.push(["get-document", typeof arg === "string" ? arg : Array.from(arg.data)]);
+    offlineServer.trace.push(["get-document", typeof arg === "string" ? arg : arg.data ? Array.from(arg.data) : arg.url]);
     return {
-      promise: typeof arg === "string" ? Promise.reject(new Error("network")) : Promise.resolve(offlineServer.pdf),
+      promise: arg.data ? Promise.resolve(offlineServer.pdf) : Promise.reject(new Error("network")),
       destroy: () => offlineServer.trace.push(["destroy-task"]),
     };
   };
@@ -1221,6 +1221,100 @@ test("ReaderNativeSelectionLoupeController resolves element and stale caret resu
   assert.equal(controller.getWordBoundaries(directWord).fullText, "Instagram");
 });
 
+test("selection endpoints follow the pointed-to column instead of another line at the same height", () => {
+  let staleCaret = null;
+  let lastSelection = null;
+  const nodesBySpan = new Map();
+  const selection = {
+    setBaseAndExtent: (...positions) => {
+      lastSelection = positions;
+    },
+  };
+  const context = vm.createContext({
+    document: {
+      addEventListener: () => {},
+      caretPositionFromPoint: () => staleCaret,
+      createTreeWalker: (element) => ({ nextNode: () => nodesBySpan.get(element) || null }),
+    },
+    window: { addEventListener: () => {}, getSelection: () => selection },
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    Element: class {},
+    Node: { TEXT_NODE: 3 },
+    NodeFilter: { SHOW_TEXT: 4 },
+    ReaderSelectionLoupeView: class {
+      update() {}
+      hide() {}
+    },
+  });
+  loadReaderModel(context);
+  loadNativeSelectionController(context);
+  vm.runInContext(source("mobile/MobileSelectionTargetResolver.js"), context);
+
+  const words = [];
+  const lines = [];
+  const nodes = [];
+  const textLayer = {
+    contains: (node) => nodes.includes(node),
+    querySelectorAll: (selector) => (selector === ".precise-line" ? lines : selector === ".precise-word" ? words : []),
+  };
+  for (const [text, left, top] of [
+    ["LEFT", 20, 100],
+    ["RIGHT", 220, 100],
+    ["LEFTNEXT", 20, 125],
+    ["RIGHTNEXT", 220, 125],
+  ]) {
+    const node = { nodeType: 3, textContent: text };
+    const bounds = rect(left, top, 60, 16);
+    const word = {
+      textContent: text,
+      contains: (candidate) => candidate === node,
+      getBoundingClientRect: () => bounds,
+      querySelectorAll: () => [],
+      closest: (selector) => (selector === ".precise-word" ? word : null),
+    };
+    node.parentElement = word;
+    nodesBySpan.set(word, node);
+    nodes.push(node);
+    words.push(word);
+
+    lines.push({
+      textContent: text,
+      contains: (candidate) => candidate === node,
+      getBoundingClientRect: () => bounds,
+      querySelectorAll: (selector) => (selector === ".precise-word" ? [word] : []),
+    });
+  }
+  nodes[0].compareDocumentPosition = (other) => (other === nodes[1] ? 4 : 0);
+  nodes[1].compareDocumentPosition = (other) => (other === nodes[0] ? 2 : 0);
+  const wrapper = {
+    contains: (node) => nodes.includes(node),
+    querySelector: (selector) => (selector === ".textLayer" ? textLayer : null),
+  };
+  staleCaret = { offsetNode: nodes[0], offset: 2 };
+
+  const NativeController = context.window.ReaderNativeSelectionLoupeController;
+  const native = new NativeController(new context.window.ReaderModel(), null, null);
+  const nativeTarget = native.findTextTargetWithinGap(240, 108, textLayer, Infinity, Infinity, true);
+  assert.equal(nativeTarget.node, nodes[1]);
+  assert.equal(nativeTarget.span, words[1]);
+
+  const mobileTarget = context.window.MobileSelectionTargetResolver.getTextPositionAt({}, 240, 108, wrapper, true);
+  assert.equal(mobileTarget.node, nodes[1]);
+  assert.equal(mobileTarget.span, words[1]);
+
+  vm.runInContext(source("mobile/MobileSelectionController.js"), context);
+  const mobile = new context.window.MobileSelectionController({}, {});
+  mobile.anchorTarget = {
+    node: nodes[0],
+    offset: 0,
+    initialEndNode: nodes[0],
+    initialEndOffset: nodes[0].textContent.length,
+  };
+  mobile.updateSelectionToPoint(240, 108, wrapper);
+  assert.equal(lastSelection[0], nodes[0]);
+  assert.equal(lastSelection[2], nodes[1]);
+});
+
 test("ReaderNativeSelectionLoupeController uses the caret span in a PDF.js fallback text layer", () => {
   let caret = null;
   const context = vm.createContext({
@@ -1349,6 +1443,7 @@ test("ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
   const context = vm.createContext({
     document: { elementFromPoint: () => null, querySelectorAll: () => [], addEventListener: () => {} },
     window: {
+      PointerEvent: class {},
       addEventListener: (name, handler) => windowListeners.set(name, handler),
       getSelection: () => ({
         setBaseAndExtent: (...args) => {
@@ -1398,6 +1493,10 @@ test("ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
     body,
   );
   controller.bindEvents();
+  assert.equal(bodyListeners.has("pointerdown"), true);
+  assert.equal(bodyListeners.has("mousedown"), false);
+  assert.equal(windowListeners.has("pointermove"), true);
+  assert.equal(windowListeners.has("mousemove"), false);
   controller.getPageWrapperAt = () => wrapper;
   let forceFocusToFirstWord = false;
   controller.findTextTargetWithinGap = (x) =>
@@ -1419,14 +1518,12 @@ test("ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
     },
   };
   bodyListeners.get("pointerdown")(down);
-  bodyListeners.get("mousedown")(down);
-  assert.equal(preventedMouseDown, 1, "native mousedown selection must not replace the custom anchor");
+  assert.equal(preventedMouseDown, 1, "pointer selection must prevent the browser's default anchor");
   assert.deepStrictEqual(lastSelection, [word1, 0, word1, word1.textContent.length]);
 
   windowListeners.get("pointermove")({ pointerId: 7, buttons: 1, clientX: 150, clientY: 20 });
   assert.deepStrictEqual(lastSelection, [word1, 0, word2, word2.textContent.length]);
   windowListeners.get("pointerup")({ pointerId: 7 });
-  windowListeners.get("mouseup")({});
   assert.deepStrictEqual(
     lastSelection,
     [word1, 0, word2, word2.textContent.length],
@@ -1446,11 +1543,9 @@ test("ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
   assert.deepStrictEqual(lastSelection, [word1, 0, word2, word2.textContent.length]);
 
   bodyListeners.get("pointerdown")({ ...down, clientX: 150 });
-  bodyListeners.get("mousedown")({ ...down, clientX: 150 });
   forceFocusToFirstWord = true;
   windowListeners.get("pointermove")({ pointerId: 7, buttons: 1, clientX: 155, clientY: 20 });
   windowListeners.get("pointerup")({ pointerId: 7 });
-  windowListeners.get("mouseup")({});
   assert.equal(
     controller.completedSelectionDrag,
     false,
@@ -1474,7 +1569,7 @@ test("ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
   directTextTarget.closest = (selector) => (selector.includes(".textLayer") ? span2 : null);
   controller.findTextTargetWithinGap = () => ({ node: word2, offset: 6, span: span2 });
   let preventedSingleClick = false;
-  bodyListeners.get("mousedown")({
+  controller.handleMouseDown({
     ...down,
     target: directTextTarget,
     detail: 1,
@@ -1487,13 +1582,82 @@ test("ReaderNativeSelectionLoupeController fixes first-span double-clicks withou
   assert.deepStrictEqual(lastCollapse, [word2, 6]);
 
   controller.findTextTargetWithinGap = () => null;
-  bodyListeners.get("mousedown")({
+  controller.handleMouseDown({
     ...down,
     preventDefault: () => {
       preventedEmptyHit = true;
     },
   });
   assert.equal(preventedEmptyHit, true, "empty page margins must not start native container selection");
+});
+
+test("ReaderNativeSelectionLoupeController uses mouse listeners only without Pointer Events", () => {
+  const bodyListeners = new Map();
+  const windowListeners = new Map();
+  const context = vm.createContext({
+    document: { addEventListener: () => {} },
+    window: { addEventListener: (name, handler) => windowListeners.set(name, handler) },
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    ReaderSelectionLoupeView: class {
+      update() {}
+      hide() {}
+    },
+  });
+  loadReaderModel(context);
+  loadNativeSelectionController(context);
+
+  const body = { addEventListener: (name, handler) => bodyListeners.set(name, handler) };
+  new context.window.ReaderNativeSelectionLoupeController(new context.window.ReaderModel(), {}, body).bindEvents();
+
+  assert.equal(bodyListeners.has("mousedown"), true);
+  assert.equal(bodyListeners.has("pointerdown"), false);
+  assert.equal(windowListeners.has("mousemove"), true);
+  assert.equal(windowListeners.has("pointermove"), false);
+});
+
+test("ReaderNativeSelectionLoupeController leaves touch selection and its loupe to the mobile controller", () => {
+  const context = vm.createContext({
+    document: { elementFromPoint: () => null, querySelectorAll: () => [], addEventListener: () => {} },
+    window: { addEventListener: () => {}, getSelection: () => null },
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    ReaderSelectionLoupeView: class {
+      constructor() {
+        this.hideCount = 0;
+      }
+      update() {}
+      hide() {
+        this.hideCount += 1;
+      }
+    },
+  });
+  loadReaderModel(context);
+  loadNativeSelectionController(context);
+
+  const controller = new context.window.ReaderNativeSelectionLoupeController(
+    new context.window.ReaderModel(),
+    null,
+    null,
+  );
+  controller.startSelection({
+    pointerId: 42,
+    pointerType: "touch",
+    isPrimary: true,
+    button: 0,
+    clientX: 100,
+    clientY: 200,
+  });
+  controller.updateSelection({
+    pointerId: 42,
+    pointerType: "touch",
+    buttons: 1,
+    clientX: 120,
+    clientY: 220,
+  });
+  controller.endSelection({ pointerId: 42, pointerType: "touch" });
+
+  assert.equal(controller.pointerId, null);
+  assert.equal(controller.pageWrapper, null);
+  assert.equal(controller.loupe.hideCount, 0, "native touch events must not hide the mobile selection loupe");
 });
 
 test("ReaderNativeSelectionLoupeController preserves full initial word and expands word-by-word on double-click drag", () => {
@@ -1784,7 +1948,7 @@ test("TextLayerView keeps the text layer selectable without leaking selection in
   );
 });
 
-test("TextLayerView renders 3-phase subpixel layout with precise words, spaces, and linebreaks", () => {
+test("TextLayerView renders precise word runs with continuous spaces and linebreaks", () => {
   class MockElement {
     constructor(tagName = "div") {
       this.tagName = tagName;
@@ -1864,19 +2028,21 @@ test("TextLayerView renders 3-phase subpixel layout with precise words, spaces, 
   // Check Phase 1: precise words
   const words = lineSpan.querySelectorAll(".precise-word");
   assert.equal(words.length, 2);
-  assert.equal(words[0].textContent, "Hello");
+  assert.equal(words[0].textContent, "Hello ");
   assert.equal(words[0].style.left, "0px"); // (10 - 10) * 1.5
   assert.equal(words[1].textContent, "World");
   assert.equal(words[1].style.left, "67.5px"); // (55 - 10) * 1.5
 
-  // Check Phase 2: precise space
+  // Keep the inter-word space in the same selectable text run to avoid visual gaps.
   const spaces = lineSpan.querySelectorAll(".precise-space");
-  assert.equal(spaces.length, 1);
-  assert.equal(spaces[0].style.left, "60px"); // (50 - 10) * 1.5
-  // The layout engine now measures " " and scales it, width is not forced to gap * scale directly.
-  assert.equal(spaces[0].attributes["role"], "presentation");
+  assert.equal(spaces.length, 0);
+  assert.equal(
+    lineSpan.childNodes.map((child) => child.textContent).join(""),
+    "Hello World\n",
+    "copyable line text must retain its inter-word space",
+  );
 
-  // Check Phase 3: trailing newline text node inside a positioning span
+  // Check the trailing newline text node inside a positioning span
   const lastChild = lineSpan.childNodes[lineSpan.childNodes.length - 1];
   assert.equal(lastChild.className, "precise-linebreak");
   assert.equal(lastChild.style.position, "absolute");

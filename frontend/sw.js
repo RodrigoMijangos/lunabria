@@ -1,4 +1,4 @@
-const CACHE_NAME = "lunabria-v1.14.0";
+const CACHE_NAME = "lunabria-v1.15.0";
 const COVER_CACHE_NAME = "lunabria-covers-v1";
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   "https://cdn.jsdelivr.net",
@@ -21,7 +21,7 @@ const STATIC_ASSETS = [
   "./js/services/http.js?v=1.0.0",
   "./js/services/connectivity.js?v=1.0.4",
   "./js/services/LocalDBOutbox.js?v=1.0.0",
-  "./js/db.js?v=1.4.6",
+  "./js/db.js?v=1.4.7-pdf-chunks",
   "./js/services/books.js?v=1.0.15-proxy-buffering-resilience",
   "./js/services/virtual-libraries.js?v=1.0.8",
   "./js/services/LunabriaQueryCompiler.js?v=1.2.0-natural-query",
@@ -37,7 +37,7 @@ const STATIC_ASSETS = [
   "./js/models/LibraryModel.js?v=0.8.5-publisher-search",
   "./js/views/reader/PDFPageView.js?v=0.6.2",
   "./js/views/reader/TextLayerCrossReferenceDecorator.js?v=1.0.0",
-  "./js/views/reader/TextLayerView.js?v=1.0.11-cross-references",
+  "./js/views/reader/TextLayerView.js?v=1.0.12",
   "./js/views/reader/HighlightOverlayView.js?v=1.4.0",
   "./js/views/reader/DrawingCanvasView.js?v=0.6.0",
   "./js/views/reader/ReaderHUDView.js?v=0.6.22-jump-breadcrumb",
@@ -69,32 +69,32 @@ const STATIC_ASSETS = [
   "./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.8",
   "./js/views/reader/TableOfContentsView.js?v=1.1.0",
   "./js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0",
-  "./js/services/reader/ReaderTextTargetGeometry.js?v=1.0.0",
-  "./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.0",
+  "./js/services/reader/ReaderTextTargetGeometry.js?v=1.0.1",
+  "./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.1",
   "./js/viewmodels/reader/ReaderDrawingInteractionController.js?v=1.0.1",
   "./js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.1",
   "./js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0",
   "./js/viewmodels/reader/ReaderDrawingViewModel.js?v=1.4.0",
-  "./js/services/reader/ReaderSelectionGeometry.js?v=1.1.0",
+  "./js/services/reader/ReaderSelectionGeometry.js?v=1.1.1",
   "./js/viewmodels/reader/ReaderAnnotationToolbarView.js?v=1.0.0",
-  "./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.4",
+  "./js/viewmodels/reader/ReaderAnnotationViewModel.js?v=1.4.5",
   "./js/views/reader/LinkOverlayView.js?v=1.0.0",
-  "./js/viewmodels/reader/ReaderPageLayerBuilder.js?v=1.0.0",
+  "./js/viewmodels/reader/ReaderPageLayerBuilder.js?v=1.0.1",
   "./js/viewmodels/reader/ReaderPageRenderer.js?v=1.4.2-cross-references",
-  "./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.9",
+  "./js/viewmodels/reader/ReaderNotesViewModel.js?v=1.0.10",
   "./js/viewmodels/reader/ReaderExportSectionPicker.js?v=1.0.0",
   "./js/viewmodels/reader/ReaderExportController.js?v=1.0.0",
   "./js/viewmodels/reader/ReaderKeyboardWheelController.js?v=1.0.0",
   "./js/viewmodels/reader/ReaderToolbarManager.js?v=1.4.1",
-  "./js/services/reader/ReaderOfflineService.js?v=1.0.9",
-  "./js/viewmodels/reader/ReaderEventBindings.js?v=1.4.0",
-  "./js/viewmodels/reader/ReaderBookReconciler.js?v=1.0.0",
-  "./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.6-mobile-first-paint",
+  "./js/services/reader/ReaderOfflineService.js?v=1.1.0-resumable-pdf",
+  "./js/viewmodels/reader/ReaderEventBindings.js?v=1.4.1",
+  "./js/viewmodels/reader/ReaderBookReconciler.js?v=1.0.1",
+  "./js/viewmodels/reader/ReaderDocumentLifecycle.js?v=1.4.7-pdf-range-streaming",
   "./js/mobile/DeviceEnvironment.js?v=1.1.1",
   "./js/mobile/MobileHUDView.js?v=1.1.2",
   "./js/mobile/MobileDrawingToolbarView.js?v=1.3.0",
-  "./js/mobile/MobileSelectionTargetResolver.js?v=1.0.0",
-  "./js/mobile/MobileSelectionController.js?v=1.4.2",
+  "./js/mobile/MobileSelectionTargetResolver.js?v=1.0.1",
+  "./js/mobile/MobileSelectionController.js?v=1.4.3",
   "./js/mobile/MobilePWAInstaller.js?v=1.1.0",
   "./js/mobile/MobileReaderController.js?v=1.3.2-mobile-first-paint",
   "./js/viewmodels/ReaderViewModel.js?v=1.4.6",
@@ -180,6 +180,9 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
+
+  // Let the browser and PDF.js handle PDF range requests without buffering or synthetic timeouts.
+  if (/^\/api\/books\/\d+\/pdf$/.test(url.pathname)) return;
 
   // For other API endpoints, verify connectivity with the actual request and fall back to offline 503.
   if (url.pathname.startsWith("/api/")) {

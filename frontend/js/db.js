@@ -9,12 +9,12 @@ const SIMPLE_STORES = [
   ["cached_annotations", "bookId"],
 ];
 
-const INDEXED_STORES = ["page_layouts", "page_drawings"];
+const INDEXED_STORES = ["page_layouts", "page_drawings", "pdf_chunks"];
 
 class LocalDB {
   constructor() {
     this.dbName = "moon_calibre_local";
-    this.version = 7;
+    this.version = 8;
     this.db = null;
     this._outboxProcessing = false;
     this._outboxPromise = null;
@@ -97,6 +97,26 @@ class LocalDB {
     }
   }
 
+  async _getAllByBookIndex(storeName, bookId) {
+    try {
+      const db = await this.open();
+      return await new Promise((resolve) => {
+        const tx = db.transaction(storeName, "readonly");
+        const records = [];
+        const request = tx.objectStore(storeName).index("by_book").openCursor(IDBKeyRange.only(Number(bookId)));
+        request.onsuccess = (event) => {
+          const cursor = event.target.result;
+          if (!cursor) return resolve(records);
+          records.push(cursor.value);
+          cursor.continue();
+        };
+        request.onerror = () => resolve([]);
+      });
+    } catch {
+      return [];
+    }
+  }
+
   async _deleteByBookIndex(storeName, bookId) {
     const db = await this.open();
     return new Promise((resolve, reject) => {
@@ -119,7 +139,15 @@ class LocalDB {
 
   async getPdfBlob(bookId) {
     const record = await this._get("pdf_cache", Number(bookId));
-    return record ? record.blob : null;
+    if (!record) return null;
+    if (record.blob) return record.blob;
+    if (!record.chunked) return null;
+
+    const chunks = await this.getPdfChunks(bookId);
+    if (!this._isCompletePdfChunkSet(chunks, record.totalBytes, record.validator)) return null;
+    return new Blob(chunks.sort((left, right) => left.start - right.start).map((chunk) => chunk.blob), {
+      type: "application/pdf",
+    });
   }
 
   async deletePdfBlob(bookId) {
@@ -128,7 +156,64 @@ class LocalDB {
   }
 
   async isPdfCached(bookId) {
-    return (await this.getPdfBlob(bookId)) !== null;
+    const record = await this._get("pdf_cache", Number(bookId));
+    if (record?.blob) return true;
+    if (!record?.chunked) return false;
+    return this._isCompletePdfChunkSet(
+      await this.getPdfChunks(bookId),
+      record.totalBytes,
+      record.validator,
+    );
+  }
+
+  _isCompletePdfChunkSet(chunks, totalBytes, validator = "") {
+    if (!Array.isArray(chunks) || !Number.isSafeInteger(totalBytes) || totalBytes < 1) return false;
+    let expectedStart = 0;
+    for (const chunk of [...chunks].sort((left, right) => left.start - right.start)) {
+      if (
+        chunk.start !== expectedStart ||
+        chunk.totalBytes !== totalBytes ||
+        !chunk.blob?.size ||
+        (validator && chunk.validator && chunk.validator !== validator)
+      ) {
+        return false;
+      }
+      expectedStart += chunk.blob.size;
+    }
+    return expectedStart === totalBytes;
+  }
+
+  async savePdfChunksComplete(bookId, totalBytes, validator = "") {
+    return this._put("pdf_cache", {
+      bookId: Number(bookId),
+      blob: null,
+      chunked: true,
+      totalBytes: Number(totalBytes),
+      validator: String(validator || ""),
+      cachedAt: Date.now(),
+    });
+  }
+
+  async savePdfChunk(bookId, start, totalBytes, blob, validator = "") {
+    const bId = Number(bookId);
+    return this._put("pdf_chunks", {
+      key: `${bId}_${Number(start)}`,
+      bookId: bId,
+      start: Number(start),
+      totalBytes: Number(totalBytes),
+      validator: String(validator || ""),
+      blob,
+      cachedAt: Date.now(),
+    });
+  }
+
+  async getPdfChunks(bookId) {
+    return this._getAllByBookIndex("pdf_chunks", bookId);
+  }
+
+  async clearPdfChunks(bookId) {
+    if (!bookId) return false;
+    return this._deleteByBookIndex("pdf_chunks", bookId).catch(() => false);
   }
 
   async saveLocalProgress(bookId, progress) {
@@ -359,6 +444,7 @@ class LocalDB {
     await Promise.allSettled([
       this.deleteCachedBook(bId),
       this.deletePdfBlob(bId),
+      this.clearPdfChunks(bId),
       this.deleteLocalProgress(bId),
       this.clearBookLayouts(bId),
       this.clearBookDrawings(bId),

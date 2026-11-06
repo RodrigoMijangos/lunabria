@@ -12,23 +12,31 @@ class ReaderEventBindings {
 
     let isPointerDown = false;
 
-    window.addEventListener('pointerdown', (e) => {
-      if (e.button === 0) isPointerDown = true;
-    }, true);
+    window.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (e.button === 0) isPointerDown = true;
+      },
+      true,
+    );
 
-    window.addEventListener('pointerup', () => {
-      if (isPointerDown) {
-        isPointerDown = false;
-        setTimeout(() => reader.annotations.updateFloatingToolbar(), 40);
-      }
-    }, true);
+    window.addEventListener(
+      "pointerup",
+      () => {
+        if (isPointerDown) {
+          isPointerDown = false;
+          setTimeout(() => reader.annotations.updateFloatingToolbar(), 40);
+        }
+      },
+      true,
+    );
 
-    document.addEventListener('selectionchange', () => {
+    document.addEventListener("selectionchange", () => {
       if (reader.drawing.textHighlight.isSelecting) return;
       if (isPointerDown) {
         if (reader.floatingToolbar) {
-          reader.floatingToolbar.style.opacity = '0';
-          reader.floatingToolbar.style.pointerEvents = 'none';
+          reader.floatingToolbar.style.opacity = "0";
+          reader.floatingToolbar.style.pointerEvents = "none";
         }
         return;
       }
@@ -36,46 +44,52 @@ class ReaderEventBindings {
       reader.selectionTimeout = setTimeout(() => reader.annotations.updateFloatingToolbar(), 80);
     });
 
-    document.addEventListener('pointerdown', (e) => {
+    document.addEventListener("pointerdown", (e) => {
       const target = e.target instanceof Element ? e.target : null;
       if (!target) return;
 
-      if (!target.closest('#reader-quick-highlight-palette')) {
+      if (!target.closest("#reader-quick-highlight-palette")) {
         reader.annotations.hideQuickHighlightPalette();
       }
 
-      if (!target.closest('#highlight-action-menu') && !target.closest('.pdf-highlight-rect')) {
+      if (!target.closest("#highlight-action-menu") && !target.closest(".pdf-highlight-rect")) {
         if (reader.highlightActionMenu) {
-          reader.highlightActionMenu.style.display = 'none';
+          reader.highlightActionMenu.style.display = "none";
           reader.model.activeHighlight = null;
         }
       }
 
-      const clickedSelectionToolbar = target.closest('#floating-toolbar');
-      const clickedControls = target.closest('#reader-header, #reader-footer, #highlight-action-menu, .drawing-toolbar, .drawer, button, select, input');
-      const isInsideReaderBody = Boolean(target.closest('#reader-body'));
+      const clickedSelectionToolbar = target.closest("#floating-toolbar");
+      const clickedControls = target.closest(
+        "#reader-header, #reader-footer, #highlight-action-menu, .drawing-toolbar, .drawer, button, select, input",
+      );
+      const isInsideReaderBody = Boolean(target.closest("#reader-body"));
       if (!clickedSelectionToolbar && !clickedControls && !isInsideReaderBody) {
         reader.annotations.clearTextSelection();
       }
     });
 
-    reader.bodyEl.addEventListener('scroll', () => {
+    reader.bodyEl.addEventListener(
+      "scroll",
+      () => {
+        reader.annotations.hideQuickHighlightPalette();
+        if (reader.model.selectedRange) {
+          reader.annotations.updateFloatingToolbar();
+        }
+      },
+      { passive: true },
+    );
+    window.addEventListener("resize", () => {
       reader.annotations.hideQuickHighlightPalette();
-      if (reader.model.selectedRange) {
-        reader.annotations.updateFloatingToolbar();
-      }
-    }, { passive: true });
-    window.addEventListener('resize', () => {
-      reader.annotations.hideQuickHighlightPalette();
-      if (reader.container.style.display === 'flex' && reader.model.fitMode) {
+      if (reader.container.style.display === "flex" && reader.model.fitMode) {
         clearTimeout(reader.resizeFitTimeout);
         reader.resizeFitTimeout = setTimeout(async () => {
-          if (reader.model.fitMode === 'width') {
+          if (reader.model.fitMode === "width") {
             const scale = await reader.nav.calculateFitWidthScale();
             if (Math.abs(scale - reader.model.scale) > 0.02) {
               reader.nav.setZoom(scale, false);
             }
-          } else if (reader.model.fitMode === 'page') {
+          } else if (reader.model.fitMode === "page") {
             const scale = await reader.nav.calculateFitPageScale();
             if (Math.abs(scale - reader.model.scale) > 0.02) {
               reader.nav.setZoom(scale, false);
@@ -86,79 +100,123 @@ class ReaderEventBindings {
     });
 
     // Dismiss floating toolbar copy/note buttons
-    document.getElementById('floating-copy-btn')?.addEventListener('click', (e) => {
+    document.getElementById("floating-copy-btn")?.addEventListener("click", (e) => {
       e.stopPropagation();
       if (reader.model.selectedText) {
         navigator.clipboard.writeText(ReaderModel.normalizeText(reader.model.selectedText));
         if (reader.floatingToolbar) {
-          reader.floatingToolbar.style.opacity = '0';
-          reader.floatingToolbar.style.pointerEvents = 'none';
+          reader.floatingToolbar.style.opacity = "0";
+          reader.floatingToolbar.style.pointerEvents = "none";
         }
       }
     });
 
-    document.getElementById('floating-note-btn')?.addEventListener('click', (e) => {
+    document.getElementById("floating-note-btn")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      const note = prompt('Add note to this quote:');
+      const note = prompt("Add note to this quote:");
       if (note !== null) {
-        reader.annotations.applyHighlight(reader.model.colors[0]?.id || 'yellow', note);
+        reader.annotations.applyHighlight(reader.model.colors[0]?.id || "yellow", note);
       }
     });
 
     // Highlight action menu: delete & edit
-    document.getElementById('highlight-action-delete-btn')?.addEventListener('click', async (e) => {
+    document.getElementById("highlight-action-delete-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (reader.model.activeHighlight) {
         const id = reader.model.activeHighlight.id;
         const page = reader.model.activeHighlight.page;
-        if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
-          await localDB.enqueueOutboxOp({
-            id: `op_del_${id}`,
-            type: 'annotation',
-            action: 'delete',
-            bookId: reader.model.bookId,
-            entityId: id
-          }).catch(() => {});
-        }
-        await api.deleteAnnotation(id);
-        if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
-          await localDB.removeOutboxOp(`op_del_${id}`).catch(() => {});
-        }
-        reader.highlightActionMenu.style.display = 'none';
+
+        // 1. Immediate visual feedback: close menu, clear active highlight, remove highlight elements from DOM
+        if (reader.highlightActionMenu) reader.highlightActionMenu.style.display = "none";
         reader.model.activeHighlight = null;
-        await reader.annotations.refreshAnnotations();
+        for (const el of document.querySelectorAll(`.pdf-highlight-rect[data-annotation-id="${id}"]`)) {
+          el.remove();
+        }
+        reader.model.setAnnotations((reader.model.annotations || []).filter((a) => String(a.id) !== String(id)));
+
+        // 2. Persist to local cache and enqueue outbox operation
+        if (typeof localDB !== "undefined" && typeof localDB.saveCachedAnnotations === "function") {
+          await localDB.saveCachedAnnotations(reader.model.bookId, reader.model.annotations).catch(() => {});
+        }
+
+        if (typeof localDB !== "undefined" && typeof localDB.enqueueOutboxOp === "function") {
+          await localDB
+            .enqueueOutboxOp({
+              id: `op_del_${id}`,
+              type: "annotation",
+              action: "delete",
+              bookId: reader.model.bookId,
+              entityId: id,
+            })
+            .catch(() => {});
+        }
+
+        // 3. Online sync
+        let serverSuccess = false;
+        try {
+          await api.deleteAnnotation(id);
+          serverSuccess = true;
+          if (typeof localDB !== "undefined" && typeof localDB.removeOutboxOp === "function") {
+            await localDB.removeOutboxOp(`op_del_${id}`).catch(() => {});
+          }
+        } catch (delErr) {
+          console.warn("[ReaderEventBindings] Delete failed, queued in outbox:", delErr);
+        }
+
+        if (serverSuccess) {
+          await reader.annotations.refreshAnnotations();
+        }
         reader.annotations.refreshPageHighlights(page);
       }
     });
 
-    document.getElementById('highlight-action-note-btn')?.addEventListener('click', async (e) => {
+    document.getElementById("highlight-action-note-btn")?.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (reader.model.activeHighlight) {
         const annot = reader.model.activeHighlight;
-        const currentNote = annot.comment || '';
-        const newNote = prompt('Edit / Add note to this highlight:', currentNote);
+        const currentNote = annot.comment || "";
+        const newNote = prompt("Edit / Add note to this highlight:", currentNote);
         if (newNote !== null) {
-          if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
-            await localDB.enqueueOutboxOp({
-              id: `op_update_${annot.id}`,
-              type: 'annotation',
-              action: 'update',
-              bookId: reader.model.bookId,
-              entityId: annot.id,
-              payload: { comment: newNote }
-            }).catch(() => {});
-          }
-          await api.updateAnnotation(annot.id, { comment: newNote });
-          if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
-            await localDB.removeOutboxOp(`op_update_${annot.id}`).catch(() => {});
-          }
-          reader.highlightActionMenu.style.display = 'none';
+          annot.comment = newNote;
+          if (reader.highlightActionMenu) reader.highlightActionMenu.style.display = "none";
           reader.model.activeHighlight = null;
-          await reader.annotations.refreshAnnotations();
+
+          if (typeof localDB !== "undefined" && typeof localDB.saveCachedAnnotations === "function") {
+            await localDB.saveCachedAnnotations(reader.model.bookId, reader.model.annotations).catch(() => {});
+          }
+
+          if (typeof localDB !== "undefined" && typeof localDB.enqueueOutboxOp === "function") {
+            await localDB
+              .enqueueOutboxOp({
+                id: `op_update_${annot.id}`,
+                type: "annotation",
+                action: "update",
+                bookId: reader.model.bookId,
+                entityId: annot.id,
+                payload: { comment: newNote },
+              })
+              .catch(() => {});
+          }
+
+          let serverSuccess = false;
+          try {
+            await api.updateAnnotation(annot.id, { comment: newNote });
+            serverSuccess = true;
+            if (typeof localDB !== "undefined" && typeof localDB.removeOutboxOp === "function") {
+              await localDB.removeOutboxOp(`op_update_${annot.id}`).catch(() => {});
+            }
+          } catch (updateErr) {
+            console.warn("[ReaderEventBindings] Update note failed, queued in outbox:", updateErr);
+          }
+
+          if (serverSuccess) {
+            await reader.annotations.refreshAnnotations();
+          }
           reader.annotations.refreshPageHighlights(annot.page);
         }
       }
     });
   }
-
 }
+
+window.ReaderEventBindings = ReaderEventBindings;

@@ -9,5 +9,6 @@ pymupdf>=1.23.0
 httpx>=0.27.0
 httpx2>=2.0.0
 PyMuPDF
+pikepdf>=8.0.0
 PyYAML
 tomli_w

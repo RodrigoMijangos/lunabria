@@ -129,6 +129,7 @@ function browserWorld() {
   // its own source boundary but shares the same global lexical environment.
   const sandbox = new EventTargetStub();
   Object.assign(sandbox, {
+    PointerEvent: class {},
     document, Element: ElementStub, Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 },
     navigator: { onLine: false, sendBeacon: forbidden('sendBeacon') },
     localStorage: {
@@ -253,7 +254,7 @@ test('reader and API events bind and run without network or IndexedDB', async ()
   for (const [target, events] of [
     [world.window, ['beforeunload', 'pagehide', 'pointerdown', 'pointerup', 'resize']],
     [world.document, ['DOMContentLoaded', 'selectionchange']],
-    [world.elements.get('reader-body'), ['scroll', 'pointerdown', 'mousedown']]
+    [world.elements.get('reader-body'), ['scroll', 'pointerdown']]
   ]) {
     for (const event of events) assert.ok(target.listeners.get(event)?.length, `Missing event: ${event}`);
   }
@@ -483,7 +484,7 @@ test('STATIC_ASSETS are unique local existing resources and cache release matche
   const backend = fs.readFileSync(path.join(frontend, '..', 'backend', 'app', 'main.py'), 'utf8');
   const version = backend.match(/\bversion\s*=\s*['"]([^'"]+)['"]/);
   assert.ok(version, 'Backend FastAPI version not found');
-  assert.equal(version[1], '1.14.0');
+  assert.equal(version[1], '1.15.0');
   // Frontend-only revisions refresh the shell without publishing a new API release.
   const cacheVersion = cacheName.match(/^lunabria-v(\d+\.\d+\.\d+)(?:-[a-z0-9-]+)?$/);
   assert.ok(cacheVersion, 'Invalid shell cache name');

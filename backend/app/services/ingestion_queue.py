@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional
 
 from app import database
 from app.services.calibre_service import calibre_service
+from app.services.pdf_linearizer import linearize_pdf
 from app.services.pdf_metadata_extractor import extract_pdf_metadata
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 def process_upload_job(job: Dict[str, Any]) -> int:
     file_path = job["staging_path"]
     clean_title = Path(job["filename"]).stem.replace("_", " ").replace("-", " ")
+    if Path(file_path).suffix.lower() == ".pdf":
+        linearize_pdf(Path(file_path))
     book_id = calibre_service.add_book(
         file_path=file_path,
         title=clean_title,

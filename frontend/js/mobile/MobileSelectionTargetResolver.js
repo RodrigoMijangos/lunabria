@@ -14,6 +14,7 @@ class MobileSelectionTargetResolver {
       const bounds = ReaderTextTargetGeometry.getWordBoundaries({
         node: targetProbe.node,
         offset: targetProbe.offset,
+        span: targetProbe.span,
       });
       if (bounds && bounds.endOffset > bounds.startOffset) {
         try {
@@ -41,21 +42,18 @@ class MobileSelectionTargetResolver {
     const textLayer = pageWrapper?.querySelector?.(".textLayer") || pageWrapper?.querySelector?.(".pdf-text-layer");
     if (!textLayer) return null;
 
-    if (typeof ReaderNativeSelectionLoupeController !== "undefined") {
-      const probe = ReaderNativeSelectionLoupeController.prototype?.findTextTargetWithinGap?.call(
-        null,
-        clientX,
-        clientY,
-        textLayer,
-        slackX,
-        slackY,
-        false,
-      );
-      if (probe?.node) return probe;
-    }
+    const probe = ReaderTextTargetGeometry.findTextTargetWithinGap(clientX, clientY, textLayer, slackX, slackY, false);
+    if (probe?.node) return probe;
 
-    const words = Array.from(textLayer.querySelectorAll?.(".precise-word") || []);
-    const candidates = words.length > 0 ? words : Array.from(textLayer.querySelectorAll?.(".precise-line, span") || []);
+    const words = Array.from(textLayer.querySelectorAll?.(".precise-word") || []).filter(
+      (span) => !ReaderTextTargetGeometry.isVerticalElement(span),
+    );
+    const candidates =
+      words.length > 0
+        ? words
+        : Array.from(textLayer.querySelectorAll?.(".precise-line, span") || []).filter(
+            (span) => !ReaderTextTargetGeometry.isVerticalElement(span),
+          );
     if (!candidates.length) return null;
 
     const nearest = ReaderTextTargetGeometry.nearestElement(candidates, clientX, clientY);
@@ -84,14 +82,27 @@ class MobileSelectionTargetResolver {
     return null;
   }
 
-  static getTextPositionAt(controller, clientX, clientY, pageWrapper) {
+  static getTextPositionAt(controller, clientX, clientY, pageWrapper, isDragging = false) {
     if (!pageWrapper) return null;
+
+    const textLayer = pageWrapper.querySelector?.(".textLayer") || pageWrapper.querySelector?.(".pdf-text-layer");
+    const target = textLayer
+      ? ReaderTextTargetGeometry.findTextTargetWithinGap(
+          clientX,
+          clientY,
+          textLayer,
+          isDragging ? Infinity : 44,
+          isDragging ? Infinity : 30,
+          isDragging,
+          isDragging ? controller?.anchorTarget : null,
+        )
+      : null;
+    if (target?.node && pageWrapper.contains(target.node)) return target;
+    if (textLayer) return null;
 
     const caret = ReaderTextTargetGeometry.caretPosition(clientX, clientY);
     const textNodeType = typeof Node !== "undefined" ? Node.TEXT_NODE : 3;
-    if (caret && caret.node.nodeType === textNodeType && pageWrapper.contains(caret.node)) {
-      return caret;
-    }
+    if (caret && caret.node.nodeType === textNodeType && pageWrapper.contains(caret.node)) return caret;
 
     const textSpan = controller.findTargetElementUnderPoint(clientX, clientY, pageWrapper);
     if (textSpan && pageWrapper.contains(textSpan)) {

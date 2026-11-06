@@ -423,7 +423,7 @@ test("LocalDB merges offline complete books non-destructively and handles cached
   vm.runInContext(source("db.js"), context);
   const localDB = vm.runInContext("localDB", context);
 
-  assert.equal(localDB.version, 7, "LocalDB version must be bumped to 7");
+  assert.equal(localDB.version, 8, "LocalDB version must be bumped to 8");
 
   // 1. Initial save of an offline complete book
   const coverBlob = new Blob(["cover bytes"], { type: "image/jpeg" });

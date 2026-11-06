@@ -141,8 +141,31 @@ class ReaderNotesViewModel {
 
   async deleteNote(annotId) {
     if (confirm('Delete this annotation?')) {
-      await api.deleteAnnotation(annotId);
-      if (this.onRefreshAnnotations) await this.onRefreshAnnotations();
+      const id = annotId;
+      this.model.setAnnotations((this.model.annotations || []).filter((a) => String(a.id) !== String(id)));
+      if (typeof localDB !== 'undefined' && typeof localDB.saveCachedAnnotations === 'function') {
+        await localDB.saveCachedAnnotations(this.model.bookId, this.model.annotations).catch(() => {});
+      }
+      if (typeof localDB !== 'undefined' && typeof localDB.enqueueOutboxOp === 'function') {
+        await localDB.enqueueOutboxOp({
+          id: `op_del_${id}`,
+          type: 'annotation',
+          action: 'delete',
+          bookId: this.model.bookId,
+          entityId: id
+        }).catch(() => {});
+      }
+      this.renderNotesMode();
+
+      try {
+        await api.deleteAnnotation(id);
+        if (typeof localDB !== 'undefined' && typeof localDB.removeOutboxOp === 'function') {
+          await localDB.removeOutboxOp(`op_del_${id}`).catch(() => {});
+        }
+        if (this.onRefreshAnnotations) await this.onRefreshAnnotations();
+      } catch (delErr) {
+        console.warn('[ReaderNotesViewModel] Delete note failed, queued in outbox:', delErr);
+      }
       this.renderNotesMode();
     }
   }

@@ -359,7 +359,10 @@ test("ReaderPageRenderer decorates both precise layouts and the PDF.js fallback 
   const world = createTextLayerWorld();
   const trace = [];
   world.textLayerView.createTextLayerContainer = () => new ElementStub();
-  world.textLayerView.groupWordsIntoLines = (words) => words;
+  world.textLayerView.groupWordsIntoLines = (words) => {
+    trace.push(["group", words]);
+    return words;
+  };
   world.textLayerView.renderPreciseLines = () => trace.push("precise");
   world.textLayerView.decorateCrossReferences = (...args) => trace.push(["decorate", ...args.slice(1)]);
   world.context.pdfjsLib.TextLayer = class {
@@ -407,7 +410,11 @@ test("ReaderPageRenderer decorates both precise layouts and the PDF.js fallback 
   assert.equal(trace[1][3], callback);
 
   trace.length = 0;
-  world.context.api.getPageLayout = async () => ({ words: [{ text: "Chapter 3" }], lines: [] });
+  const cachedWords = [{ text: "Chapter 3" }];
+  world.context.api.getPageLayout = async () => ({
+    words: cachedWords,
+    lines: [{ x0: 0, y0: 0, x1: 500, y1: 600, words: cachedWords }],
+  });
   await renderer.renderTextLayer(
     createPageWrapper(),
     { getTextContent: async () => ({ items: [] }) },
@@ -418,8 +425,10 @@ test("ReaderPageRenderer decorates both precise layouts and the PDF.js fallback 
     1,
     1,
   );
-  assert.equal(trace[0], "precise");
-  assert.equal(trace[1][0], "decorate");
-  assert.equal(trace[1][1], navigationMap);
-  assert.equal(trace[1][2], 5);
+  assert.equal(trace[0][0], "group");
+  assert.equal(trace[0][1], cachedWords);
+  assert.equal(trace[1], "precise");
+  assert.equal(trace[2][0], "decorate");
+  assert.equal(trace[2][1], navigationMap);
+  assert.equal(trace[2][2], 5);
 });
