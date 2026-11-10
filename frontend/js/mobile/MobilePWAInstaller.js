@@ -53,9 +53,9 @@ class MobilePWAInstaller {
     } else {
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
       if (isIOS) {
-        alert('Para instalar Lunabria en tu iPhone o iPad, pulsa el botón de Compartir en Safari y selecciona "Añadir a pantalla de inicio".');
+        alert('To install Lunabria on your iPhone or iPad, tap the Share button in Safari and select "Add to Home Screen".');
       } else {
-        alert('Lunabria ya está instalada o tu navegador permite instalarla desde el menú principal de la barra de direcciones.');
+        alert('Lunabria is already installed or your browser allows installing it from the address bar menu.');
       }
     }
   }

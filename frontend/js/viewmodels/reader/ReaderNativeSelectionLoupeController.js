@@ -103,8 +103,37 @@ class ReaderNativeSelectionLoupeController {
     event.preventDefault?.();
     const selection = window.getSelection();
     if (!selection) return;
+
+    if (event.shiftKey && selection && !selection.isCollapsed && selection.anchorNode && this.anchorWord) {
+      try {
+        const cmp = this.comparePositions(
+          selection.anchorNode,
+          selection.anchorOffset,
+          this.anchorWord.startNode,
+          this.anchorWord.startOffset,
+        );
+        if (cmp <= 0) {
+          selection.setBaseAndExtent(
+            selection.anchorNode,
+            selection.anchorOffset,
+            this.anchorWord.endNode,
+            this.anchorWord.endOffset,
+          );
+        } else {
+          selection.setBaseAndExtent(
+            selection.anchorNode,
+            selection.anchorOffset,
+            this.anchorWord.startNode,
+            this.anchorWord.startOffset,
+          );
+        }
+        this.completedSelectionDrag = true;
+        return;
+      } catch (_) {}
+    }
+
     try {
-      if (this.clickDetail === 2 && this.anchorWord) {
+      if (this.clickDetail >= 2 && this.anchorWord) {
         selection.setBaseAndExtent(
           this.anchorWord.startNode,
           this.anchorWord.startOffset,
@@ -245,14 +274,13 @@ class ReaderNativeSelectionLoupeController {
     );
     if (!focus?.node) return;
 
-    this.applySelectionExtent(focus);
-
     const pointerTravel = Math.hypot(event.clientX - this.startX, event.clientY - this.startY);
     const hasSelectionSpan = focus.node !== this.anchor.node || focus.offset !== this.anchor.offset;
     if (pointerTravel > 8) this.didDrag = true;
 
-    if (this.isSelecting || pointerTravel > 3 || hasSelectionSpan) {
+    if (this.isSelecting || pointerTravel > 3 || hasSelectionSpan || this.clickDetail >= 2) {
       this.isSelecting = true;
+      this.applySelectionExtent(focus);
       this.loupe.update(event.clientX, event.clientY, activeWrapper);
     }
   }
@@ -261,7 +289,8 @@ class ReaderNativeSelectionLoupeController {
     const selection = window.getSelection();
     if (!selection) return;
     try {
-      if (this.clickDetail === 2 && this.anchorWord) {
+      const anchorWord = this.anchorWord || this.getWordBoundaries(this.anchor);
+      if (anchorWord) {
         const focusWord = this.getWordBoundaries(focus) || {
           startNode: focus.node,
           startOffset: focus.offset,
@@ -269,22 +298,22 @@ class ReaderNativeSelectionLoupeController {
           endOffset: focus.offset,
         };
         const cmp = this.comparePositions(
-          this.anchorWord.startNode,
-          this.anchorWord.startOffset,
+          anchorWord.startNode,
+          anchorWord.startOffset,
           focusWord.startNode,
           focusWord.startOffset,
         );
         if (cmp <= 0) {
           selection.setBaseAndExtent(
-            this.anchorWord.startNode,
-            this.anchorWord.startOffset,
+            anchorWord.startNode,
+            anchorWord.startOffset,
             focusWord.endNode,
             focusWord.endOffset,
           );
         } else {
           selection.setBaseAndExtent(
-            this.anchorWord.endNode,
-            this.anchorWord.endOffset,
+            anchorWord.endNode,
+            anchorWord.endOffset,
             focusWord.startNode,
             focusWord.startOffset,
           );

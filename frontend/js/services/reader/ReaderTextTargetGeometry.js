@@ -27,19 +27,36 @@ class ReaderTextTargetGeometry {
     const node = targetInfo.node;
     const text = node.textContent || "";
 
-    const wordSpan = targetInfo.span?.closest?.(".precise-word");
-    if (wordSpan?.contains(node)) {
-      const trimmed = text.trimEnd();
+    const wordSpan =
+      targetInfo.span?.closest?.(".precise-word") ||
+      node.parentElement?.closest?.(".precise-word");
+    if (wordSpan && (wordSpan.contains(node) || wordSpan === node)) {
+      const actualNode = node.nodeType === 3 ? node : (wordSpan.firstChild || node);
+      const nodeText = actualNode.textContent || "";
+      const trimmed = nodeText.trimEnd();
       return {
-        startNode: node,
+        startNode: actualNode,
         startOffset: 0,
-        endNode: node,
+        endNode: actualNode,
         endOffset: trimmed.length,
         fullText: trimmed,
       };
     }
 
-    const offset = Math.max(0, Math.min(text.length, targetInfo.offset || 0));
+    let offset = Math.max(0, Math.min(text.length, targetInfo.offset || 0));
+    if (offset >= text.length && text.length > 0) offset = text.length - 1;
+    if (text.length > 0 && /\s/.test(text[offset])) {
+      let left = offset;
+      while (left >= 0 && /\s/.test(text[left])) left--;
+      let right = offset;
+      while (right < text.length && /\s/.test(text[right])) right++;
+      if (left >= 0 && (right >= text.length || offset - left <= right - offset)) {
+        offset = left;
+      } else if (right < text.length) {
+        offset = right;
+      }
+    }
+
     let start = offset;
     while (start > 0 && !/\s/.test(text[start - 1])) start--;
     let end = offset;

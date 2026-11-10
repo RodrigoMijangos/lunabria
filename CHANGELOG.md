@@ -11,6 +11,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-11-09
+
+### Changed
+- Text selection snaps to full initial words and expands by whole word blocks, preventing partial words from being selected mid-drag.
+
+### Fixed
+- Chapter-based notes exports now filter annotations by chapter vertical boundaries on shared pages, excluding annotations that precede the chapter heading.
+
 ## [1.15.0] - 2026-11-06
 
 ### Added
@@ -593,7 +601,8 @@ Mobile PWA, responsive reader and offline capabilities.
 - Calibre CLI service layer and direct `metadata.db` SQLite connector.
 - FastAPI REST API routers for catalog browsing, reading progress tracking, and media streaming.
 
-[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/RodrigoMijangos/lunabria/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.15.0...v1.16.0
 [1.15.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/RodrigoMijangos/lunabria/compare/v1.12.0...v1.13.0

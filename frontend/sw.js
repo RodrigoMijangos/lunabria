@@ -1,4 +1,4 @@
-const CACHE_NAME = "lunabria-v1.15.0";
+const CACHE_NAME = "lunabria-v1.16.0";
 const COVER_CACHE_NAME = "lunabria-covers-v1";
 const CACHEABLE_EXTERNAL_ORIGINS = new Set([
   "https://cdn.jsdelivr.net",
@@ -17,7 +17,7 @@ const STATIC_ASSETS = [
   "./icons/icon-512.png",
   "./icons/maskable-512.png",
   "./css/style.css?v=1.0.18",
-  "./css/mobile/mobile-reader.css?v=1.1.4",
+  "./css/mobile/mobile-reader.css?v=1.1.5",
   "./js/services/http.js?v=1.0.0",
   "./js/services/connectivity.js?v=1.0.4",
   "./js/services/LocalDBOutbox.js?v=1.0.0",
@@ -69,8 +69,8 @@ const STATIC_ASSETS = [
   "./js/viewmodels/reader/ReaderNavigationViewModel.js?v=1.0.8",
   "./js/views/reader/TableOfContentsView.js?v=1.1.0",
   "./js/viewmodels/reader/ReaderTextHighlightController.js?v=1.3.0",
-  "./js/services/reader/ReaderTextTargetGeometry.js?v=1.0.1",
-  "./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.1",
+  "./js/services/reader/ReaderTextTargetGeometry.js?v=1.0.2",
+  "./js/viewmodels/reader/ReaderNativeSelectionLoupeController.js?v=1.4.2",
   "./js/viewmodels/reader/ReaderDrawingInteractionController.js?v=1.0.1",
   "./js/viewmodels/reader/ReaderDrawingPersistenceController.js?v=1.0.1",
   "./js/viewmodels/reader/ReaderDrawingToolController.js?v=1.0.0",
@@ -94,7 +94,7 @@ const STATIC_ASSETS = [
   "./js/mobile/MobileHUDView.js?v=1.1.2",
   "./js/mobile/MobileDrawingToolbarView.js?v=1.3.0",
   "./js/mobile/MobileSelectionTargetResolver.js?v=1.0.1",
-  "./js/mobile/MobileSelectionController.js?v=1.4.3",
+  "./js/mobile/MobileSelectionController.js?v=1.4.4",
   "./js/mobile/MobilePWAInstaller.js?v=1.1.0",
   "./js/mobile/MobileReaderController.js?v=1.3.2-mobile-first-paint",
   "./js/viewmodels/ReaderViewModel.js?v=1.4.6",

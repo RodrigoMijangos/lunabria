@@ -1803,6 +1803,169 @@ test("ReaderNativeSelectionLoupeController preserves full initial word and expan
   assert.equal(controller.clickDetail, 1);
 });
 
+test("ReaderNativeSelectionLoupeController selects full word and advances by whole word blocks on any drag selection", () => {
+  let lastSelection = null;
+  let lastCollapse = null;
+  const context = vm.createContext({
+    document: {
+      elementFromPoint: () => null,
+      querySelectorAll: () => [],
+      addEventListener: () => {},
+    },
+    window: {
+      addEventListener: () => {},
+      getSelection: () => ({
+        collapse: (node, offset) => {
+          lastCollapse = { node, offset };
+        },
+        setBaseAndExtent: (startNode, startOffset, endNode, endOffset) => {
+          lastSelection = { startNode, startOffset, endNode, endOffset };
+        },
+        anchorNode: lastSelection ? lastSelection.startNode : null,
+        anchorOffset: lastSelection ? lastSelection.startOffset : 0,
+        isCollapsed: false,
+      }),
+    },
+    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    Element: class {},
+    Node: {
+      TEXT_NODE: 3,
+      DOCUMENT_POSITION_FOLLOWING: 4,
+      DOCUMENT_POSITION_PRECEDING: 2,
+      DOCUMENT_POSITION_CONTAINED_BY: 16,
+      DOCUMENT_POSITION_CONTAINS: 8,
+    },
+    NodeFilter: { SHOW_TEXT: 4 },
+    ReaderSelectionLoupeView: class {
+      constructor() {
+        this.visible = false;
+        this.updates = [];
+      }
+      update(x, y, pw) {
+        this.visible = true;
+        this.updates.push({ x, y, pw });
+      }
+      hide() {
+        this.visible = false;
+      }
+    },
+  });
+
+  loadReaderModel(context);
+  loadNativeSelectionController(context);
+
+  const model = new context.window.ReaderModel();
+  const controller = new context.window.ReaderNativeSelectionLoupeController(model, null, null);
+
+  const wordA = {
+    textContent: "First ",
+    nodeType: 3,
+    compareDocumentPosition: (other) => (other === wordB ? 4 : 0),
+  };
+  const spanA = {
+    textContent: "First ",
+    contains: () => true,
+    closest: (sel) => (sel === ".precise-word" ? spanA : null),
+  };
+  const wordB = {
+    textContent: "sentence.",
+    nodeType: 3,
+    compareDocumentPosition: (other) => (other === wordA ? 2 : 0),
+  };
+  const spanB = {
+    textContent: "sentence.",
+    contains: () => true,
+    closest: (sel) => (sel === ".precise-word" ? spanB : null),
+  };
+
+  const fakeWrapper = {
+    isConnected: true,
+    querySelectorAll: () => [fakeWrapper],
+    getBoundingClientRect: () => ({ top: 0, bottom: 500, left: 0, right: 400 }),
+    querySelector: () => ({ querySelectorAll: () => [spanA, spanB] }),
+  };
+  controller.getPageWrapperAt = () => fakeWrapper;
+
+  const targetEl = new context.Element();
+  targetEl.closest = () => null;
+
+  // 1. Single-click (detail: 1) on character offset 2 of wordA ("r")
+  controller.findTextTargetWithinGap = () => ({
+    node: wordA,
+    offset: 2,
+    span: spanA,
+    rect: { top: 10, bottom: 30, left: 10, right: 60 },
+  });
+  controller.startSelection({
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+    button: 0,
+    clientX: 25,
+    clientY: 20,
+    detail: 1,
+    target: targetEl,
+  });
+
+  assert.equal(controller.clickDetail, 1);
+  assert.equal(lastCollapse.node, wordA);
+  assert.equal(lastCollapse.offset, 2);
+  assert.equal(controller.isSelecting, false);
+
+  // 2. Drag forward within the same word (offset 4, "t")
+  controller.findTextTargetWithinGap = () => ({
+    node: wordA,
+    offset: 4,
+    span: spanA,
+    rect: { top: 10, bottom: 30, left: 10, right: 60 },
+  });
+  controller.updateSelection({ pointerId: 1, buttons: 1, clientX: 45, clientY: 20 });
+
+  assert.equal(controller.isSelecting, true);
+  assert.equal(lastSelection.startNode, wordA);
+  assert.equal(lastSelection.startOffset, 0, "Same-word drag must snap start to word start 0");
+  assert.equal(lastSelection.endNode, wordA);
+  assert.equal(lastSelection.endOffset, 5, "Same-word drag must snap end to trimmed word end");
+
+  // 3. Continue dragging forward into wordB ("sentence.")
+  controller.findTextTargetWithinGap = () => ({
+    node: wordB,
+    offset: 3,
+    span: spanB,
+    rect: { top: 10, bottom: 30, left: 70, right: 140 },
+  });
+  controller.updateSelection({ pointerId: 1, buttons: 1, clientX: 95, clientY: 20 });
+
+  assert.equal(lastSelection.startNode, wordA);
+  assert.equal(lastSelection.startOffset, 0, "Forward drag start must remain at start of wordA");
+  assert.equal(lastSelection.endNode, wordB);
+  assert.equal(lastSelection.endOffset, 9, "Forward drag end must snap to end of wordB");
+
+  controller.endSelection({ clientX: 95, clientY: 20 });
+  assert.equal(controller.completedSelectionDrag, true);
+  assert.equal(controller.isSelecting, false);
+
+  // 4. Shift+Click on wordA extends backwards
+  controller.findTextTargetWithinGap = () => ({
+    node: wordA,
+    offset: 2,
+    span: spanA,
+    rect: { top: 10, bottom: 30, left: 10, right: 60 },
+  });
+  controller.startSelection({
+    pointerId: 2,
+    pointerType: "mouse",
+    isPrimary: true,
+    button: 0,
+    clientX: 25,
+    clientY: 20,
+    detail: 1,
+    shiftKey: true,
+    target: targetEl,
+  });
+  assert.equal(controller.completedSelectionDrag, true, "Shift+Click marks completedSelectionDrag");
+});
+
 test("ReaderToolbarManager wheel zoom uses fast 0.25 step with delta intensity scaling", () => {
   const frames = [];
   const registeredListeners = [];

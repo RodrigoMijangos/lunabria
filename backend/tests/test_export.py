@@ -535,6 +535,93 @@ class TestNotesExportDeterministic(unittest.TestCase):
         self.assertIn('- **[Page 1]**: "Concept 1"', md)
         self.assertIn("> 💡 *Note:* Note 1", md)
 
+    def test_section_export_filters_annotations_before_chapter_start_on_same_page(self):
+        doc = pymupdf.open(self.sample_pdf_with_toc)
+        sections = notes_export.parse_toc_sections(doc, book_id=10)
+        doc.close()
+
+        # Page 2 has "Chapter 2 Deep Dive" starting at y0 ~ 82.8.
+        # An annotation at y0 = 40 (above the chapter heading) belongs before Chapter 2.
+        annot_before_ch2 = {
+            "id": "annot_before",
+            "page": 2,
+            "color": "yellow",
+            "category": "Key Idea",
+            "text": "Annotation before Chapter 2 heading",
+            "rects": [{"x0": 70, "y0": 40, "x1": 200, "y1": 60}]
+        }
+        annot_in_ch2 = {
+            "id": "annot_in",
+            "page": 2,
+            "color": "yellow",
+            "category": "Key Idea",
+            "text": "Annotation inside Chapter 2",
+            "rects": [{"x0": 70, "y0": 200, "x1": 200, "y1": 220}]
+        }
+
+        # Export Chapter 2 (section index 1)
+        ch2_annots = notes_export.select_export_annotations(
+            [annot_before_ch2, annot_in_ch2],
+            "section",
+            section_index=1,
+            sections=sections
+        )
+        self.assertEqual([a["id"] for a in ch2_annots], ["annot_in"])
+
+        # Export Chapter 1 (section index 0, which ends where Chapter 2 begins on page 2)
+        ch1_annots = notes_export.select_export_annotations(
+            [annot_before_ch2, annot_in_ch2],
+            "section",
+            section_index=0,
+            sections=sections
+        )
+        self.assertEqual([a["id"] for a in ch1_annots], ["annot_before"])
+
+    def test_build_model_assigns_annotations_before_chapter_heading_to_preceding_section(self):
+        palette = self.get_sample_palette()
+        # Page 2 has Chapter 2 heading at y ~ 82.8.
+        annot_pre = {
+            "id": "pre",
+            "page": 2,
+            "color": "yellow",
+            "category": "Key Idea",
+            "text": "Ending lines of Chapter 1",
+            "rects": [{"x0": 70, "y0": 40, "x1": 200, "y1": 60}]
+        }
+        annot_ch2 = {
+            "id": "ch2",
+            "page": 2,
+            "color": "yellow",
+            "category": "Key Idea",
+            "text": "Deep dive point",
+            "rects": [{"x0": 70, "y0": 200, "x1": 200, "y1": 220}]
+        }
+        book_info = {"id": 1, "title": "Boundary Test", "authors": "Author"}
+        model = notes_export.build_model([annot_pre, annot_ch2], book_info, self.sample_pdf_with_toc, palette)
+
+        sec_map = {s["id"]: s["title"] for s in model["sections"]}
+        runs = model["runs"]
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(sec_map[runs[0]["section"]], "Chapter 1 Introduction")
+        self.assertEqual(runs[0]["marks"][0]["id"], "pre")
+        self.assertEqual(sec_map[runs[1]["section"]], "Chapter 2 Deep Dive")
+        self.assertEqual(runs[1]["marks"][0]["id"], "ch2")
+
+    def test_section_export_fallback_without_geometry(self):
+        # When annotations lack rects, fallback includes based on page boundaries
+        sections = [
+            {"title": "Ch 1", "level": 1, "page_start": 1, "page_end": 2},
+            {"title": "Ch 2", "level": 1, "page_start": 2, "page_end": 3}
+        ]
+        annot_no_rects = {"id": "nr", "page": 2, "rects": []}
+        selected = notes_export.select_export_annotations(
+            [annot_no_rects],
+            "section",
+            section_index=0,
+            sections=sections
+        )
+        self.assertEqual([a["id"] for a in selected], ["nr"])
+
     def test_golden_files_generation(self):
         palette = self.get_sample_palette()
         annots = self.get_fixture_annotations()

@@ -10,7 +10,7 @@ const diagnoseUploadResponse = (xhr, bytesSent = false) => {
   const isNginxOrProxy = serverHeader.includes('nginx') || responseText.toLowerCase().includes('nginx') || /<html[\s>]/i.test(responseText);
 
   if (status === 413 || /request entity too large|payload too large/i.test(responseText)) {
-    const error = new Error("Error del proxy inverso (HTTP 413 - Payload Too Large): el archivo supera el límite permitido por el proxy. Configura 'client_max_body_size 500M;' en Nginx u otro proxy inverso.");
+    const error = new Error("Reverse proxy error (HTTP 413 - Payload Too Large): the file exceeds the maximum size allowed by the proxy. Configure 'client_max_body_size 500M;' in Nginx or your reverse proxy.");
     error.status = status;
     error.isProxyError = true;
     error.proxyDirective = 'client_max_body_size 500M;';
@@ -18,7 +18,7 @@ const diagnoseUploadResponse = (xhr, bytesSent = false) => {
   }
 
   if (status === 504 || /gateway time-?out/i.test(responseText)) {
-    const error = new Error("Error del proxy inverso (HTTP 504 - Gateway Timeout): el proxy agotó el tiempo de espera. Desactiva el buffering de peticiones ('proxy_request_buffering off;') y amplía 'proxy_read_timeout 600s;'.");
+    const error = new Error("Reverse proxy error (HTTP 504 - Gateway Timeout): proxy timed out waiting for the upstream server. Disable request buffering ('proxy_request_buffering off;') and increase 'proxy_read_timeout 600s;'.");
     error.status = status;
     error.isProxyError = true;
     error.proxyDirective = 'proxy_request_buffering off;';
@@ -26,14 +26,14 @@ const diagnoseUploadResponse = (xhr, bytesSent = false) => {
   }
 
   if (status === 502 || /bad gateway/i.test(responseText)) {
-    const error = new Error("Error del proxy inverso (HTTP 502 - Bad Gateway): el proxy no pudo comunicarse con el backend de Lunabria.");
+    const error = new Error("Reverse proxy error (HTTP 502 - Bad Gateway): the proxy could not connect to the Lunabria backend.");
     error.status = status;
     error.isProxyError = true;
     return error;
   }
 
   if (status === 408 || /request time-?out/i.test(responseText)) {
-    const error = new Error("Error del proxy inverso (HTTP 408 - Request Timeout): tiempo agotado durante la transferencia en el proxy. Desactiva el buffering con 'proxy_request_buffering off;'.");
+    const error = new Error("Reverse proxy error (HTTP 408 - Request Timeout): transfer timed out in the proxy. Disable buffering with 'proxy_request_buffering off;'.");
     error.status = status;
     error.isProxyError = true;
     error.proxyDirective = 'proxy_request_buffering off;';
@@ -41,7 +41,7 @@ const diagnoseUploadResponse = (xhr, bytesSent = false) => {
   }
 
   if (status === 400 && (!result || !result.detail) && isNginxOrProxy) {
-    const error = new Error("Error del proxy inverso (HTTP 400 - Bad Request): Nginx rechazó la subida antes de llegar a Lunabria. Típico cuando 'proxy_request_buffering on;' está activo. Añade 'proxy_request_buffering off;' a Nginx.");
+    const error = new Error("Reverse proxy error (HTTP 400 - Bad Request): Nginx rejected the upload before reaching Lunabria. Typically caused by 'proxy_request_buffering on;'. Add 'proxy_request_buffering off;' to Nginx.");
     error.status = status;
     error.isProxyError = true;
     error.proxyDirective = 'proxy_request_buffering off;';
@@ -58,7 +58,7 @@ const diagnoseUploadResponse = (xhr, bytesSent = false) => {
     return error;
   }
 
-  const message = status ? `Error en la subida (HTTP ${status})` : 'Error uploading book';
+  const message = status ? `Upload error (HTTP ${status})` : 'Error uploading book';
   const error = new Error(message);
   error.status = status;
   return error;
@@ -181,7 +181,7 @@ const createBooksApiService = () => ({
 
       xhr.onerror = () => {
         if (bytesSent) {
-          const error = new Error("Conexión interrumpida por el proxy inverso tras enviar los datos. Es probable que Nginx haya abortado por buffering. Configura 'proxy_request_buffering off;'.");
+          const error = new Error("Connection interrupted by the reverse proxy after sending data. Nginx likely aborted due to buffering. Configure 'proxy_request_buffering off;'.");
           error.status = 0;
           error.isProxyError = true;
           error.proxyDirective = 'proxy_request_buffering off;';
@@ -193,7 +193,7 @@ const createBooksApiService = () => ({
 
       xhr.ontimeout = () => {
         if (bytesSent) {
-          const error = new Error("Tiempo de espera agotado tras enviar los datos. Posible buffering en el proxy inverso. Configura 'proxy_request_buffering off;'.");
+          const error = new Error("Timeout reached after sending data. Possible buffering in reverse proxy. Configure 'proxy_request_buffering off;'.");
           error.status = 408;
           error.isProxyError = true;
           error.proxyDirective = 'proxy_request_buffering off;';

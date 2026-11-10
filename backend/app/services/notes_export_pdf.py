@@ -51,9 +51,50 @@ def extract_reconstructed_text(
     split_words_with_dashes = _split_words_with_dashes
     VERTICAL_OVERLAP_THRESHOLD = _vertical_overlap_threshold
     cleaned_saved = normalize_text(saved_text)
-    sorted_rects = sorted(rects or [], key=lambda r: (round(r.get("y0", 0.0), 1), r.get("x0", 0.0)))
-    first_y0 = sorted_rects[0]["y0"] if sorted_rects else 0.0
-    first_x0 = sorted_rects[0]["x0"] if sorted_rects else 0.0
+
+    def _rect_y0(r: Dict[str, Any]) -> float:
+        for k in ("y0", "top", "y"):
+            if k in r and r[k] is not None:
+                try:
+                    return float(r[k])
+                except (ValueError, TypeError):
+                    pass
+        return 0.0
+
+    def _rect_x0(r: Dict[str, Any]) -> float:
+        for k in ("x0", "left", "x"):
+            if k in r and r[k] is not None:
+                try:
+                    return float(r[k])
+                except (ValueError, TypeError):
+                    pass
+        return 0.0
+
+    def _rect_y1(r: Dict[str, Any]) -> float:
+        for k in ("y1", "bottom"):
+            if k in r and r[k] is not None:
+                try:
+                    return float(r[k])
+                except (ValueError, TypeError):
+                    pass
+        if "height" in r and r["height"] is not None:
+            return _rect_y0(r) + float(r["height"])
+        return _rect_y0(r)
+
+    def _rect_x1(r: Dict[str, Any]) -> float:
+        for k in ("x1", "right"):
+            if k in r and r[k] is not None:
+                try:
+                    return float(r[k])
+                except (ValueError, TypeError):
+                    pass
+        if "width" in r and r["width"] is not None:
+            return _rect_x0(r) + float(r["width"])
+        return _rect_x0(r)
+
+    sorted_rects = sorted(rects or [], key=lambda r: (round(_rect_y0(r), 1), _rect_x0(r)))
+    first_y0 = _rect_y0(sorted_rects[0]) if sorted_rects else 0.0
+    first_x0 = _rect_x0(sorted_rects[0]) if sorted_rects else 0.0
 
     if not doc or not rects or page_num < 1 or page_num > doc.page_count:
         return cleaned_saved, None, "stored", (page_num, int(first_y0 * 10), int(first_x0 * 10), 0, 0), first_y0
@@ -71,8 +112,12 @@ def extract_reconstructed_text(
             word_h = w_y1 - w_y0
             word_w = w_x1 - w_x0
             for r in sorted_rects:
-                vert_overlap = max(0.0, min(r["y1"], w_y1) - max(r["y0"], w_y0))
-                horiz_overlap = max(0.0, min(r["x1"], w_x1) - max(r["x0"], w_x0))
+                r_y0 = _rect_y0(r)
+                r_y1 = _rect_y1(r)
+                r_x0 = _rect_x0(r)
+                r_x1 = _rect_x1(r)
+                vert_overlap = max(0.0, min(r_y1, w_y1) - max(r_y0, w_y0))
+                horiz_overlap = max(0.0, min(r_x1, w_x1) - max(r_x0, w_x0))
                 if word_h > 0 and (vert_overlap / word_h) > VERTICAL_OVERLAP_THRESHOLD and (horiz_overlap > 0.25 * word_w or horiz_overlap > 0):
                     matched_words.append(sw)
                     break
@@ -116,26 +161,57 @@ def parse_toc_sections(
     stack: List[Dict[str, Any]] = []
 
     for entry in raw_toc:
-        lvl, title, page, dest = entry
+        if len(entry) >= 4:
+            lvl, title, page, dest = entry[:4]
+        else:
+            lvl, title, page = entry[:3]
+            dest = None
         title = normalize_text(title)
 
-        y = 0.0
+        dest_y = None
         if isinstance(dest, dict) and "to" in dest and dest["to"] is not None:
-            y = dest["to"].y
-        else:
+            dest_y = float(dest["to"].y)
+
+        found_y = None
+        if doc and 1 <= page <= doc.page_count:
             try:
                 p = doc[page - 1]
                 matches = p.search_for(title)
+                if not matches:
+                    cleaned = re.sub(r"\s+", " ", title).strip()
+                    if cleaned and cleaned != title:
+                        matches = p.search_for(cleaned)
+                if not matches:
+                    for sep in (": ", " - ", " – ", " — "):
+                        if sep in title:
+                            part = title.split(sep)[0].strip()
+                            if len(part) >= 3:
+                                matches = p.search_for(part)
+                                if matches:
+                                    break
                 if matches:
-                    y = matches[0].y0
+                    if dest_y is not None and dest_y > 40.0:
+                        closest_match = min(matches, key=lambda m: abs(m.y0 - dest_y))
+                        found_y = closest_match.y0
+                    else:
+                        body_matches = [m for m in matches if m.y0 >= 45.0]
+                        found_y = body_matches[0].y0 if body_matches else matches[0].y0
             except Exception:
-                y = 0.0
+                pass
+
+        if found_y is not None:
+            y = float(found_y)
+        elif dest_y is not None:
+            y = dest_y
+        else:
+            y = 0.0
 
         sec_id = "s_" + hashlib.sha1(f"{book_id}|{lvl}|{title}|{page}".encode("utf-8")).hexdigest()[:8]
 
         while stack and stack[-1]["level"] >= lvl:
             popped = stack.pop()
             popped["page_end"] = page
+            popped["end_y"] = y
 
         parent_id = stack[-1]["id"] if stack else None
         parent_path = list(stack[-1]["path"]) if stack else []
@@ -150,6 +226,7 @@ def parse_toc_sections(
             "page_end": doc.page_count,
             "path": parent_path + [title],
             "y": y,
+            "end_y": None,
             "raw_page": page
         }
 

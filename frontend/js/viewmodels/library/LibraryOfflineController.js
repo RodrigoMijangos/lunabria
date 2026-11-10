@@ -260,8 +260,8 @@ class LibraryOfflineController {
     }
     const message =
       count > 0
-        ? `Modo sin conexión: mostrando ${count} libro(s) disponible(s) con PDF y lectura completa`
-        : "Modo sin conexión: sin libros descargados para lectura completa";
+        ? `Offline mode: showing ${count} book(s) available with PDF and full reading`
+        : "Offline mode: no books downloaded for full reading";
     banner.innerHTML = `<svg class="ui-icon" aria-hidden="true" focusable="false"><use href="./icons.svg#circle-check"></use></svg> <span>${message}</span>`;
     banner.style.display = "flex";
   }

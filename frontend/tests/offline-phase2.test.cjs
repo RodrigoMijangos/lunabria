@@ -326,10 +326,10 @@ test("LibraryViewModel shows offline banner with correct message and count", () 
   const banner = elements.get("offline-catalog-banner");
   assert.ok(banner);
   assert.equal(banner.style.display, "flex");
-  assert.ok(banner.innerHTML.includes("3 libro(s) disponible(s)"));
+  assert.ok(banner.innerHTML.includes("3 book(s) available"));
 
   l.showOfflineBanner(0);
-  assert.ok(banner.innerHTML.includes("sin libros descargados"));
+  assert.ok(banner.innerHTML.includes("no books downloaded"));
 
   l.hideOfflineBanner();
   assert.equal(banner.style.display, "none");

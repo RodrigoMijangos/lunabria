@@ -335,18 +335,32 @@ class MobileSelectionController {
     if (!sel || typeof sel.setBaseAndExtent !== "function") return;
 
     try {
+      const focusWord =
+        (typeof ReaderTextTargetGeometry !== "undefined"
+          ? ReaderTextTargetGeometry.getWordBoundaries(currentPos)
+          : null) || {
+          startNode: currentPos.node,
+          startOffset: currentPos.offset,
+          endNode: currentPos.node,
+          endOffset: currentPos.offset,
+        };
       const cmp = this.comparePositions(
         this.anchorTarget.node,
         this.anchorTarget.offset,
-        currentPos.node,
-        currentPos.offset,
+        focusWord.startNode,
+        focusWord.startOffset,
       );
       if (cmp <= 0) {
-        sel.setBaseAndExtent(this.anchorTarget.node, this.anchorTarget.offset, currentPos.node, currentPos.offset);
+        sel.setBaseAndExtent(
+          this.anchorTarget.node,
+          this.anchorTarget.offset,
+          focusWord.endNode,
+          focusWord.endOffset,
+        );
       } else {
         sel.setBaseAndExtent(
-          currentPos.node,
-          currentPos.offset,
+          focusWord.startNode,
+          focusWord.startOffset,
           this.anchorTarget.initialEndNode || this.anchorTarget.node,
           this.anchorTarget.initialEndOffset || this.anchorTarget.offset,
         );

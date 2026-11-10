@@ -121,10 +121,10 @@ class BookUploadManager {
     const accepted = result?.accepted || [];
     if (rejected.length === 0) return;
     if (accepted.length === 0) {
-      ToastView?.show?.("Solo se admiten libros en formato PDF (.pdf).", "error");
+      ToastView?.show?.("Only PDF books (.pdf) are supported.", "error");
     } else {
       ToastView?.show?.(
-        `Se omitieron ${rejected.length} archivo(s) no compatibles: solo se admiten archivos .pdf`,
+        `Skipped ${rejected.length} unsupported file(s): only .pdf files are supported`,
         "warning",
       );
     }

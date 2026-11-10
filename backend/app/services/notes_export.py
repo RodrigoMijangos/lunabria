@@ -201,6 +201,58 @@ def _select_range_annotations(
     ]
 
 
+def _get_annotation_pos_y(annotation: Dict[str, Any]) -> Optional[float]:
+    rects = annotation.get("rects")
+    if not rects or not isinstance(rects, list):
+        return None
+    y_vals = []
+    for r in rects:
+        if isinstance(r, dict):
+            for k in ("y0", "top", "y"):
+                if k in r and r[k] is not None:
+                    try:
+                        y_vals.append(float(r[k]))
+                        break
+                    except (ValueError, TypeError):
+                        pass
+    return min(y_vals) if y_vals else None
+
+
+def _annotation_matches_section(
+    annotation: Dict[str, Any],
+    section: Dict[str, Any],
+    *,
+    end_y: Optional[float] = None,
+    toc_y_tolerance: float = TOC_Y_TOLERANCE
+) -> bool:
+    annot_page = annotation.get("page")
+    if annot_page is None:
+        return False
+
+    page_start = section["page_start"]
+    page_end = section["page_end"]
+
+    if annot_page < page_start or annot_page > page_end:
+        return False
+
+    annot_y = _get_annotation_pos_y(annotation)
+    if annot_y is None:
+        return True
+
+    if annot_page == page_start:
+        sec_y = section.get("y")
+        if sec_y is not None and sec_y > 0.0:
+            if annot_y < sec_y - toc_y_tolerance:
+                return False
+
+    if annot_page == page_end:
+        if end_y is not None and end_y > 0.0:
+            if annot_y >= end_y - toc_y_tolerance:
+                return False
+
+    return True
+
+
 def _select_section_annotations(
     annotations: List[Dict[str, Any]],
     *,
@@ -218,11 +270,18 @@ def _select_section_annotations(
     if section_index >= len(sections):
         raise ValueError("The selected table-of-contents section does not exist.")
     section = sections[section_index]
-    page_start = section["page_start"]
-    page_end = section["page_end"]
+
+    section_end_y = section.get("end_y")
+    if section_end_y is None and sections:
+        for next_s in sections[section_index + 1:]:
+            if next_s.get("level", 1) <= section.get("level", 1):
+                if next_s.get("page_start") == section["page_end"]:
+                    section_end_y = next_s.get("y")
+                break
+
     return [
         annotation for annotation in annotations
-        if page_start <= annotation["page"] <= page_end
+        if _annotation_matches_section(annotation, section, end_y=section_end_y)
     ]
 
 

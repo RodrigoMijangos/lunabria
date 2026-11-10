@@ -200,14 +200,14 @@ class ReaderPageLayerBuilder {
       '<svg class="ui-icon" aria-hidden="true" focusable="false" style="width:32px;height:32px;"><use href="./icons.svg#warning"></use></svg>';
 
     const msg = document.createElement("p");
-    msg.textContent = `No se pudo dibujar la página ${pageNumber}.`;
+    msg.textContent = `Could not render page ${pageNumber}.`;
     msg.style.margin = "0 0 12px 0";
     msg.style.fontWeight = "500";
 
     const retryBtn = document.createElement("button");
     retryBtn.type = "button";
     retryBtn.className = "btn btn-secondary retry-page-render-btn";
-    retryBtn.textContent = "Reintentar página";
+    retryBtn.textContent = "Retry page";
     retryBtn.style.cursor = "pointer";
     retryBtn.onclick = (e) => {
       e.stopPropagation();

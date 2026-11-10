@@ -176,7 +176,10 @@ class BookUploadTransferController {
 
     const detail = error?.detail;
     if (detail && detail.code === "DUPLICATE_ISBN_FORMAT") {
-      const confirmMsg = `Ya existe un libro con el mismo ISBN (${detail.isbn}) y formato (${detail.format}):\n«${detail.existing_title}»\n\n¿Deseas añadirlo de todas maneras?`;
+      const confirmMsg = `A book with the same ISBN (${detail.isbn}) and format (${detail.format}) already exists:
+«${detail.existing_title}»
+
+Do you want to add it anyway?`;
       const allow =
         typeof window !== "undefined" && typeof window.confirm === "function" ? window.confirm(confirmMsg) : false;
 
@@ -188,8 +191,8 @@ class BookUploadTransferController {
         pump();
       } else {
         item.status = "skipped";
-        item.error = "Omitido: ISBN y formato duplicados";
-        ToastView?.show?.(`Se omitió ${item.name} por duplicado de ISBN`, "warning");
+        item.error = "Skipped: duplicate ISBN and format";
+        ToastView?.show?.(`Skipped ${item.name} due to duplicate ISBN`, "warning");
         m.renderUploadQueue();
         m.updateBackgroundIndicator();
       }
@@ -202,7 +205,7 @@ class BookUploadTransferController {
       item.status = "pending";
       item.progress = 0;
       item.error = null;
-      ToastView?.show?.(`Reintentando "${item.name}" tras fallo de transferencia o proxy...`, "warning");
+      ToastView?.show?.(`Retrying "${item.name}" after transfer or proxy failure...`, "warning");
       m.renderUploadQueue();
       m.updateBackgroundIndicator();
       pump();

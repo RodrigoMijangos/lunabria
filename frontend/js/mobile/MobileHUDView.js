@@ -61,11 +61,11 @@ class MobileHUDView {
         iconUse.setAttribute('href', isFlow ? './icons.svg#scroll' : './icons.svg#book-open');
       }
       if (this.viewModeLabel) {
-        this.viewModeLabel.textContent = isFlow ? 'Continuo' : 'Página';
+        this.viewModeLabel.textContent = isFlow ? 'Flow' : 'Page';
       }
       this.viewModeBtn.title = isFlow
-        ? 'Modo continuo activo (Tocar para ver página única)'
-        : 'Modo página única activo (Tocar para ver flujo continuo)';
+        ? 'Continuous flow mode active (Tap for single page)'
+        : 'Single page mode active (Tap for continuous flow)';
     }
   }
 

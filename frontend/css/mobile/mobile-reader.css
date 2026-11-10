@@ -301,7 +301,7 @@ body.mobile-reader-active .hud-right-controls {
   justify-content: stretch !important;
 }
 
-/* Menú contextual mobile en una sola línea flex con flex space-around */
+/* Mobile contextual menu in a single flex line with flex space-around */
 body.mobile-reader-active .hud-mobile-grid {
   display: flex !important;
   flex-direction: row !important;
@@ -313,14 +313,14 @@ body.mobile-reader-active .hud-mobile-grid {
   box-sizing: border-box !important;
 }
 
-/* Desempaquetar contenedores internos para alinear todos los controles en la misma línea flex */
+/* Flatten inner containers to align all controls on the same flex line */
 body.mobile-reader-active .hud-mobile-half-left,
 body.mobile-reader-active .hud-mobile-left-row2,
 body.mobile-reader-active .hud-mobile-half-right {
   display: contents !important;
 }
 
-/* Grupo de páginas integrado en la línea flex */
+/* Page group integrated into the flex line */
 body.mobile-reader-active #reader-page-group {
   display: inline-flex !important;
   align-items: center !important;
@@ -355,7 +355,7 @@ body.mobile-reader-active #reader-page-total {
   margin-left: 4px !important;
 }
 
-/* Botones COMPLETAMENTE REDONDOS con íconos visibles en mobile */
+/* Fully circular buttons with visible icons on mobile */
 body.mobile-reader-active #reader-offline-btn,
 body.mobile-reader-active #reader-sync-btn,
 body.mobile-reader-active #mobile-view-mode-btn,
@@ -369,7 +369,7 @@ body.mobile-reader-active #mobile-wipe-strokes-btn {
   height: 36px !important;
   min-width: 36px !important;
   max-width: 36px !important;
-  border-radius: 50% !important; /* Completamente redondo */
+  border-radius: 50% !important; /* Completely circular */
   padding: 0 !important;
   box-sizing: border-box !important;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
@@ -402,12 +402,12 @@ body.mobile-reader-active #mobile-wipe-strokes-btn:active {
   transform: scale(0.92) !important;
 }
 
-/* Ocultar etiquetas de texto en mobile para dejar SOLO los íconos */
+/* Hide text labels on mobile to show icons only */
 body.mobile-reader-active .hud-btn-label {
   display: none !important;
 }
 
-/* SVG icons visibles y centrados dentro de los botones redondos */
+/* Visible and centered SVG icons inside circular buttons */
 body.mobile-reader-active #reader-offline-btn .ui-icon,
 body.mobile-reader-active #reader-sync-btn .ui-icon,
 body.mobile-reader-active #mobile-view-mode-btn .ui-icon,

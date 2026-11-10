@@ -341,7 +341,7 @@ test("upload manager auto-re-enqueues item on proxy/connection interruption in s
         if (attempts === 1) {
           options.onSent();
           // First attempt: proxy connection dropped while buffering
-          const err = new Error("Conexión interrumpida por el proxy inverso tras enviar los datos");
+          const err = new Error("Connection interrupted by the reverse proxy after sending data");
           err.isProxyError = true;
           reject(err);
         } else {
@@ -400,7 +400,7 @@ test("upload manager auto-re-enqueues item on proxy/connection interruption in s
   assert.equal(attempts, 2);
   assert.equal(queue[0].status, "queued");
   assert.equal(
-    toasts.some((t) => t.type === "warning" && t.msg.includes("Reintentando")),
+    toasts.some((t) => t.type === "warning" && t.msg.includes("Retrying")),
     true,
   );
 });
